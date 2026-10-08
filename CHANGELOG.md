@@ -32,6 +32,13 @@ All notable changes to tern-cat are documented here. The format follows
   (`.tn-pane.on:not(.off) > .tn-body > .tv > .tv-fx.top::after`) instead of the pane body.
 - The overlay cat rests in the top-right corner by default (was bottom-right, where it often
   covered the prompt line, right prompts and TUI status lines).
+- The default `behavior.activity` preset is renamed `menace` (settings label "Menace"; was
+  `orange_menace`, "Orange menace"), since the cat's appearance is a separate choice. Existing
+  configs with `"orange_menace"` keep working without a warning; the host writes `"menace"` the
+  next time it saves the preset.
+- The default `cat.name` is now "Menace" (was "Orange Menace"). A name you set yourself,
+  including "Orange Menace", is left as is. The `orange-menace` sprite pack keeps its id and
+  name.
 
 ## [0.1.0] - 2026-10-08
 

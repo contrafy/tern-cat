@@ -15,10 +15,12 @@ end
 
 describe("config schema", function()
 	describe("defaults", function()
-		it("ships the Orange Menace persona with every opt-in feature off", function()
+		it("ships the Menace persona with every opt-in feature off", function()
 			local d = schema.defaults()
 			expect(d.schema_version).toBe(1)
-			expect(d.behavior.activity).toBe("orange_menace")
+			expect(d.behavior.activity).toBe("menace")
+			expect(d.cat.name).toBe("Menace")
+			expect(d.cat.appearance).toBe("orange-menace")
 			expect(d.personality).toEqual({
 				curiosity = 0.9,
 				affection = 0.65,
@@ -67,8 +69,13 @@ describe("config schema", function()
 	end)
 
 	describe("presets", function()
-		it("Orange Menace is exactly the defaults", function()
-			expect(schema.preset("orange_menace")).toEqual({})
+		it("Menace is exactly the defaults", function()
+			expect(schema.preset("menace")).toEqual({})
+		end)
+
+		it("lists menace, not the old orange_menace name, as an activity", function()
+			expect(schema.ACTIVITIES).toContain("menace")
+			expect(schema.ACTIVITIES).notToContain("orange_menace")
 		end)
 
 		it("Quiet Office never obscures, paces or swats, rarely reacts and keeps still during commands", function()
@@ -145,7 +152,7 @@ describe("config schema", function()
 			for _, raw in { nil :: any, "garbage", 42, true, { 1, 2, 3 } } do
 				local ok, cfg = pcall(schema.resolve, raw)
 				expect(ok).toBe(true)
-				expect(cfg.behavior.activity).toBe("orange_menace")
+				expect(cfg.behavior.activity).toBe("menace")
 			end
 		end)
 
@@ -191,7 +198,7 @@ describe("config schema", function()
 				rendering = { reduced_motion = "sometimes" },
 				ai = { provider = "openai" },
 			})
-			expect(cfg.behavior.activity).toBe("orange_menace")
+			expect(cfg.behavior.activity).toBe("menace")
 			expect(cfg.rendering.reduced_motion).toBe("follow_tern")
 			expect(cfg.ai.provider).toBe("none")
 			expect(hasWarning(warnings, "behavior.activity")).toBe(true)
@@ -311,6 +318,13 @@ describe("config schema", function()
 			local _, warnings = schema.resolve({ cat = { name = string.rep("猫", 33) } })
 			expect(hasWarning(warnings, "cat.name")).toBe(true)
 		end)
+
+		it("leaves an explicit cat name untouched, including the old default", function()
+			local cfg, warnings = schema.resolve({ cat = { name = "Orange Menace" } })
+			expect(cfg.cat.name).toBe("Orange Menace")
+			expect(#warnings).toBe(0)
+			expect(schema.serialize(cfg).cat).toEqual({ name = "Orange Menace" })
+		end)
 	end)
 
 	describe("migrate", function()
@@ -332,6 +346,29 @@ describe("config schema", function()
 			local _, warnings = schema.migrate({ schema_version = "one" })
 			expect(hasWarning(warnings, "schema_version")).toBe(true)
 		end)
+
+		it("accepts the old orange_menace activity as a silent alias for menace", function()
+			local migrated, migrateWarnings = schema.migrate({ behavior = { activity = "orange_menace" } })
+			expect(migrated.behavior.activity).toBe("menace")
+			expect(#migrateWarnings).toBe(0)
+			local cfg, warnings = schema.resolve({ behavior = { activity = "orange_menace", allow_swats = false } })
+			expect(cfg.behavior.activity).toBe("menace")
+			expect(cfg.behavior.allow_swats).toBe(false)
+			expect(warnings).toEqual({})
+			expect(cfg).toEqual(schema.resolve({ behavior = { activity = "menace", allow_swats = false } }))
+		end)
+
+		it("writes the alias back as menace (the default, so omitted) when the config is rewritten", function()
+			local cfg = schema.resolve({ behavior = { activity = "orange_menace" }, cat = { name = "Rex" } })
+			local sparse = schema.serialize(cfg)
+			expect(sparse).toEqual({ schema_version = 1, cat = { name = "Rex" } })
+		end)
+
+		it("does not mutate the caller's raw config when applying the alias", function()
+			local raw = { behavior = { activity = "orange_menace" } }
+			schema.resolve(raw)
+			expect(raw.behavior.activity).toBe("orange_menace")
+		end)
 	end)
 
 	describe("checkField", function()
@@ -339,6 +376,13 @@ describe("config schema", function()
 			local value, err = schema.checkField("sound.volume", 0.5)
 			expect(value).toBe(0.5)
 			expect(err).toBeNil()
+		end)
+
+		it("maps the old orange_menace activity to menace", function()
+			local value, err = schema.checkField("behavior.activity", "orange_menace")
+			expect(value).toBe("menace")
+			expect(err).toBeNil()
+			expect(schema.checkField("behavior.activity", "menace")).toBe("menace")
 		end)
 
 		it("rejects unknown paths and wrong types", function()

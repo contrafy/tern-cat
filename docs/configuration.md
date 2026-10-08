@@ -67,7 +67,7 @@ weights ([architecture.md](architecture.md#behavior-engine)).
 
 | Preset | Changes from the defaults |
 |---|---|
-| `orange_menace` (default) | None. |
+| `menace` (default) | None. The old name `orange_menace` is still accepted and means `menace`. |
 | `quiet_office` | `personality`: mischief 0.3, energy 0.4, talkativeness 0.05. `behavior`: `allow_visual_obscuring`, `allow_swats`, `allow_pacing` and `allow_pointer_reactions` off, `focus_mode` on, `reaction_sample_rate` 0.1, `reaction_cooldown_s` 180. No overlay over terminal panes; fewer swats and hops; no pointer reactions; the cat keeps still while commands run. |
 | `chaos` | `personality`: curiosity 1, mischief 1, energy 0.95, talkativeness 0.4. Every `allow_*` toggle on, `reaction_sample_rate` 0.8, `reaction_cooldown_s` 10. About three times as many swats and hops, twice as much walking. |
 | `zen` | `personality`: curiosity 0.4, mischief 0.1, energy 0.15, talkativeness 0.05. `allow_visual_obscuring`, `allow_swats` and `allow_pacing` off, `allow_idle_sleep` on, `reaction_sample_rate` 0.05, `reaction_cooldown_s` 600. No overlay over terminal panes; mostly sitting and sleeping. |
@@ -81,7 +81,7 @@ versions are migrated on load.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `name` | string, 1-32 characters | `"Orange Menace"` | Name shown in the block and in Carly's context line (control characters and quotes are stripped there). Renames use the same limit. |
+| `name` | string, 1-32 characters | `"Menace"` | Name shown in the block and in Carly's context line (control characters and quotes are stripped there). Renames use the same limit. |
 | `appearance` | pack id (`^[a-z][a-z0-9-]*$`, at most 32) | `"orange-menace"` | Sprite pack. Bundled: `orange-menace`, `void`, `tuxedo`. User packs go in `<data>/packs/<id>/` ([sprite-pack-spec.md](sprite-pack-spec.md)). An unknown or invalid pack falls back to the default pack. |
 
 ### `personality`
@@ -121,7 +121,7 @@ All numbers from 0 to 1. The settings page shows them as percentages.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `activity` | `"quiet_office"`, `"orange_menace"`, `"chaos"`, `"zen"` | `"orange_menace"` | Preset (see above). |
+| `activity` | `"quiet_office"`, `"menace"`, `"chaos"`, `"zen"` | `"menace"` | Preset (see above). `"orange_menace"` is read as `"menace"`. |
 | `allow_visual_obscuring` | boolean | `true` | Settings label "Draw over terminal panes (overlay)". `false`: the overlay cat is not drawn over terminal panes at all, so it never covers your text; the block cat is unaffected. `rendering.overlay` hides the overlay everywhere. |
 | `allow_swats` | boolean | `true` | Allows `swat` and ambient `hop`, the swat when you play, and the `ls` swat. |
 | `allow_command_reactions` | boolean | `true` | React to commands finishing (and `stare` at `sudo`). |

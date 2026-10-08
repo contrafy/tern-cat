@@ -306,6 +306,24 @@ describe("block view", function()
 			expect(values).toEqual({ "portal", "vent", "box", "off" })
 		end)
 
+		it("labels the activity presets, with Menace as the default", function()
+			local found: any = nil
+			for _, section in prefs(settingsModel("general")).p.sections do
+				for _, r in section.rows do
+					if r.id == "behavior.activity" then
+						found = r
+					end
+				end
+			end
+			assert(found, "missing activity row")
+			expect(found.control.value).toBe("menace")
+			local labels: { [string]: string } = {}
+			for _, o in found.control.options do
+				labels[o.value] = o.label
+			end
+			expect(labels).toEqual({ quiet_office = "Quiet office", menace = "Menace", chaos = "Chaos", zen = "Zen" })
+		end)
+
 		it("offers Remove only for user-installed packs, with a confirm step", function()
 			local packs = {
 				{ id = "orange-menace", name = "Orange Menace", preview = "pv-o", removable = false },

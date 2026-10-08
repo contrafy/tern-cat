@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "cat": {
-    "name": "Orange Menace",
+    "name": "Menace",
     "appearance": "orange-menace"
   },
   "personality": {
@@ -27,7 +27,7 @@
     "pane_transition": "portal"
   },
   "behavior": {
-    "activity": "orange_menace",
+    "activity": "menace",
     "allow_visual_obscuring": true,
     "allow_swats": true,
     "allow_command_reactions": true,

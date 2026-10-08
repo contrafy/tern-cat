@@ -56,7 +56,7 @@ local FOCUS_REASONS: { [string]: string } = {
 
 local ACTIVITY_MULTIPLIERS: { [string]: { [string]: number } } = {
 	quiet_office = { swat = 0.2, hop = 0.2, walk = 0.3, look = 0.7 },
-	orange_menace = {},
+	menace = {},
 	chaos = { swat = 3, hop = 3, walk = 2, look = 1.5 },
 	zen = { sleep = 3, sit = 2, swat = 0.2, hop = 0.2, walk = 0.3 },
 }
