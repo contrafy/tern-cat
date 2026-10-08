@@ -744,6 +744,18 @@ describe("brain", function()
 			expect(#e.runs).toBe(1)
 		end)
 
+		-- A real-host smoke can only confirm playback from the log: the exit status is the evidence,
+		-- and the line names the sound id, never a filesystem path.
+		it("logs the player's exit status at debug level without the file path", function()
+			local e = setup({
+				files = { [DATA .. "/config.json"] = '{"sound":{"enabled":true}}', ["/usr/bin/afplay"] = "" },
+			})
+			local b = brain.load(e.deps)
+			brain.localIntent(b, "pet")
+			expect(hasLog(e, "debug: sound: played purr (afplay) status 0")).toBe(true)
+			expect(hasLog(e, "purr.wav")).toBe(false)
+		end)
+
 		it("falls back to silence when no player exists", function()
 			local e = setup({ os = "windows", files = { [DATA .. "/config.json"] = '{"sound":{"enabled":true}}' } })
 			local b = brain.load(e.deps)

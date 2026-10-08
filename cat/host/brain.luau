@@ -435,7 +435,12 @@ local function playFor(b: Brain, decision: T.BehaviorDecision)
 	if path == nil then
 		return
 	end
-	if sound.play(player, path, b.config.sound.volume, b.deps.run :: sound.Run) then
+	local kind = player.kind
+	local played = sound.play(player, path, b.config.sound.volume, b.deps.run :: sound.Run, function(result)
+		local status = if type(result) == "table" then result.status else nil
+		log(b, "debug", `sound: played {id} ({kind}) status {status}`)
+	end)
+	if played then
 		sound.markPlayed(b.sound_state, now)
 	else
 		b.sound_player = nil

@@ -210,8 +210,15 @@ local function detect(os_name: string, exists: (string) -> boolean, run: Run, do
 end
 
 -- Starts playback; returns false (and never raises) when the player could not be spawned.
-local function play(player: Player, path: string, volume: number, run: Run): boolean
-	return (pcall(run, argv(player, path, volume), { timeout_ms = PLAY_TIMEOUT_MS }, function() end))
+-- `done` (optional) receives the player's result when it exits.
+local function play(player: Player, path: string, volume: number, run: Run, done: ((ProcessResult) -> ())?): boolean
+	return (
+		pcall(run, argv(player, path, volume), { timeout_ms = PLAY_TIMEOUT_MS }, function(result: ProcessResult)
+			if done then
+				done(result)
+			end
+		end)
+	)
 end
 
 return {
