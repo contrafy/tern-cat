@@ -203,6 +203,8 @@ export type Config = {
 		allow_pane_reactions: boolean,
 		allow_idle_sleep: boolean,
 		allow_pacing: boolean,
+		-- CSS-only hover/press reactions of the overlay cat (look near the pointer, swat on press).
+		allow_pointer_reactions: boolean,
 		-- While a command runs: no moving or reactive decisions and no sound (see Environment.busy).
 		focus_mode: boolean,
 		-- Probability that an eligible command event produces a visible reaction.

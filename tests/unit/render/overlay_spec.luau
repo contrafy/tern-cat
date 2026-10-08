@@ -4,7 +4,10 @@ local overlay = require("../../../cat/render/overlay")
 
 local describe, it, expect = t.describe, t.it, t.expect
 
-local SELECTOR = "section.tn-pane.on > .tn-body::after"
+local HOST = "section.tn-pane.on > div.tn-body > div.tv > div.tv-fx.top"
+local SELECTOR = HOST .. "::after"
+local LOOK_URL = "data:image/png;base64,TE9PSw=="
+local SWAT_URL = "data:image/png;base64,U1dBVA=="
 
 local function params(overrides: { [string]: any }?): overlay.Params
 	local p: { [string]: any } = {
@@ -23,6 +26,28 @@ local function params(overrides: { [string]: any }?): overlay.Params
 		p[k] = v
 	end
 	return p :: any
+end
+
+local function reactive(overrides: { [string]: any }?): overlay.Params
+	local p: { [string]: any } = {
+		reactions = {
+			hover = { sheet_url = LOOK_URL, durations_ms = { 100, 100, 200 }, loop = false },
+			press = { sheet_url = SWAT_URL, durations_ms = { 100, 100, 100, 100 }, loop = false },
+		},
+	}
+	for k, v in overrides or {} do
+		p[k] = v
+	end
+	return params(p)
+end
+
+-- The body of the first rule set whose selector list starts with `selector`.
+local function block(css: string, selector: string): string?
+	local i = string.find(css, selector .. " {", 1, true)
+	if not i then
+		return nil
+	end
+	return string.match(css, "%b{}", i)
 end
 
 local function count(haystack: string, needle: string): number
@@ -51,14 +76,21 @@ end
 
 describe("render/overlay.css", function()
 	describe("decoration that never interferes with the terminal", function()
-		it("anchors to the focused pane and lets every click through", function()
+		it("anchors to the focused pane's top effects layer and lets every click through", function()
 			local css = overlay.css(params())
+			expect(overlay.SELECTOR).toBe(SELECTOR)
+			expect(overlay.HOST).toBe(HOST)
 			expect(css).toContain(SELECTOR)
 			expect(css).toContain("pointer-events: none")
+			expect(css).toContain("visibility: visible")
 			expect(css).toContain("position: absolute")
 			expect(css).toContain("right: 12px")
 			expect(css).toContain("bottom: 12px")
 			expect(css).toContain("image-rendering: pixelated")
+			expect(css).notToContain(":hover")
+			expect(css).notToContain(":active")
+			expect(css).notToContain("::before")
+			expect(css).notToContain("cursor")
 			expect(balanced(css)).toBe(true)
 		end)
 
@@ -213,6 +245,170 @@ describe("render/overlay.css", function()
 		it("emits only one rule set per selector it owns", function()
 			local css = overlay.css(params({ pace = true }))
 			expect(count(css, SELECTOR)).toBe(2)
+		end)
+
+		for _, url in hostileUrls do
+			it(`refuses reaction sheet_url {string.format("%q", url)}`, function()
+				local css = overlay.css(params({
+					reactions = {
+						hover = { sheet_url = url, durations_ms = { 100, 100 } },
+						press = { sheet_url = url, durations_ms = { 100, 100 } },
+					},
+				}))
+				expect(count(css, "url(")).toBe(1)
+				expect(css).notToContain(":hover")
+				expect(css).notToContain(":active")
+				expect(css).notToContain("::before")
+				expect(css).toContain("pointer-events: none")
+				expect(css).notToContain("display: none")
+				expect(css).notToContain("evil")
+				expect(balanced(css)).toBe(true)
+			end)
+		end
+
+		it("clamps reaction durations and ignores junk fields", function()
+			local css = overlay.css(params({
+				reactions = {
+					hover = {
+						sheet_url = LOOK_URL,
+						durations_ms = { -1, 1e12, 0 / 0, "x; color: red" :: any },
+						loop = "}" :: any,
+					},
+					press = "body { display: none }" :: any,
+				},
+			}))
+			expect(css).toContain(LOOK_URL)
+			expect(css).notToContain("nan")
+			expect(css).notToContain("infms")
+			expect(css).notToContain("color: red")
+			expect(css).notToContain("display: none")
+			expect(css).notToContain(":active")
+			expect(balanced(css)).toBe(true)
+		end)
+	end)
+
+	describe("pointer reactions", function()
+		it("makes only the cat and its ring take pointer state, without changing the cursor", function()
+			local css = overlay.css(reactive())
+			local cat = block(css, SELECTOR)
+			local ring = block(css, HOST .. "::before")
+			assert(cat and ring, "missing cat or ring rule")
+			expect(cat).toContain("pointer-events: auto")
+			expect(cat).toContain("visibility: visible")
+			expect(ring).toContain("pointer-events: auto")
+			expect(ring).toContain("visibility: visible")
+			expect(ring).notToContain("background-color")
+			expect(css).notToContain("cursor")
+			expect(balanced(css)).toBe(true)
+		end)
+
+		it("centres the proximity ring on the cat and keeps it inside the pane", function()
+			local ring = block(overlay.css(reactive()), HOST .. "::before")
+			assert(ring, "missing ring")
+			expect(ring).toContain("right: 0px")
+			expect(ring).toContain("bottom: 0px")
+			expect(ring).toContain("width: 124px")
+			expect(ring).toContain("height: 124px")
+			expect(ring).toContain("padding: 48px 12px 12px 48px")
+			expect(ring).toContain("transform-origin: 80px 80px")
+			local far = block(overlay.css(reactive({ offset_px = { right = 100, bottom = 60 } })), HOST .. "::before")
+			assert(far, "missing ring")
+			expect(far).toContain("right: 52px")
+			expect(far).toContain("bottom: 12px")
+			expect(far).toContain("padding: 48px 48px 48px 48px")
+		end)
+
+		it("plays the hover sheet once while the pointer is near or on the cat", function()
+			local css = overlay.css(reactive())
+			local hover = block(css, HOST .. ":hover::after")
+			assert(hover, "missing hover rule")
+			expect(hover).toContain(`url("{LOOK_URL}")`)
+			expect(hover).toContain("background-size: 192px 64px")
+			expect(hover).toContain("animation: tern-cat-hover 400ms step-end 1 forwards")
+			expect(css).toContain("@keyframes tern-cat-hover {")
+			expect(css).toContain("50% { background-position: -128px 0px; }")
+		end)
+
+		it("loops a looping hover sheet", function()
+			local css = overlay.css(reactive({
+				reactions = { hover = { sheet_url = LOOK_URL, durations_ms = { 100, 100 }, loop = true } },
+			}))
+			expect(css).toContain("animation: tern-cat-hover 200ms step-end infinite")
+		end)
+
+		it("swats in the ring's content box while pressed and holds the pose after release", function()
+			local css = overlay.css(reactive())
+			local ring = block(css, HOST .. "::before")
+			local press = block(css, HOST .. ":active::before")
+			local hide = block(css, HOST .. ":active::after")
+			local cat = block(css, SELECTOR)
+			assert(ring and press and hide and cat, "missing press rules")
+			expect(ring).toContain(`url("{SWAT_URL}")`)
+			expect(ring).toContain("background-clip: content-box")
+			expect(ring).toContain("background-origin: content-box")
+			expect(ring).toContain("background-size: 0px 0px")
+			expect(ring).toContain("background-position: -192px 0px")
+			expect(ring).toContain("transition: background-size 0s linear 700ms")
+			expect(press).toContain("background-size: 256px 64px")
+			expect(press).toContain("animation: tern-cat-press 400ms step-end 1 forwards")
+			expect(press).toContain("transition: background-size 0s;")
+			expect(hide).toContain("opacity: 0")
+			expect(hide).toContain("transition: opacity 0s;")
+			expect(cat).toContain("transition: opacity 0s linear 700ms")
+		end)
+
+		it("keeps pacing through hover and press by repeating the walk by name", function()
+			local css = overlay.css(reactive({ pace = true }))
+			local walk = "tern-cat-pace-idle-1 8333ms step-end infinite"
+			for _, sel in { SELECTOR, HOST .. "::before", HOST .. ":hover::after", HOST .. ":active::before" } do
+				local body = block(css, sel)
+				assert(body, `missing {sel}`)
+				expect(body).toContain(walk)
+			end
+			expect(count(css, "@keyframes tern-cat-pace-idle-1")).toBe(1)
+		end)
+
+		it("mirrors the ring with the cat", function()
+			local ring = block(overlay.css(reactive({ facing = "left" })), HOST .. "::before")
+			assert(ring, "missing ring")
+			expect(ring).toContain("transform: scaleX(-1)")
+		end)
+
+		it("shows each reaction's first frame without animation when still", function()
+			local css = overlay.css(reactive({ still = true, pace = true }))
+			expect(css).notToContain("@keyframes")
+			local hover = block(css, HOST .. ":hover::after")
+			local ring = block(css, HOST .. "::before")
+			local press = block(css, HOST .. ":active::before")
+			assert(hover and ring and press, "missing reaction rules")
+			expect(hover).toContain("animation: none")
+			expect(hover).toContain("background-position: 0px 0px")
+			expect(ring).toContain("background-position: 0px 0px")
+			expect(press).toContain("animation: none")
+		end)
+
+		it("stops reaction animations under reduced motion", function()
+			local css = overlay.css(reactive({ pace = true }))
+			local media = string.match(css, "@media %(prefers%-reduced%-motion: reduce%) (%b{})")
+			assert(media, "missing reduced-motion block")
+			for _, sel in { SELECTOR, HOST .. "::before", HOST .. ":hover::after", HOST .. ":active::before" } do
+				expect(media).toContain(sel)
+			end
+			expect(media).toContain("animation: none !important")
+		end)
+
+		it("supports a hover without a press sheet (no swat rules)", function()
+			local css =
+				overlay.css(reactive({ reactions = { hover = { sheet_url = LOOK_URL, durations_ms = { 100 } } } }))
+			expect(css).toContain(HOST .. "::before")
+			expect(css).toContain(HOST .. ":hover::after")
+			expect(css).notToContain(":active")
+			expect(css).notToContain("opacity")
+			expect(block(css, HOST .. ":hover::after")).toContain("animation: none")
+		end)
+
+		it("renders nothing, not even the ring, when hidden", function()
+			expect(overlay.css(reactive({ hidden = true }))).notToContain("{")
 		end)
 	end)
 end)

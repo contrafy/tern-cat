@@ -138,6 +138,7 @@ describe("integrations/carly exports", function()
 		expect(doc).toContain("sound.enabled (false only")
 		expect(doc).toContain("quiet.hours_enabled (true only")
 		expect(doc).toContain("behavior.focus_mode (true only")
+		expect(doc).toContain("behavior.allow_pointer_reactions (false only")
 		for _, key in { "sound.volume", "quiet.start", "quiet.stop" } do
 			expect(doc).notToContain(key)
 		end

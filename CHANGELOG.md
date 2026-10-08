@@ -7,6 +7,20 @@ All notable changes to tern-cat are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Overlay pointer reactions, CSS only: the overlay cat plays `look` while the pointer is near it
+  or on it and swats when you press there, holding the pose about 0.7 s after release. Clicks,
+  selection, typing and mouse reporting still reach the terminal; no pointer data reaches the
+  plugin, and a hover or press is not a pet. New `behavior.allow_pointer_reactions` (default
+  `true`, `false` in `quiet_office`; settings row "React to the pointer (overlay)"; Carly may only
+  turn it off).
+
+### Changed
+
+- The overlay cat is drawn on the focused pane's top effects layer
+  (`.tn-pane.on > .tn-body > .tv > .tv-fx.top::after`) instead of the pane body.
+
 ## [0.1.0] - 2026-10-08
 
 First public beta. Tested against Tern 0.6.2 (macOS, Apple silicon); unit tests, type checks and

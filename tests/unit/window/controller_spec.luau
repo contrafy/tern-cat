@@ -329,6 +329,26 @@ describe("window/controller loop", function()
 		expect(lastCss(w)).toContain("tern-cat-")
 	end)
 
+	it("adds pointer reactions from the pack's look and swat fallbacks, and drops them when turned off", function()
+		local w = world()
+		local c = controller.new(w.ports)
+		controller.start(c)
+		local css = lastCss(w)
+		-- The fixture pack has `look`, and `swat` falls back to `happy`.
+		expect(css).toContain(":hover::after")
+		expect(css).toContain(":active::before")
+		expect(css).toContain("pointer-events: auto")
+		w.files[DATA .. "/config.json"] = encodeJson({ behavior = { allow_pointer_reactions = false } })
+		for _ = 1, 10 do
+			fire(w)
+		end
+		css = lastCss(w)
+		expect(css).toContain("tern-cat-")
+		expect(css).notToContain(":hover")
+		expect(css).notToContain(":active")
+		expect(css).toContain("pointer-events: none")
+	end)
+
 	-- A symlinked or oversize config.json is not "no config": silently falling back to defaults
 	-- would re-enable an overlay the user turned off.
 	it("keeps the last good config and warns once when config.json becomes unreadable", function()

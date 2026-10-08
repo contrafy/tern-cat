@@ -97,6 +97,9 @@ describe("controls", function()
 				"split"
 			)
 			expect((controls.settingsChange("behavior.focus_mode", true) :: any)["behavior.focus_mode"]).toBe(true)
+			expect(
+				(controls.settingsChange("behavior.allow_pointer_reactions", false) :: any)["behavior.allow_pointer_reactions"]
+			).toBe(false)
 		end)
 
 		it("turns the sound event chips into flags", function()

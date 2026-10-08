@@ -41,6 +41,7 @@ local SET_CONFIG_KEYS = {
 	"behavior.allow_pane_reactions",
 	"behavior.allow_idle_sleep",
 	"behavior.allow_pacing",
+	"behavior.allow_pointer_reactions",
 	"behavior.focus_mode",
 	"sound.enabled",
 	"sound.volume",
@@ -54,8 +55,9 @@ local SET_CONFIG_KEYS = {
 local MAX_SET_CONFIG_ENTRIES = #SET_CONFIG_KEYS
 
 -- Carly calls exports without asking the user, so it may not opt into sound (the only feature
--- that starts a process), loosen quiet hours or end focus mode. For these keys Carly may only
--- set the listed less-intrusive value; keys mapped to nil are refused outright.
+-- that starts a process), loosen quiet hours, end focus mode or turn pointer reactions on. For
+-- these keys Carly may only set the listed less-intrusive value; keys mapped to nil are refused
+-- outright.
 local CARLY_RESTRICTED: { [string]: { value: any? } } = {
 	["sound.enabled"] = { value = false },
 	["sound.volume"] = {},
@@ -63,6 +65,7 @@ local CARLY_RESTRICTED: { [string]: { value: any? } } = {
 	["quiet.start"] = {},
 	["quiet.stop"] = {},
 	["behavior.focus_mode"] = { value = true },
+	["behavior.allow_pointer_reactions"] = { value = false },
 }
 
 local SCOPE_BY_SOURCE: { [string]: T.EventScope } = {
