@@ -33,6 +33,7 @@ from art.animations import Anim, all_animations  # noqa: E402
 from art.cat import SIZE, render  # noqa: E402
 from art.palettes import CAT_INDICES, PACKS, rgba  # noqa: E402
 from art.raster import Canvas  # noqa: E402
+from packlib import encode_apng, encode_png, encode_sheet  # noqa: E402
 
 AUTHOR = "Ahmad Raaiyan"
 LICENSE = "CC-BY-4.0"
@@ -64,25 +65,15 @@ def to_image(canvas: Canvas, pack_id: str) -> Image.Image:
 
 def save_png(im: Image.Image, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    im.save(path, format="PNG", optimize=True)
+    path.write_bytes(encode_png(im))
 
 
 def save_apng(frames: list[Image.Image], durations: list[int], loop: bool, path: Path) -> None:
-    # APNG num_plays: 0 repeats forever, 1 plays exactly once and holds the last frame.
-    frames[0].save(
-        path,
-        format="PNG",
-        save_all=True,
-        append_images=frames[1:],
-        duration=durations,
-        loop=0 if loop else 1,
-        disposal=0,
-        blend=0,
-        compress_level=9,
-    )
-    with Image.open(path) as check:
-        if getattr(check, "n_frames", 1) != len(frames):
-            raise SystemExit(f"{path}: wrote {check.n_frames} frames, expected {len(frames)}")
+    try:
+        data = encode_apng(frames, durations, loop)
+    except ValueError as e:
+        raise SystemExit(f"{path}: {e}") from None
+    path.write_bytes(data)
 
 
 def hitbox(canvases: list[Canvas]) -> list[int]:
@@ -127,11 +118,8 @@ def build_pack(pack_id: str, anims: list[Anim], rendered: dict[str, list[Canvas]
         apng_rel = f"build/{anim.name}.apng"
         (out / "build").mkdir(parents=True, exist_ok=True)
         save_apng(frames, durations, anim.loop, out / apng_rel)
-        sheet = Image.new("RGBA", (SIZE * len(frames), SIZE))
-        for i, im in enumerate(frames):
-            sheet.paste(im, (i * SIZE, 0))
         sheet_rel = f"build/{anim.name}.sheet.png"
-        save_png(sheet, out / sheet_rel)
+        (out / sheet_rel).write_bytes(encode_sheet(frames, SIZE, SIZE))
         manifest_anims[anim.name] = {
             "frames": rel_frames,
             "durations_ms": durations,
