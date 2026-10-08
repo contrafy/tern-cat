@@ -170,8 +170,14 @@ end
 -- scan and returns the default pack (without a warning) until `step` has finished it.
 local function select(c: Cache, wanted: string?): (T.LoadedPack?, string?)
 	local id = if wanted and wanted ~= "" then wanted else c.deps.default_id
-	if c.packs[id] then
-		return c.packs[id], nil
+	local cached = c.packs[id]
+	if cached then
+		if c.deps.fs.exists(manifest.joinPath(cached.root, loader.MANIFEST_FILE)) then
+			return cached, nil
+		end
+		-- Removed since it was validated (Remove in the block, or deleted by hand): forget every
+		-- pack and sheet so it is never shown again, then select as on a fresh load.
+		invalidate(c)
 	end
 	loadNamed(c, { id, c.deps.default_id })
 	if c.packs[id] == nil and c.queue == nil then
