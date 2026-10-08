@@ -6,7 +6,7 @@ local sound = require("../../../cat/integrations/sound")
 
 local describe, it, expect = t.describe, t.it, t.expect
 
-local AWAKE = { reduced_motion = false, quiet_hours = false, snoozed = false }
+local AWAKE = { reduced_motion = false, quiet_hours = false, snoozed = false, busy = false }
 
 local function enabled(extra: { [string]: any }?): any
 	local overrides: { [string]: any } = { sound = { enabled = true } }
@@ -57,15 +57,22 @@ describe("sound", function()
 		end)
 
 		it("stays quiet during quiet hours unless told otherwise", function()
-			local quiet = { reduced_motion = false, quiet_hours = true, snoozed = false }
+			local quiet = { reduced_motion = false, quiet_hours = true, snoozed = false, busy = false }
 			expect((sound.policy(enabled(), "meow", quiet, 10000, sound.newState()))).toBe(false)
 			local cfg = enabled({ sound = { enabled = true, respect_quiet_hours = false } })
 			expect((sound.policy(cfg, "meow", quiet, 10000, sound.newState()))).toBe(true)
 		end)
 
 		it("stays quiet while snoozed", function()
-			local snoozed = { reduced_motion = false, quiet_hours = false, snoozed = true }
+			local snoozed = { reduced_motion = false, quiet_hours = false, snoozed = true, busy = false }
 			expect((sound.policy(enabled(), "meow", snoozed, 10000, sound.newState()))).toBe(false)
+		end)
+
+		it("stays quiet in focus mode while a command runs, even for gestures", function()
+			local busy = { reduced_motion = false, quiet_hours = false, snoozed = false, busy = true }
+			local ok, why = sound.policy(enabled(), "purr", busy, 10000, sound.newState())
+			expect(ok).toBe(false)
+			expect(why).toBe("focus mode")
 		end)
 
 		it("rate limits to one sound every two seconds", function()

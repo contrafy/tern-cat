@@ -454,6 +454,19 @@ local function sections(model: Model, s: SettingsModel): { any }
 				},
 			},
 			{
+				id = "focus",
+				title = "Focus mode",
+				rows = {
+					switch(
+						c,
+						base,
+						"behavior.focus_mode",
+						"Keep still while commands run",
+						"No pacing, reactions or sound until they finish; pets and treats still work."
+					),
+				},
+			},
+			{
 				id = "sound",
 				title = "Sound",
 				rows = {

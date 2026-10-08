@@ -46,7 +46,9 @@ command output lines). Host hooks deliver metadata only: `CommandFinishedEvent` 
 `command_started`/`command_finished` carry the full command line. tern-cat passes it to
 `classify(line)` in `cat/core/events.luau` inside the hook handler, which returns one of `test`,
 `build`, `vcs`, `list`, `sudo`, `editor`, `network`, `package`, `other`. Only the category
-continues. The line is not stored, logged, put in an event, or returned.
+continues. The line is not stored, logged, put in an event, or returned. Focus mode
+(`cat/core/running.luau`) additionally keeps, in memory only, the pane id and start time of
+each running command.
 
 Every event's attributes then pass through `sanitizeAttributes` (same file), which keeps only
 allowlisted keys per event type and only values of the declared kind: booleans, finite numbers,
@@ -92,9 +94,10 @@ does not ask the user before Carly calls them, so:
 - mutating calls become intents that go through the same allowlist as every other source
   (`cat/core/commands.luau`: allowlisted kinds and per-kind arguments);
 - the `set_config` allowlist is source-aware: intents with source `carly` may not opt into sound
-  (the only feature that starts a process) or loosen quiet hours. Carly may set `sound.enabled`
-  only to `false` and `quiet.hours_enabled` only to `true`, and may not change `sound.volume`,
-  `quiet.start` or `quiet.stop`; the block, the window and the keyboard keep the full allowlist;
+  (the only feature that starts a process), loosen quiet hours or end focus mode. Carly may set
+  `sound.enabled` only to `false`, `quiet.hours_enabled` and `behavior.focus_mode` only to
+  `true`, and may not change `sound.volume`, `quiet.start` or `quiet.stop`; the block, the window
+  and the keyboard keep the full allowlist;
 - read-only views (status, explain, AI status, context) return small summaries; nothing returns
   command text, terminal output, file paths or journal summaries.
 

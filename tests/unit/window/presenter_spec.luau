@@ -3,6 +3,7 @@ local t = require("../../lib/test")
 local f = require("../../lib/factories")
 local clock = require("../../../cat/core/clock")
 local presenter = require("../../../cat/window/presenter")
+local running = require("../../../cat/core/running")
 
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -190,6 +191,43 @@ describe("window/presenter scheduling", function()
 			{ now_ms = 0, wall_s = f.WALL_S, hour = 23, min = 0 }
 		)
 		expect(presenter.environment(q).quiet_hours).toBe(false)
+	end)
+
+	it("is busy in focus mode while any of this window's panes runs a command", function()
+		local p, c = make({ behavior = { focus_mode = true } })
+		expect(presenter.environment(p).busy).toBe(false)
+		presenter.observe(p, "command_started", { pane = 1 })
+		presenter.observe(p, "command_started", { pane = 2 })
+		presenter.observe(p, "command_finished", { pane = 1, status = 0 })
+		expect(presenter.environment(p).busy).toBe(true)
+		presenter.observe(p, "pane_closed", { pane = 2 })
+		expect(presenter.environment(p).busy).toBe(false)
+		presenter.observe(p, "command_started", { pane = 3 })
+		c.advance(running.STALE_MS)
+		expect(presenter.environment(p).busy).toBe(false)
+		local off = make()
+		presenter.observe(off, "command_started", { pane = 1 })
+		expect(presenter.environment(off).busy).toBe(false)
+	end)
+
+	it("never paces while a command runs in focus mode, and paces again once it finishes", function()
+		local p, c = make({ behavior = { allow_pacing = true, focus_mode = true }, personality = { energy = 1 } })
+		presenter.observe(p, "command_started", { pane = 1 })
+		for _ = 1, 200 do
+			runUntilChange(p, c)
+			local v = presenter.view(p)
+			expect(v.pace).toBe(false)
+			local a = v.animation
+			expect(a == "idle" or a == "sit" or a == "blink" or a == "groom" or a == "sleep").toBe(true)
+		end
+		presenter.observe(p, "command_finished", { pane = 1, status = 0 })
+		presenter.react(p, presenter.eventFor(p, "command_finished", { pane = 1, status = 0 }) :: any)
+		local sawWalk = false
+		for _ = 1, 300 do
+			runUntilChange(p, c)
+			sawWalk = sawWalk or presenter.view(p).pace
+		end
+		expect(sawWalk).toBe(true)
 	end)
 end)
 

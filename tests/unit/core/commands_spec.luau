@@ -203,6 +203,8 @@ describe("commands", function()
 			)
 			rejects(factories.intent("set_config", { key = "sound.volume", value = 1 }, carly))
 			rejects(factories.intent("set_config", { key = "quiet.hours_enabled", value = false }, carly))
+			-- Focus mode keeps the cat still during commands; only the user may turn it back off.
+			rejects(factories.intent("set_config", { key = "behavior.focus_mode", value = false }, carly))
 			rejects(factories.intent("set_config", { key = "quiet.start", value = "23:00" }, carly))
 			rejects(factories.intent("set_config", { key = "quiet.stop", value = "06:00" }, carly))
 			rejects(
@@ -223,12 +225,16 @@ describe("commands", function()
 				accepts("set_config", { key = "quiet.hours_enabled", value = true }, carly).args.values["quiet.hours_enabled"]
 			).toBe(true)
 			accepts("set_config", { key = "behavior.allow_swats", value = false }, carly)
+			expect(
+				accepts("set_config", { key = "behavior.focus_mode", value = true }, carly).args.values["behavior.focus_mode"]
+			).toBe(true)
 		end)
 
 		it("keeps sound and quiet settings available to the user's own surfaces", function()
 			for _, source in { "block", "window", "keyboard" } do
 				accepts("set_config", { key = "sound.enabled", value = true }, { source = source })
 				accepts("set_config", { key = "quiet.start", value = "23:00" }, { source = source })
+				accepts("set_config", { key = "behavior.focus_mode", value = false }, { source = source })
 			end
 		end)
 	end)

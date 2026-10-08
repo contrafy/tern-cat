@@ -91,6 +91,7 @@ All modules are `--!strict` and return a table of functions. Only the entries an
 | `cat/core/store.luau` | `StoreEnvelope` lifecycle: decode/recover, apply event/intent once (dedupe by id), bounded journal, rev bump; config-changing intents become `{kind = "config", changes}` effects | `empty`, `decode`, `applyEvent`, `applyIntent`, `catchUp` |
 | `cat/core/events.luau` | Event construction, command classifier (category only), ids, dedupe ring | `classify(line)`, `commandFinished(...)`, `gesture(...)` |
 | `cat/core/behavior.luau` | Weighted FSM: posture, trigger rules, cooldowns, precedence | `newState(now_ms)`, `tick(state, ctx)`, `react(state, event, ctx)` |
+| `cat/core/running.luau` | Commands running per pane for focus mode (pane id and start time only; 6 h safety timeout) | `new`, `started`, `stopped`, `busy` |
 | `cat/core/commands.luau` | Intent allowlist and argument validation for every source (block, keyboard, window, carly); `SET_CONFIG_KEYS` | `validate(raw)`, `toEvent(intent)` |
 | `cat/config/schema.luau` | Config defaults, presets, per-field validation and fallback, migrations, precedence merge | `defaults()`, `preset(activity)`, `resolve(raw)`, `checkField(path, v)` |
 
@@ -109,11 +110,11 @@ All modules are `--!strict` and return a table of functions. Only the entries an
 
 | Module | Responsibility | Key functions |
 |---|---|---|
-| `cat/host/brain.luau` | The single writer: owns the store, ticks the engine (next delay clamped to 0.5-5 s), applies inbox intents, polls config, writes config changes (pretty JSON in example key order; backs up an unreadable file first), persists kv only when `rev` changes, moves a corrupt `kv.json` aside and starts a fresh cat, plays sounds | `load(deps)`, `tick`, `onCommandStarted/Finished`, `onPaneEvent`, `applyIntent`, `pollInbox`, `pollConfig`, `setConfig`, `availablePacks`, `subscribe` |
+| `cat/host/brain.luau` | The single writer: owns the store, ticks the engine (next delay clamped to 0.5-5 s), applies inbox intents, polls config, writes config changes (pretty JSON in example key order; backs up an unreadable file first), persists kv only when `rev` changes, moves a corrupt `kv.json` aside and starts a fresh cat, tracks running commands in every local pane (focus mode), plays sounds | `load(deps)`, `tick`, `onCommandStarted/Finished`, `onPaneEvent`, `applyIntent`, `pollInbox`, `pollConfig`, `setConfig`, `availablePacks`, `subscribe` |
 | `cat/host/inbox.luau` | Inbox poll: name pattern `<ms>-<8hex>.json`, 5 s grace for bad files, 32 files per poll | `poll(state, fs, json, dir, now)` |
 | `cat/host/controls.luau` | Block input mapping: actions, menu, focused-block keys (`p o f space s h z`, Escape), settings-row changes, test mode (`test`, `frozen`, `seed=N`, or `TERN_CAT_TEST`) | `resolveAction`, `menuActions`, `keyAction`, `settingsChange`, `parseTestMode` |
 | `cat/integrations/hooks.luau` | Registers `command_started`, `command_finished`, `cwd`, `pane_exited`; classifies the line inside the handler and drops it (no `title` hook: shells retitle on every prompt) | `register(on, sink)` |
-| `cat/integrations/sound.luau` | Policy (off by default, per-event flags, quiet hours, snooze, volume 0, 2 s minimum gap), sound pack loading, player detection and argv | `policy`, `loadPack`, `detect`, `argv`, `play` |
+| `cat/integrations/sound.luau` | Policy (off by default, per-event flags, quiet hours, snooze, focus mode, volume 0, 2 s minimum gap), sound pack loading, player detection and argv | `policy`, `loadPack`, `detect`, `argv`, `play` |
 
 Sound runs only in the host half: `host.luau` holds the single `tern.process.run` call site and
 passes it to `sound.detect` and `sound.play`.
@@ -123,7 +124,7 @@ passes it to `sound.detect` and `sound.play`.
 | Module | Responsibility | Key functions |
 |---|---|---|
 | `cat/window/controller.luau` | The window loop behind injected ports: one self-rescheduling timer (next decision, kv poll every 2 s, config poll every 3 s), requests to intents, overlay toggle, reset confirmation (second run within 10 s), cover state, Carly snapshot and context. Never writes kv | `new`, `start`, `onWindowEvent`, `request`, `toggleOverlay`, `reloadConfig`, `confirmReset`, `setCovered`, `snapshot`, `context` |
-| `cat/window/presenter.luau` | One read-only behavior engine per window; command lines reduced to a category immediately; overlay parameters; local override until config agrees | `new`, `view`, `params`, `tick`, `react`, `gesture`, `mirror`, `eventFor`, `setConfig`, `setCovered`, `visible` |
+| `cat/window/presenter.luau` | One read-only behavior engine per window; command lines reduced to a category immediately; this window's running commands (focus mode, tracked even while the overlay is hidden; host `react.*` mirrors are skipped while busy); overlay parameters; local override until config agrees | `new`, `view`, `params`, `tick`, `react`, `observe`, `gesture`, `mirror`, `eventFor`, `setConfig`, `setCovered`, `visible` |
 | `cat/window/packs.luau` | Validates only the wanted and default packs (full scan only if both miss), resolves fallbacks, caches each sheet as a data URL; a pack without a built sheet uses its first frame | `new`, `select`, `asset`, `invalidate` |
 | `cat/window/intents.luau` | Builds, validates and writes inbox files | `build`, `fileName`, `write` |
 | `cat/window/mirror.luau` | Decides whether to replay a host reaction | `check`, `key` |
@@ -151,9 +152,13 @@ Precedence, highest first:
 
 1. Snooze / hidden: no new decisions except `sleep`.
 2. Quiet hours: only `sleep`, `blink`, `groom`; no sound.
-3. Reduced motion: no `walk` or ambient `hop`; renderers show a still frame.
-4. Granular toggles (`allow_*`) remove whole rule families.
-5. Activity preset and personality weights.
+3. Focus mode (`behavior.focus_mode` and a command running, `env.busy`): only `idle`, `sit`,
+   `blink`, `groom`, `sleep`; no reactions, no sound; a moving decision in progress is replaced
+   at once. Gestures still play (silently). The host counts every local pane, each window its
+   own panes; a pane stops counting on finish, on `pane_exited`/`pane_closed`, or after 6 h.
+4. Reduced motion: no `walk` or ambient `hop`; renderers show a still frame.
+5. Granular toggles (`allow_*`) remove whole rule families.
+6. Activity preset and personality weights.
 
 Posture is a two-state FSM: `asleep` can only leave through `wake`; nothing else may start while
 asleep (startle reactions route through `wake`).

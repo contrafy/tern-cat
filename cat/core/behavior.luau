@@ -2,8 +2,9 @@
 -- Behavior decision policy: a weighted FSM over EngineState. Pure: callers inject time,
 -- rng, config, profile and environment through DecideContext.
 --
--- Precedence (highest first): snooze, quiet hours, reduced motion, allow_* toggles,
--- activity preset and personality. A sleeping cat only leaves sleep through `wake`.
+-- Precedence (highest first): snooze, quiet hours, focus mode (env.busy: a command is running
+-- with `behavior.focus_mode` on), reduced motion, allow_* toggles, activity preset and
+-- personality. A sleeping cat only leaves sleep through `wake`.
 
 local T = require("../types")
 local animations = require("../render/animations")
@@ -42,6 +43,15 @@ local QUIET_REASONS: { [string]: string } = {
 	sleep = "Quiet hours; sleeping.",
 	blink = "Quiet hours; a slow blink.",
 	groom = "Quiet hours; grooming quietly.",
+}
+
+-- What a focused cat may do on its own while a command runs: nothing that moves or reacts.
+local FOCUS_REASONS: { [string]: string } = {
+	idle = "A command is running; keeping still.",
+	sit = "A command is running; sitting quietly.",
+	blink = "A command is running; a slow blink.",
+	groom = "A command is running; grooming quietly.",
+	sleep = "A command is running; napping.",
 }
 
 local ACTIVITY_MULTIPLIERS: { [string]: { [string]: number } } = {
@@ -144,7 +154,7 @@ local function finalize(d: Decision, ctx: Ctx): Decision
 	if env.reduced_motion then
 		out.intensity = 0
 	end
-	if env.quiet_hours then
+	if env.quiet_hours or env.busy then
 		out.sound = nil
 	end
 	return out
@@ -246,6 +256,34 @@ local function ambientWeights(ctx: Ctx): { [string]: number }
 	return w
 end
 
+-- Focus mode ambient choice: only the calm animations, still weighted by personality and mood.
+local function focusAmbient(ctx: Ctx): Decision
+	local b = ctx.config.behavior
+	local pick: T.Animation = "sleep"
+	if not (b.allow_idle_sleep and ctx.profile.needs.energy < LOW_ENERGY) then
+		local weights: { [string]: number } = {}
+		for name, weight in ambientWeights(ctx) do
+			if FOCUS_REASONS[name] then
+				weights[name] = weight
+			end
+		end
+		pick = (ctx.rng:weighted(weights) or "idle") :: any
+	end
+	return decide("ambient.focus", pick, FOCUS_REASONS[pick], ctx)
+end
+
+-- Focus mode replaces a moving or reactive decision as soon as a command runs instead of
+-- letting it play out. Gestures and an in-progress wake are left alone.
+local function needsSettling(state: T.EngineState, ctx: Ctx): boolean
+	local current = state.current
+	return ctx.env.busy
+		and state.posture == "awake"
+		and current ~= nil
+		and not isGestureRelated(current.id)
+		and current.animation ~= "wake"
+		and FOCUS_REASONS[current.animation] == nil
+end
+
 local function chooseAmbient(state: T.EngineState, ctx: Ctx): (Decision, string?)
 	local env = ctx.env
 	local b = ctx.config.behavior
@@ -264,6 +302,9 @@ local function chooseAmbient(state: T.EngineState, ctx: Ctx): (Decision, string?
 		if not b.allow_idle_sleep then
 			return decide("ambient.wake", "wake", "Idle naps are turned off.", ctx)
 		end
+		if env.busy then
+			return decide("ambient.focus", "sleep", FOCUS_REASONS.sleep, ctx)
+		end
 		if not away and needs.energy >= RESTED_ENERGY and rng:chance(NATURAL_WAKE_CHANCE) then
 			return decide("ambient.wake", "wake", "Done napping.", ctx)
 		end
@@ -272,6 +313,9 @@ local function chooseAmbient(state: T.EngineState, ctx: Ctx): (Decision, string?
 	if env.quiet_hours then
 		local pick: T.Animation = (rng:weighted({ sleep = 4, blink = 1, groom = 1 }) or "sleep") :: any
 		return decide("ambient.quiet", pick, QUIET_REASONS[pick], ctx)
+	end
+	if env.busy then
+		return focusAmbient(ctx)
 	end
 	if b.allow_idle_sleep and needs.energy < LOW_ENERGY then
 		return decide("ambient.tired", "sleep", "Low on energy; taking a nap.", ctx)
@@ -436,6 +480,9 @@ local function tick(state: T.EngineState, ctx: Ctx): (T.EngineState, Decision?)
 	then
 		return apply(state, decide("ambient.snoozed", "sleep", "Snoozed.", ctx), ctx)
 	end
+	if needsSettling(state, ctx) then
+		return apply(state, (chooseAmbient(state, ctx)), ctx)
+	end
 	if ctx.now_ms < state.until_ms then
 		return state, nil
 	end
@@ -445,7 +492,12 @@ local function tick(state: T.EngineState, ctx: Ctx): (T.EngineState, Decision?)
 		s = table.clone(state)
 		s.pending = nil
 		local allowed = isGestureRelated(pending.id)
-			or (not ctx.env.snoozed and not ctx.env.quiet_hours and familyAllowed(pending.id, ctx.config.behavior))
+			or (
+				not ctx.env.snoozed
+				and not ctx.env.quiet_hours
+				and not ctx.env.busy
+				and familyAllowed(pending.id, ctx.config.behavior)
+			)
 		if allowed then
 			return apply(s, pending, ctx)
 		end
@@ -479,6 +531,12 @@ local function react(state: T.EngineState, event: T.CatEvent, ctx: Ctx): (T.Engi
 
 	local env = ctx.env
 	if env.snoozed or env.quiet_hours then
+		return s, nil
+	end
+	if env.busy then
+		if needsSettling(s, ctx) then
+			return apply(s, (chooseAmbient(s, ctx)), ctx)
+		end
 		return s, nil
 	end
 

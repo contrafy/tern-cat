@@ -275,5 +275,26 @@ describe("block view", function()
 			local start = prefs(m).p.sections[1].rows[2]
 			expect(start.control.options[1].value).toBe("22:30")
 		end)
+
+		it("offers focus mode on the quiet page, on by the Quiet Office preset", function()
+			local function focusRow(m: any): any
+				for _, section in prefs(m).p.sections do
+					for _, r in section.rows do
+						if r.id == "behavior.focus_mode" then
+							return r
+						end
+					end
+				end
+				return nil
+			end
+			local off = focusRow(settingsModel("quiet"))
+			expect(off).notToBeNil()
+			expect(off.control).toEqual({ k = "switch", on = false })
+			local m = settingsModel("quiet")
+			m.config = factories.config({ behavior = { activity = "quiet_office" } })
+			local on = focusRow(m)
+			expect(on.control.on).toBe(true)
+			expect(on.changed).toBe(false)
+		end)
 	end)
 end)

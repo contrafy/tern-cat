@@ -109,21 +109,28 @@ Command reactions are sampled (`reaction_sample_rate`, default 35%) and rate lim
 editor, network, package, other) and exit status are used; the command line is dropped inside
 the hook.
 
+Focus mode (`behavior.focus_mode`, off by default, on in `quiet_office`; switch under Quiet
+hours & sound in the settings page) keeps the cat still while any command runs: it only idles,
+sits, blinks, grooms or sleeps, does not react to commands or panes, and plays no sound. Your own
+pets, treats, play and `perform` requests still play. When the last running command finishes,
+the cat behaves normally again and may react to that command. Snooze and quiet hours rank above
+focus mode; reduced motion and the `allow_*` toggles below it.
+
 The mood (calm, playful, sleepy, annoyed, curious, happy) comes from the needs (hunger, energy,
 affection, boredom), which never reduce stats and are simulated, capped, for time Tern was
 closed.
 
 Presets (`behavior.activity`): `orange_menace` (default), `quiet_office` (fewer swats, no pacing,
-rare reactions), `chaos` (frequent reactions, more swats, hops and walks), `zen` (mostly sitting
-and sleeping). Explicit keys in your config beat the preset.
+rare reactions, focus mode), `chaos` (frequent reactions, more swats, hops and walks), `zen`
+(mostly sitting and sleeping). Explicit keys in your config beat the preset.
 
 ## Carly integration
 
 The window half registers these Carly exports (Carly calls them as
 `plugins['tern-cat'].<name>(...)`). Every argument is validated, every call is wrapped in
 `pcall`, and actions return `{ok = true}` or `{ok = false, error = "..."}`. Requests are rate
-limited (a burst of 3, then 10 per minute), and Carly can only mute sound or turn quiet hours on,
-never the reverse.
+limited (a burst of 3, then 10 per minute), and Carly can only mute sound or turn quiet hours or
+focus mode on, never the reverse.
 
 | Export | Signature |
 |---|---|
@@ -166,8 +173,8 @@ host half runs a local player with a fixed argument list:
   `sh -c "command -v pw-play paplay aplay"` probe. No player found means silence.
 
 Five sounds (meow, purr, surprise, happy, swat), each switchable in `sound.events`. Silent while
-snoozed, during quiet hours (unless `sound.respect_quiet_hours` is off) and at volume 0; at most
-one sound every 2 seconds.
+snoozed, during quiet hours (unless `sound.respect_quiet_hours` is off), in focus mode while a
+command runs, and at volume 0; at most one sound every 2 seconds.
 
 ## Multiple windows and remote panes
 

@@ -203,6 +203,8 @@ export type Config = {
 		allow_pane_reactions: boolean,
 		allow_idle_sleep: boolean,
 		allow_pacing: boolean,
+		-- While a command runs: no moving or reactive decisions and no sound (see Environment.busy).
+		focus_mode: boolean,
 		-- Probability that an eligible command event produces a visible reaction.
 		reaction_sample_rate: number,
 		-- Minimum seconds between two reactions to the same trigger.
@@ -238,6 +240,9 @@ export type Environment = {
 	reduced_motion: boolean,
 	quiet_hours: boolean,
 	snoozed: boolean,
+	-- Focus mode is on and a command is running (in any local pane for the host, in this
+	-- window's panes for a window).
+	busy: boolean,
 }
 
 export type DecideContext = {
