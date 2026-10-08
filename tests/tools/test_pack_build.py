@@ -132,6 +132,26 @@ def test_build_check_and_staleness(tmp_path: Path, capsys: pytest.CaptureFixture
     assert run("--check", pack) == 0
 
 
+def test_single_frame_animation_is_one_frame_apng(tmp_path: Path) -> None:
+    pack = make_pack(tmp_path / "tiny")
+    frame(pack / "frames/sleep/01.png", (50, 50, 50, 255))
+    manifest = json.loads((pack / "pack.json").read_text(encoding="utf-8"))
+    manifest["animations"]["sleep"] = {
+        "frames": ["frames/sleep/01.png"],
+        "durations_ms": [1000],
+        "loop": False,
+        "anchor": [8, 11],
+        "hitbox": [2, 2, 12, 8],
+    }
+    (pack / "pack.json").write_text(json.dumps(manifest), encoding="utf-8")
+    assert run(pack) == 0
+    assert apng_info(pack / "build/sleep.apng") == (1, 1, [1000])
+    with Image.open(pack / "build/sleep.sheet.png") as sheet:
+        assert sheet.size == (W, H)
+    assert validate_packs.validate_sprite_pack(pack, bundled=False)
+    assert pack_build.main([str(pack)]) == 0  # lune cross-check too, when available
+
+
 def test_check_flags_missing_manifest_fields(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     pack = make_pack(tmp_path / "tiny")
     assert run(pack) == 0

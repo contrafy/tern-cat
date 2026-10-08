@@ -9,6 +9,8 @@ settings this makes the output bytes a pure function of pixels, durations and lo
 from __future__ import annotations
 
 import io
+import struct
+import zlib
 
 from PIL import Image
 
@@ -54,11 +56,34 @@ def encode_apng(frames: list[Image.Image], durations: list[int], loop: bool) -> 
         compress_level=9,
     )
     data = buf.getvalue()
+    if len(clean) == 1:
+        # Pillow writes a plain PNG for a single frame; add acTL + fcTL so it is a 1-frame APNG.
+        data = _single_frame_apng(data, clean[0].width, clean[0].height, durations[0], loop)
     with Image.open(io.BytesIO(data)) as check:
         got = getattr(check, "n_frames", 1)
     if got != len(clean):
         raise ValueError(f"APNG encoder wrote {got} frames, expected {len(clean)} (identical consecutive frames?)")
     return data
+
+
+def _chunk(kind: bytes, payload: bytes) -> bytes:
+    return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", zlib.crc32(kind + payload))
+
+
+def _single_frame_apng(png: bytes, width: int, height: int, duration_ms: int, loop: bool) -> bytes:
+    if not 0 < duration_ms <= 0xFFFF:
+        raise ValueError(f"duration {duration_ms} ms does not fit an APNG frame delay")
+    pos = 8
+    while pos + 8 <= len(png):
+        length, kind = struct.unpack(">I4s", png[pos : pos + 8])
+        if kind == b"acTL":
+            return png
+        if kind == b"IDAT":
+            actl = _chunk(b"acTL", struct.pack(">II", 1, 0 if loop else 1))
+            fctl = _chunk(b"fcTL", struct.pack(">IIIIIHHBB", 0, width, height, 0, 0, duration_ms, 1000, 0, 0))
+            return png[:pos] + actl + fctl + png[pos:]
+        pos += 12 + length
+    raise ValueError("encoded PNG has no IDAT chunk")
 
 
 def sheet_image(frames: list[Image.Image], width: int, height: int) -> Image.Image:
