@@ -64,6 +64,9 @@ local function policy(
 	if env.quiet_hours and s.respect_quiet_hours then
 		return false, "quiet hours"
 	end
+	if env.busy then
+		return false, "focus mode"
+	end
 	local last = state.last_ms
 	if last ~= nil and now_ms - last < MIN_GAP_MS then
 		return false, "rate limited"

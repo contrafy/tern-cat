@@ -240,6 +240,9 @@ export type Environment = {
 	reduced_motion: boolean,
 	quiet_hours: boolean,
 	snoozed: boolean,
+	-- Focus mode is on and a command is running (in any local pane for the host, in this
+	-- window's panes for a window).
+	busy: boolean,
 }
 
 export type DecideContext = {

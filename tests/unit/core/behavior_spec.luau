@@ -21,7 +21,7 @@ type CtxOpts = {
 
 local function makeCtx(o: CtxOpts?): any
 	local opts: CtxOpts = o or {}
-	local env = { reduced_motion = false, quiet_hours = false, snoozed = false }
+	local env = { reduced_motion = false, quiet_hours = false, snoozed = false, busy = false }
 	for k, v in opts.env or {} do
 		env[k] = v
 	end
@@ -388,6 +388,152 @@ describe("core.behavior", function()
 			end
 		end)
 
+		it("focus mode limits ambient behavior to idle, sit, blink, groom and sleep", function()
+			local counts, decisions = ambient(2000, {
+				env = { busy = true },
+				config = factories.config({ behavior = { activity = "chaos" } }),
+				profile = factories.profile({ needs = { boredom = 0.9 }, mood = "playful" }),
+			})
+			for name in counts do
+				expect(name == "idle" or name == "sit" or name == "blink" or name == "groom" or name == "sleep").toBeTruthy()
+			end
+			expect(counts.idle or 0).toBeGreaterThan(0)
+			for _, d in decisions do
+				expect(d.sound).toBeNil()
+				expect(d.reason).toContain("command is running")
+			end
+		end)
+
+		it("focus mode cuts a moving or reactive decision short instead of letting it play out", function()
+			for _, anim in { "walk", "hop", "swat", "stare", "happy" } do
+				local s = behavior.newState(0)
+				s.current = {
+					id = `ambient.{anim}`,
+					animation = anim :: any,
+					intensity = 1,
+					duration_ms = 6000,
+					reason = "test",
+				}
+				s.until_ms = 6000
+				local _, d = behavior.tick(s, makeCtx({ now_ms = 100, env = { busy = true } }))
+				expect(d).notToBeNil()
+				expect(d.id).toBe(`ambient.focus`)
+				-- A command starting mid-walk settles the cat at once, without waiting for a tick.
+				local _, r = behavior.react(s, started("build"), makeCtx({ now_ms = 100, env = { busy = true } }))
+				expect(r).notToBeNil()
+				expect(r.id).toBe("ambient.focus")
+			end
+			-- A calm decision is left alone.
+			local calm = behavior.newState(0)
+			local _, none = behavior.tick(calm, makeCtx({ now_ms = 100, env = { busy = true } }))
+			expect(none).toBeNil()
+		end)
+
+		it("focus mode suppresses reactions and does not wake a napping cat", function()
+			local config = eagerConfig()
+			local s = behavior.newState(0)
+			for _, ev in { finished("test", 1), finished("list", 0), started("sudo"), paneEv("created"), focusEv() } do
+				local _, d = behavior.react(s, ev, makeCtx({ now_ms = 5000, config = config, env = { busy = true } }))
+				expect(d).toBeNil()
+			end
+			for seed = 1, 30 do
+				local asleep = asleepState(0, seed)
+				local s2, d = behavior.react(
+					asleep,
+					started("build"),
+					makeCtx({ now_ms = 5000, seed = seed, config = config, env = { busy = true } })
+				)
+				expect(d).toBeNil()
+				expect(s2.posture).toBe("asleep")
+			end
+		end)
+
+		it("explicit gestures still respond in focus mode, silently", function()
+			for _, g in { "pet", "poke", "feed", "play" } do
+				for seed = 1, 20 do
+					local _, d = behavior.react(
+						behavior.newState(0),
+						gestureEv(g),
+						makeCtx({ now_ms = 10, seed = seed, env = { busy = true } })
+					)
+					expect(d).notToBeNil()
+					expect(d.sound).toBeNil()
+				end
+			end
+			local _, hop = behavior.react(
+				behavior.newState(0),
+				gestureEv("perform", "hop"),
+				makeCtx({ now_ms = 10, env = { busy = true } })
+			)
+			expect(hop.animation).toBe("hop")
+			-- And the gesture is not cut short by the next tick.
+			local s, d = behavior.react(
+				behavior.newState(0),
+				gestureEv("perform", "walk"),
+				makeCtx({ now_ms = 10, env = { busy = true } })
+			)
+			expect(d.animation).toBe("walk")
+			local _, cut = behavior.tick(s, makeCtx({ now_ms = 20, env = { busy = true } }))
+			expect(cut).toBeNil()
+		end)
+
+		it("drops a reaction queued behind a wake when focus mode began meanwhile", function()
+			local config = eagerConfig({ allow_pane_reactions = true })
+			for seed = 1, 60 do
+				local s = asleepState(0, seed)
+				local d
+				s, d = behavior.react(s, paneEv("created"), makeCtx({ now_ms = 5000, seed = seed, config = config }))
+				if d and d.animation == "wake" and s.pending then
+					local _, next =
+						behavior.tick(s, makeCtx({ now_ms = s.until_ms, seed = seed, env = { busy = true } }))
+					expect(next).notToBeNil()
+					expect(next.id).toBe("ambient.focus")
+					return
+				end
+			end
+			error("no seed woke the cat for a pane reaction")
+		end)
+
+		it("quiet hours beat focus mode (no idle or sit)", function()
+			local counts, decisions = ambient(1000, { env = { busy = true, quiet_hours = true } })
+			for name in counts do
+				expect(name == "sleep" or name == "blink" or name == "groom").toBeTruthy()
+			end
+			for _, d in decisions do
+				expect(d.reason).toContain("Quiet hours")
+			end
+		end)
+
+		it("focus mode beats reduced motion (no look, stretch or swat), which still zeroes intensity", function()
+			local config = factories.config({ behavior = { activity = "chaos" } })
+			local still = ambient(2000, { env = { reduced_motion = true }, config = config })
+			expect((still.look or 0) + (still.swat or 0)).toBeGreaterThan(0)
+			local counts, decisions = ambient(2000, { env = { reduced_motion = true, busy = true }, config = config })
+			expect(counts.look).toBeNil()
+			expect(counts.stretch).toBeNil()
+			expect(counts.swat).toBeNil()
+			for _, d in decisions do
+				expect(d.intensity).toBe(0)
+			end
+		end)
+
+		it("snooze beats focus mode", function()
+			local counts = ambient(300, { env = { busy = true, snoozed = true } })
+			for name in counts do
+				expect(name).toBe("sleep")
+			end
+		end)
+
+		it("a finished command reacts normally once nothing is running", function()
+			local _, d = behavior.react(
+				behavior.newState(0),
+				finished("build", 0),
+				makeCtx({ now_ms = 5000, config = eagerConfig() })
+			)
+			expect(d).notToBeNil()
+			expect(string.sub(d.id, 1, 6)).toBe("react.")
+		end)
+
 		it("toggles remove whole families even when the preset favors them", function()
 			local config = factories.config({
 				behavior = { activity = "chaos", allow_swats = false, allow_pacing = false },
@@ -751,6 +897,7 @@ describe("core.behavior", function()
 					reduced_motion = driver:chance(0.2),
 					quiet_hours = driver:chance(0.2),
 					snoozed = driver:chance(0.15),
+					busy = driver:chance(0.2),
 				}
 				local config = configs[driver:int(1, #configs)]
 				local ctx = makeCtx({
@@ -807,6 +954,17 @@ describe("core.behavior", function()
 							local a = d.animation
 							if a ~= "sleep" and a ~= "blink" and a ~= "groom" and a ~= "wake" then
 								error(`quiet hours ambient {a}`)
+							end
+						end
+					end
+					if env.busy then
+						expect(d.sound).toBeNil()
+						expect(string.sub(d.id, 1, 6) ~= "react.").toBeTruthy()
+						if string.sub(d.id, 1, 8) == "ambient." then
+							local a = d.animation
+							local calm = a == "idle" or a == "sit" or a == "blink" or a == "groom" or a == "sleep"
+							if not calm and a ~= "wake" then
+								error(`focus mode ambient {a}`)
 							end
 						end
 					end
