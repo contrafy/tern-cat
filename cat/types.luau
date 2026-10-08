@@ -139,6 +139,8 @@ export type EngineState = {
 	-- Last observed user activity (engine ms): commands, focus changes, gestures.
 	last_activity_ms: number,
 	fail_streak: number,
+	-- Decision deferred behind a `wake` (a sleeping cat must wake before doing anything else).
+	pending: BehaviorDecision?,
 }
 
 export type Rng = {
