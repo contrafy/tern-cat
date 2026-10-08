@@ -32,10 +32,12 @@ esac
 
 if command -v lune >/dev/null; then step tests lune run tests/run.luau; else missing tests "lune not on PATH"; fi
 
-if [ -f tools/validate_packs.py ]; then
-  if command -v uv >/dev/null; then step packs uv run tools/validate_packs.py; else missing packs "uv not on PATH"; fi
+if command -v uv >/dev/null; then
+  step packs uv run tools/validate_packs.py
+  step tools uv run --with pytest --with pillow==12.3.0 pytest -q tests/tools
 else
-  record packs "SKIP (tools/validate_packs.py absent)"
+  missing packs "uv not on PATH"
+  missing tools "uv not on PATH"
 fi
 
 echo
