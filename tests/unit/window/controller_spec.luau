@@ -33,9 +33,13 @@ local function encodeJson(value: any): string
 	return serde.encode("json", value)
 end
 
-local function addPack(files: { [string]: string }, dir: string, id: string)
+local function addPack(files: { [string]: string }, dir: string, id: string, extra: { string }?)
 	local anims: { [string]: any } = {}
-	for _, anim in { "idle", "pet", "sleep", "happy", "stare", "look", "wake" } do
+	local names = { "idle", "pet", "sleep", "happy", "stare", "look", "wake" }
+	for _, anim in extra or {} do
+		table.insert(names, anim)
+	end
+	for _, anim in names do
 		anims[anim] = {
 			frames = { anim .. "_0.png", anim .. "_1.png" },
 			durations_ms = { 200, 200 },
@@ -94,12 +98,36 @@ local function rawFs(files: { [string]: string }, dirs: { [string]: boolean }, r
 	}
 end
 
-local function world(opts: { config: any?, kv: any? }?): World
+-- portals.json with one 2-frame style ("portal") and its sheets.
+local function addPortals(files: { [string]: string })
+	local root = DIR .. "/assets/portals"
+	local function layer(sheet: string, durations: { number }): any
+		files[root .. "/" .. sheet] = support.makePng({ width = 48 * #durations, height = 24 })
+		return { sheet = sheet, frames = #durations, durations_ms = durations }
+	end
+	files[root .. "/portals.json"] = encodeJson({
+		schema_version = 1,
+		frame = { width = 48, height = 24 },
+		anchor = { 24, 12 },
+		styles = {
+			portal = {
+				name = "Swirly portal",
+				enter = { back = layer("portal/enter-back.sheet.png", { 400, 400 }) },
+				exit = { back = layer("portal/exit-back.sheet.png", { 320, 320 }) },
+			},
+		},
+	})
+end
+
+local function world(opts: { config: any?, kv: any?, portals: boolean?, dive: boolean? }?): World
 	local o = opts or {}
 	local files: { [string]: string } = {}
 	local dirs: { [string]: boolean } = {}
-	addPack(files, DIR .. "/assets/packs/orange-menace", "orange-menace")
+	addPack(files, DIR .. "/assets/packs/orange-menace", "orange-menace", if o.dive then { "dive", "emerge" } else nil)
 	addPack(files, DIR .. "/assets/packs/void", "void")
+	if o.portals then
+		addPortals(files)
+	end
 	if o.config then
 		files[DATA .. "/config.json"] = encodeJson(o.config)
 	end
@@ -429,6 +457,87 @@ describe("window/controller loop", function()
 			expect(c.pack and c.pack.manifest.id).toBe("orange-menace")
 			expect(c.packs.packs.calico).toBeNil()
 		end)
+	end)
+end)
+
+describe("window/controller pane transition", function()
+	local GRID = "div.tv-grid > div.tv-fx::after"
+
+	local function warnings(w: World, needle: string): number
+		local n = 0
+		for _, line in w.logs do
+			if string.find(line, needle, 1, true) then
+				n += 1
+			end
+		end
+		return n
+	end
+
+	it("draws the selected prop and clips the decision sheet when the pack has no dive or emerge", function()
+		local w = world({ portals = true })
+		controller.start(controller.new(w.ports))
+		local css = lastCss(w)
+		expect(css).toContain(GRID)
+		expect(css).toContain("tern-cat-emerge 640ms step-end 1 backwards")
+		expect(css).toContain("transition: height 480ms steps(")
+	end)
+
+	it("uses the pack's own dive and emerge sheets", function()
+		local w = world({ portals = true, dive = true })
+		controller.start(controller.new(w.ports))
+		local css = lastCss(w)
+		expect(css).toContain("transition: background-position 200ms steps(1, end), height 0s step-end 400ms;")
+		expect(css).toContain("tern-cat-emerge 400ms step-end 1 backwards")
+	end)
+
+	it("keeps the emerge name across decision changes so a re-install never replays it", function()
+		local w = world({ portals = true })
+		local c = controller.new(w.ports)
+		controller.start(c)
+		local before = #w.css
+		controller.request(c, "pet", {}, "keyboard")
+		expect(#w.css).toBeGreaterThan(before)
+		expect(lastCss(w)).toContain("tern-cat-emerge 640ms step-end 1 backwards")
+	end)
+
+	it("draws no transition when it is off, motion is reduced or the props are missing", function()
+		local off = world({ portals = true, config = { rendering = { pane_transition = "off" } } })
+		controller.start(controller.new(off.ports))
+		expect(lastCss(off)).notToContain(GRID)
+		expect(lastCss(off)).notToContain("emerge")
+		for _, path in off.reads do
+			expect(path).notToContain("portals.json")
+		end
+
+		local still = world({ portals = true, config = { rendering = { reduced_motion = "on" } } })
+		controller.start(controller.new(still.ports))
+		expect(lastCss(still)).notToContain(GRID)
+
+		local tern = world({ portals = true })
+		local c = controller.new(tern.ports)
+		controller.start(c)
+		fire(tern, { reduce_motion = true })
+		expect(lastCss(tern)).notToContain(GRID)
+		expect(lastCss(tern)).notToContain("emerge")
+	end)
+
+	it("turns the transition off with a single warning when portals.json is missing", function()
+		local w = world()
+		local c = controller.new(w.ports)
+		controller.start(c)
+		for _ = 1, 10 do
+			fire(w)
+		end
+		expect(lastCss(w)).notToContain(GRID)
+		expect(lastCss(w)).toContain("div.tv-fx.top::after {")
+		expect(warnings(w, "pane transition off")).toBe(1)
+	end)
+
+	it("turns off only the style that fails to load", function()
+		local w = world({ portals = true, config = { rendering = { pane_transition = "vent" } } })
+		controller.start(controller.new(w.ports))
+		expect(lastCss(w)).notToContain(GRID)
+		expect(warnings(w, 'no style "vent"')).toBe(1)
 	end)
 end)
 

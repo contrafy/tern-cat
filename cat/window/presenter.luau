@@ -20,6 +20,8 @@ export type View = {
 	pace: boolean,
 	-- CSS-only pointer reactions (look while near, swat when pressed).
 	reactions: boolean,
+	-- Pane-switch prop style; "off" while still or hidden.
+	transition: T.PaneTransition,
 	facing: Facing,
 	seq: number,
 }
@@ -282,6 +284,8 @@ local function view(p: Presenter): View
 		still = isStill,
 		pace = animation == "walk" and p.config.behavior.allow_pacing and not isStill,
 		reactions = not hidden and p.config.behavior.allow_pointer_reactions,
+		-- Reduced motion: the cat simply appears in the newly focused pane.
+		transition = if hidden or isStill then "off" else p.config.rendering.pane_transition,
 		facing = p.facing,
 		seq = p.seq,
 	}
@@ -294,7 +298,14 @@ local function reaction(a: Asset?): overlay.Reaction?
 	return { sheet_url = a.sheet_url, durations_ms = a.durations_ms, loop = a.loop }
 end
 
-local function params(p: Presenter, v: View, asset: Asset?, reactions: ReactionAssets?): overlay.Params
+-- `transition` is the pane-switch prop and the pack's dive/emerge sheets for `v.transition`.
+local function params(
+	p: Presenter,
+	v: View,
+	asset: Asset?,
+	reactions: ReactionAssets?,
+	transition: overlay.Transition?
+): overlay.Params
 	if asset == nil or v.hidden then
 		return { hidden = true } :: any
 	end
@@ -316,6 +327,7 @@ local function params(p: Presenter, v: View, asset: Asset?, reactions: ReactionA
 		reactions = if v.reactions and reactions
 			then { hover = reaction(reactions.hover), press = reaction(reactions.press) }
 			else nil,
+		transition = if v.transition ~= "off" then transition else nil,
 	}
 end
 

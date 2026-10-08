@@ -16,6 +16,7 @@ local pathsAdapter = require("../adapters/paths")
 local carly = require("../integrations/carly")
 local presenterMod = require("./presenter")
 local packsMod = require("./packs")
+local portalsMod = require("./portals")
 local intents = require("./intents")
 local mirror = require("./mirror")
 
@@ -56,6 +57,9 @@ export type Controller = {
 	packs: packsMod.Cache,
 	pack: T.LoadedPack?,
 	pack_warning: string?,
+	portals: portalsMod.Cache,
+	-- Last pane-transition problem logged (once until it changes).
+	portal_warning: string?,
 	config: T.Config,
 	config_text: string?,
 	-- config.json exists but could not be read; reported once until it reads again.
@@ -128,6 +132,13 @@ local function new(ports: Ports): Controller
 		}),
 		pack = nil,
 		pack_warning = nil,
+		portals = portalsMod.new({
+			fs = ports.fs,
+			decode = ports.json.decodeOrError,
+			base64 = ports.base64,
+			dir = ports.paths.bundled_portals,
+		}),
+		portal_warning = nil,
 		config = config,
 		config_text = nil,
 		config_unreadable = false,
@@ -170,11 +181,38 @@ local function selectPack(c: Controller)
 	c.pack_warning = warning
 end
 
+-- The pack's own sheet for a transition animation, without falling back to another animation
+-- (the overlay clips the decision sheet instead).
+local function exact(c: Controller, pack: T.LoadedPack, anim: T.Animation): overlay.Reaction?
+	if pack.manifest.animations[anim] == nil then
+		return nil
+	end
+	local a = packsMod.asset(c.packs, pack, anim)
+	return if a then { sheet_url = a.sheet_url, durations_ms = a.durations_ms } else nil
+end
+
+-- Prop plus dive/emerge for the selected style; nil (and one warning) when the props cannot load.
+local function transition(c: Controller, pack: T.LoadedPack, style: T.PaneTransition): overlay.Transition?
+	if style == "off" then
+		return nil
+	end
+	local prop, problem = portalsMod.prop(c.portals, style)
+	if prop == nil then
+		if problem ~= c.portal_warning then
+			c.ports.log("warn", `tern-cat overlay: pane transition off: {problem or "props unavailable"}`)
+			c.portal_warning = problem
+		end
+		return nil
+	end
+	return { prop = prop, dive = exact(c, pack, "dive"), emerge = exact(c, pack, "emerge") }
+end
+
 local function render(c: Controller)
 	local p = c.presenter
 	local v = presenterMod.view(p)
 	local asset: packsMod.Asset? = nil
 	local reactions: presenterMod.ReactionAssets? = nil
+	local switch: overlay.Transition? = nil
 	if not v.hidden and c.pack then
 		local pack = c.pack :: T.LoadedPack
 		asset = packsMod.asset(c.packs, pack, v.animation)
@@ -184,8 +222,9 @@ local function render(c: Controller)
 				press = packsMod.asset(c.packs, pack, presenterMod.PRESS_ANIMATION),
 			}
 		end
+		switch = transition(c, pack, v.transition)
 	end
-	local css = overlay.css(presenterMod.params(p, v, asset, reactions))
+	local css = overlay.css(presenterMod.params(p, v, asset, reactions, switch))
 	if css ~= c.css_last then
 		c.ports.css(SHEET, css)
 		c.css_last = css
@@ -468,6 +507,8 @@ end
 
 local function reloadConfig(c: Controller)
 	packsMod.invalidate(c.packs)
+	portalsMod.invalidate(c.portals)
+	c.portal_warning = nil
 	c.pack = nil
 	loadConfig(c, true)
 	pollKv(c)
