@@ -58,6 +58,10 @@ Targets Tern 0.6.2.
   gestures still play. Ranks below quiet hours and above reduced motion. Running commands are
   tracked per pane (host: every local pane; window: its own panes) until they finish, their pane
   closes, or 6 hours pass. Carly may turn it on but not off.
+- Remove user-installed sprite packs from the block: Settings > Appearance > Remove <pack>, then
+  Confirm within 10 s. Only folders directly inside `<tern.plugin.data>/packs/` are deleted;
+  bundled packs cannot be removed. Removing the selected pack switches the cat back to Orange
+  Menace.
 - Safety guard `tests/unit/safety_spec.luau`: fails the test run if shipped sources call APIs
   that type into panes, read terminal output, use the network or clipboard, change Tern settings
   or keybinds, start Carly turns, or spawn processes outside the host sound player.
@@ -95,5 +99,7 @@ Targets Tern 0.6.2.
   up front instead of silently reverting.
 - Full pack scans in a window run one pack per timer slice to stay inside Tern's 50 ms budget.
 - Command statistics are persisted at most every 1.5 s under command storms.
+- A window no longer keeps drawing a sprite pack whose folder was removed; it falls back to the
+  default pack within about 3 s, even if `config.json` still names the removed pack.
 
 [Unreleased]: https://github.com/contrafy/tern-cat/commits/master

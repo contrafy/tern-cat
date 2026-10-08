@@ -104,15 +104,15 @@ All modules are `--!strict` and return a table of functions. Only the entries an
 | `cat/render/overlay.luau` | Overlay CSS generator (sanitized string output; optional `still`) | `css(params)` |
 | `cat/sprite/png.luau` | PNG/APNG header parsing without decoding pixels | `inspect(bytes)` |
 | `cat/sprite/manifest.luau` | `pack.json` validation: limits, path segment rules, animation set | `validate(table, fs, root)`, `checkPath` |
-| `cat/sprite/loader.luau` | Discover bundled and user packs, validate, fall back to the default pack | `loadAll(fs, roots)`, `get(id)` |
+| `cat/sprite/loader.luau` | Discover bundled and user packs, validate, fall back to the default pack; the only folder a pack removal may delete | `loadAll(fs, roots)`, `select`, `removableDir(pack, user_root)` |
 
 ### Host half (`host.luau`)
 
 | Module | Responsibility | Key functions |
 |---|---|---|
-| `cat/host/brain.luau` | The single writer: owns the store, ticks the engine (next delay clamped to 0.5-5 s), applies inbox intents, polls config, writes config changes (pretty JSON in example key order; backs up an unreadable file first), persists kv only when `rev` changes, moves a corrupt `kv.json` aside and starts a fresh cat, tracks running commands in every local pane (focus mode), plays sounds | `load(deps)`, `tick`, `onCommandStarted/Finished`, `onPaneEvent`, `applyIntent`, `pollInbox`, `pollConfig`, `setConfig`, `availablePacks`, `subscribe` |
+| `cat/host/brain.luau` | The single writer: owns the store, ticks the engine (next delay clamped to 0.5-5 s), applies inbox intents, polls config, writes config changes (pretty JSON in example key order; backs up an unreadable file first), persists kv only when `rev` changes, moves a corrupt `kv.json` aside and starts a fresh cat, tracks running commands in every local pane (focus mode), plays sounds, removes user packs (switching the appearance back to the default when the removed pack was selected) | `load(deps)`, `tick`, `onCommandStarted/Finished`, `onPaneEvent`, `applyIntent`, `pollInbox`, `pollConfig`, `setConfig`, `availablePacks`, `removePack`, `subscribe` |
 | `cat/host/inbox.luau` | Inbox poll: name pattern `<ms>-<8hex>.json`, 5 s grace for bad files, 32 files per poll | `poll(state, fs, json, dir, now)` |
-| `cat/host/controls.luau` | Block input mapping: actions, menu, focused-block keys (`p o f space s h z`, Escape), settings-row changes, test mode (`test`, `frozen`, `seed=N`, or `TERN_CAT_TEST`) | `resolveAction`, `menuActions`, `keyAction`, `settingsChange`, `parseTestMode` |
+| `cat/host/controls.luau` | Block input mapping: actions, menu, focused-block keys (`p o f space s h z`, Escape), settings-row changes, two-step confirmation for Reset identity and Remove pack (10 s), test mode (`test`, `frozen`, `seed=N`, or `TERN_CAT_TEST`) | `resolveAction`, `menuActions`, `keyAction`, `settingsChange`, `armConfirm`, `isArmed`, `parseTestMode` |
 | `cat/integrations/hooks.luau` | Registers `command_started`, `command_finished`, `cwd`, `pane_exited`; classifies the line inside the handler and drops it (no `title` hook: shells retitle on every prompt) | `register(on, sink)` |
 | `cat/integrations/sound.luau` | Policy (off by default, per-event flags, quiet hours, snooze, focus mode, volume 0, 2 s minimum gap), sound pack loading, player detection and argv | `policy`, `loadPack`, `detect`, `argv`, `play` |
 
@@ -125,7 +125,7 @@ passes it to `sound.detect` and `sound.play`.
 |---|---|---|
 | `cat/window/controller.luau` | The window loop behind injected ports: one self-rescheduling timer (next decision, kv poll every 2 s, config poll every 3 s), requests to intents, overlay toggle, reset confirmation (second run within 10 s), cover state, Carly snapshot and context. Never writes kv | `new`, `start`, `onWindowEvent`, `request`, `toggleOverlay`, `reloadConfig`, `confirmReset`, `setCovered`, `snapshot`, `context` |
 | `cat/window/presenter.luau` | One read-only behavior engine per window; command lines reduced to a category immediately; this window's running commands (focus mode, tracked even while the overlay is hidden; host `react.*` mirrors are skipped while busy); overlay parameters; local override until config agrees | `new`, `view`, `params`, `tick`, `react`, `observe`, `gesture`, `mirror`, `eventFor`, `setConfig`, `setCovered`, `visible` |
-| `cat/window/packs.luau` | Validates only the wanted and default packs (full scan only if both miss), resolves fallbacks, caches each sheet as a data URL; a pack without a built sheet uses its first frame | `new`, `select`, `asset`, `invalidate` |
+| `cat/window/packs.luau` | Validates only the wanted and default packs (full scan only if both miss), resolves fallbacks, caches each sheet as a data URL; a pack without a built sheet uses its first frame; a cached pack whose `pack.json` is gone (removed) invalidates the cache. The controller reselects on every config poll | `new`, `select`, `asset`, `invalidate` |
 | `cat/window/intents.luau` | Builds, validates and writes inbox files | `build`, `fileName`, `write` |
 | `cat/window/mirror.luau` | Decides whether to replay a host reaction | `check`, `key` |
 | `cat/window/blocks.luau` | Opens or focuses the cat block, floated or split | `open(ui, placement, settings)` |

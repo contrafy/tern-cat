@@ -40,6 +40,10 @@ Detailed reference. Settings: [configuration.md](configuration.md). Privacy: [se
 
   Turn the single-key shortcuts off with `controls.keyboard_enabled: false`.
 - The settings page edits `config.json` directly; each row has a Reset.
+- Settings > Appearance lists **Remove <pack>** for each sprite pack you installed under
+  `<tern.plugin.data>/packs/`. Click Remove..., then Confirm within 10 seconds: the pack's folder
+  is deleted. If it was the cat's appearance, the cat switches back to Orange Menace in the block
+  and, within about 3 seconds, in every window. Bundled packs cannot be removed.
 
 ### Global hide chord
 

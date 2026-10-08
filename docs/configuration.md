@@ -186,7 +186,8 @@ every 2 seconds.
 
 ## What can change config besides you
 
-- The block's settings page (any row it shows).
+- The block's settings page (any row it shows). Removing the selected sprite pack on its
+  Appearance page sets `cat.appearance` back to `"orange-menace"`.
 - The overlay toggle and Carly's `configure` / `set_personality` exports. `configure` accepts
   only these keys: `behavior.activity`, `behavior.allow_visual_obscuring`, `behavior.allow_swats`,
   `behavior.allow_command_reactions`, `behavior.allow_development_reactions`,

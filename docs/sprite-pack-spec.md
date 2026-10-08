@@ -260,6 +260,32 @@ uv run tools/validate_packs.py                                      # every bund
   (`--no-lune` skips it), so both implementations must agree. Exits 0 or 1.
 - Passing a directory that contains `sounds.json` validates it as a sound pack.
 
+## Installing and removing a pack
+
+Install a pack by copying its folder, with the derived files built, to
+`<tern.plugin.data>/packs/<id>/` (macOS `~/Library/Application Support/Tern/plugin-data/tern-cat/packs/`,
+Linux `~/.local/state/tern/plugin-data/tern-cat/packs/`). Select it by setting `cat.appearance`
+to its `id` in `config.json`; Settings > Appearance lists it after that or after the next plugin
+reload (`tern plugin reload`), since the host scans every pack folder only once per load.
+
+Remove a user pack in the block: Settings > Appearance > **Remove <name>**, then **Confirm**
+within 10 seconds. The host (`removePack` in `cat/host/brain.luau`):
+
+- removes only `user` packs. Bundled packs have no Remove row and are refused: they live in the
+  plugin directory, and writing there reloads the plugin;
+- deletes only a folder that is a direct child of the user packs folder and has a folder name the
+  loader scans (`removableDir` in `cat/sprite/loader.luau`). Paths with `.` or `..` segments, a
+  backslash or a colon are refused, never resolved;
+- deletes it with `tern.fs.remove` (recursive). If the pack folder is a symlink, Tern 0.6.2
+  removes the link and leaves its target untouched;
+- switches `cat.appearance` back to `orange-menace` in `config.json` when the removed pack was
+  selected. If `config.json` cannot be written, the pack is still removed, the default pack is
+  shown with a note, and the toast says the appearance was not saved.
+
+Windows pick up the change within about 3 seconds: they re-read `config.json` and re-check that
+the selected pack's `pack.json` still exists, so a pack whose folder you delete by hand stops
+showing too.
+
 ## Licensing
 
 - `license` is required. State the license of the art, not of tern-cat's code.

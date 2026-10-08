@@ -148,6 +148,10 @@ Sprite and sound packs are data, never code ([sprite-pack-spec.md](sprite-pack-s
   sheet URL must be a validated relative path or a base64-only `data:image/png` URL, keyframe
   names are reduced to `[a-z0-9-]`, and every number is clamped. A pack cannot inject CSS.
 - A user pack cannot replace a bundled pack (duplicate ids are ignored).
+- Removing a pack (Settings > Appearance, two clicks) is the only delete of user-installed files.
+  It refuses bundled packs and any folder that is not a direct child of `<data>/packs/`
+  (`removableDir` in `cat/sprite/loader.luau`; `.`/`..` segments are refused, not resolved). It is
+  not reachable from windows, the inbox or Carly.
 
 ## What is stored where
 
@@ -162,7 +166,7 @@ writes inside its plugin directory. On a default install `tern.kv` lives at
 | Config | `<data>/config.json` | Your settings (`config/example.json` documents every key). Human-editable. A file that exists but cannot be read (symlink, over 256 KiB, read error) is never overwritten; settings changes fail with a note instead | you; the host half for settings changes |
 | Inbox | `<data>/inbox/<ms>-<hex>.json` | One pending intent per file (`kind`, `source`, validated `args`, id, time). The host deletes each file after applying it, and undecodable intent files after 5 s. It only ever deletes readable files with the intent name pattern; foreign names, directories and unreadable entries are logged once and left in place (`cat/host/inbox.luau`) | window halves |
 | Identity export | `<data>/exports/identity-<cat id>-<time>.json` | Written only when you request an export: cat name, appearance, personality and profile | host half |
-| User packs | `<data>/packs/<id>/`, `<data>/sounds/<id>/` | Packs you install | you |
+| User packs | `<data>/packs/<id>/`, `<data>/sounds/<id>/` | Packs you install | you; the host half deletes a sprite pack's folder when you remove it in settings |
 
 No command line, command output, working directory, hostname or file path is stored. Counters
 are bounded and never derived from command output.
