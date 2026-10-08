@@ -171,6 +171,8 @@ export type Activity = "quiet_office" | "orange_menace" | "chaos" | "zen"
 
 export type ReducedMotion = "follow_tern" | "on" | "off"
 
+export type BlockPlacement = "float" | "split"
+
 export type AiProvider = "none" | "mock" | "carly_schedule"
 
 export type Config = {
@@ -191,6 +193,7 @@ export type Config = {
 		block_scale: number,
 		animation_fps: number,
 		reduced_motion: ReducedMotion,
+		block_placement: BlockPlacement,
 	},
 	behavior: {
 		activity: Activity,

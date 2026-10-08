@@ -181,6 +181,16 @@ describe("config schema", function()
 			expect(hasWarning(warnings, "ai.provider")).toBe(true)
 		end)
 
+		it("resolves block placement with float as the default", function()
+			expect(schema.defaults().rendering.block_placement).toBe("float")
+			expect(schema.resolve({ rendering = { block_placement = "split" } }).rendering.block_placement).toBe(
+				"split"
+			)
+			local cfg, warnings = schema.resolve({ rendering = { block_placement = "tab" } })
+			expect(cfg.rendering.block_placement).toBe("float")
+			expect(hasWarning(warnings, "rendering.block_placement")).toBe(true)
+		end)
+
 		it("rejects malformed quiet hours", function()
 			local cfg, warnings = schema.resolve({ quiet = { hours_enabled = true, start = "25:00", stop = "7am" } })
 			expect(cfg.quiet.hours_enabled).toBe(true)
