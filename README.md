@@ -2,7 +2,7 @@
 
 An orange pixel cat that lives in your [Tern](https://docs.stencil.so/tern/) terminal: a block
 you can pet, feed and play with, plus a small overlay copy in the corner of the focused pane. It
-naps when you are away, reacts to commands finishing and remembers its stats. Public beta (0.x).
+naps when you are away, reacts to commands finishing and remembers its stats.
 
 | Floated card | Overlay cat |
 |---|---|
