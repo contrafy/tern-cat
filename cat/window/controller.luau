@@ -58,6 +58,8 @@ export type Controller = {
 	pack_warning: string?,
 	config: T.Config,
 	config_text: string?,
+	-- config.json exists but could not be read; reported once until it reads again.
+	config_unreadable: boolean,
 	envelope: T.StoreEnvelope,
 	rev: number?,
 	mirror_key: string?,
@@ -69,8 +71,13 @@ export type Controller = {
 	next_kv_ms: number,
 	next_cfg_ms: number,
 	reset_armed_ms: number?,
+	-- Request token buckets per intent source (see RATE_LIMITS).
+	buckets: { [string]: Bucket },
 	metrics: Metrics,
 }
+
+type Bucket = { tokens: number, at_ms: number }
+export type RateLimit = { burst: number, per_s: number }
 
 local SHEET = "overlay"
 local DEFAULT_PACK = "orange-menace"
@@ -80,6 +87,16 @@ local MIN_TIMER_MS = 100
 local RESET_CONFIRM_MS = 10000
 local SLOW_MS = 20
 local PENDING_CAT_ID = "cat-pending"
+-- Producer cap: the host drains 32 files per poll, so more than this means it is not consuming.
+local MAX_INBOX_FILES = 64
+-- Token buckets per source: Carly gets a small burst then about ten requests a minute; people at
+-- the keyboard get a generous five a second.
+local RATE_LIMITS: { [T.IntentSource]: RateLimit } = table.freeze({
+	carly = table.freeze({ burst = 3, per_s = 10 / 60 }),
+	keyboard = table.freeze({ burst = 10, per_s = 5 }),
+	window = table.freeze({ burst = 10, per_s = 5 }),
+	block = table.freeze({ burst = 10, per_s = 5 }),
+})
 
 local function pendingId(): string
 	return PENDING_CAT_ID
@@ -113,6 +130,7 @@ local function new(ports: Ports): Controller
 		pack_warning = nil,
 		config = config,
 		config_text = nil,
+		config_unreadable = false,
 		envelope = envelope,
 		rev = nil,
 		mirror_key = nil,
@@ -123,6 +141,7 @@ local function new(ports: Ports): Controller
 		next_kv_ms = now,
 		next_cfg_ms = now,
 		reset_armed_ms = nil,
+		buckets = {},
 		metrics = { load_ms = 0, ticks = 0, last_tick_ms = 0, max_tick_ms = 0, css_installs = 0 },
 	}
 	return c
@@ -166,13 +185,33 @@ local function render(c: Controller)
 	end
 end
 
--- Re-reads config.json when its text changed (or always when forced). True when applied.
+-- Re-reads config.json when its text changed (or always when forced). True when applied. A file
+-- that exists but cannot be read keeps the last good config (defaults on first load) and is
+-- reported once instead of silently resetting settings such as a disabled overlay.
 local function loadConfig(c: Controller, force: boolean): boolean
-	local text = c.ports.fs.read(c.ports.paths.config, configAdapter.MAX_BYTES)
+	local path = c.ports.paths.config
+	local text = c.ports.fs.read(path, configAdapter.MAX_BYTES)
+	local missing: configAdapter.Loaded? = nil
+	if text == nil then
+		local loaded = configAdapter.read(c.ports.fs, c.ports.json, path)
+		if loaded.unreadable then
+			if not c.config_unreadable then
+				c.config_unreadable = true
+				c.ports.log("warn", `tern-cat: {loaded.error}`)
+			end
+			if force or c.pack == nil then
+				selectPack(c)
+				refreshContext(c)
+			end
+			return false
+		end
+		missing = loaded
+	end
+	c.config_unreadable = false
 	if not force and text == c.config_text then
 		return false
 	end
-	local loaded = configAdapter.parse(text, c.ports.json)
+	local loaded = missing or configAdapter.parse(text, c.ports.json)
 	if loaded.error then
 		c.ports.log("warn", `tern-cat: {loaded.error}`)
 	end
@@ -229,9 +268,15 @@ local function onTimer(c: Controller, info: TickInfo?)
 			presenterMod.setCovered(p, info.covered == true)
 		end
 		local now = clock.now_ms()
+		local reloaded = false
 		if now >= c.next_cfg_ms then
 			c.next_cfg_ms = now + CONFIG_POLL_MS
-			loadConfig(c, false)
+			reloaded = loadConfig(c, false)
+		end
+		-- One pack per tick keeps the fallback full scan inside the timer budget.
+		if not reloaded and packsMod.scanning(c.packs) then
+			packsMod.step(c.packs)
+			selectPack(c)
 		end
 		if now >= c.next_kv_ms then
 			c.next_kv_ms = now + KV_POLL_MS
@@ -260,6 +305,9 @@ local function delayMs(c: Controller): number
 	local now = c.ports.clock.now_ms()
 	local d = presenterMod.nextDelayMs(c.presenter)
 	d = math.min(d, c.next_kv_ms - now, c.next_cfg_ms - now)
+	if packsMod.scanning(c.packs) then
+		d = 0
+	end
 	return math.max(MIN_TIMER_MS, math.ceil(d))
 end
 
@@ -346,11 +394,42 @@ local function applyLocal(c: Controller, intent: T.Intent)
 	rerender(c)
 end
 
+-- Takes one token from the source's bucket; false when it is empty.
+local function takeToken(c: Controller, source: T.IntentSource): boolean
+	local limit = RATE_LIMITS[source]
+	if limit == nil then
+		return false
+	end
+	local now = c.ports.clock.now_ms()
+	local b = c.buckets[source]
+	if b == nil then
+		b = { tokens = limit.burst, at_ms = now }
+		c.buckets[source] = b
+	end
+	b.tokens = math.min(limit.burst, b.tokens + math.max(0, now - b.at_ms) / 1000 * limit.per_s)
+	b.at_ms = now
+	if b.tokens < 1 then
+		return false
+	end
+	b.tokens -= 1
+	return true
+end
+
 -- Validates and delivers one intent, then applies its optimistic local presentation.
 local function request(c: Controller, kind: T.IntentKind, args: { [string]: any }?, source: T.IntentSource): Result
 	local intent, err = intents.build(c.rng, c.ports.clock.wall_s(), kind, args, source)
 	if not intent then
 		return { ok = false, error = err or "invalid request" }
+	end
+	if not takeToken(c, source) then
+		return { ok = false, error = "rate limited" }
+	end
+	local queued = c.ports.fs.list(c.ports.paths.inbox)
+	if queued and #queued > MAX_INBOX_FILES then
+		return {
+			ok = false,
+			error = `the inbox already holds {#queued} unprocessed requests; is the Tern Cat block running?`,
+		}
 	end
 	local path, werr = intents.write(c.ports.fs, c.ports.json, c.ports.paths.inbox, intent, c.ports.wall_ms(), c.rng)
 	if not path then
@@ -410,6 +489,8 @@ return {
 	KV_POLL_MS = KV_POLL_MS,
 	CONFIG_POLL_MS = CONFIG_POLL_MS,
 	RESET_CONFIRM_MS = RESET_CONFIRM_MS,
+	RATE_LIMITS = RATE_LIMITS,
+	MAX_INBOX_FILES = MAX_INBOX_FILES,
 	new = new,
 	start = start,
 	onWindowEvent = onWindowEvent,

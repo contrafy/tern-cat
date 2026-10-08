@@ -125,6 +125,23 @@ describe("integrations/carly exports", function()
 		expect(err).toContain("key")
 	end)
 
+	-- The agent reads this doc string to decide what to call; it must not advertise opting into
+	-- sound or loosening quiet hours, which the host refuses from Carly.
+	it("documents that Carly may only mute sound and turn quiet hours on", function()
+		local doc: string? = nil
+		for _, def in carly.EXPORTS do
+			if def.name == "configure" then
+				doc = def.doc
+			end
+		end
+		assert(doc, "configure export")
+		expect(doc).toContain("sound.enabled (false only")
+		expect(doc).toContain("quiet.hours_enabled (true only")
+		for _, key in { "sound.volume", "quiet.start", "quiet.stop" } do
+			expect(doc).notToContain(key)
+		end
+	end)
+
 	it("reports read-only exports as not intents", function()
 		for _, name in { "status", "explain", "ai_status" } do
 			local kind, args, err = carly.toIntent(name, nil, nil)

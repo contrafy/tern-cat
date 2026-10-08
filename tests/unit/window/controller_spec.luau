@@ -23,6 +23,7 @@ type World = {
 	css: { { name: string, source: string } },
 	timers: { { ms: number, fn: (any) -> (), cancelled: boolean } },
 	logs: { string },
+	reads: { string },
 	clock: clock.FakeClock,
 	ports: controller.Ports,
 }
@@ -54,10 +55,16 @@ local function addPack(files: { [string]: string }, dir: string, id: string)
 	})
 end
 
-local function rawFs(files: { [string]: string }, dirs: { [string]: boolean }): fsAdapter.RawFs
+local function rawFs(files: { [string]: string }, dirs: { [string]: boolean }, reads: { string }): fsAdapter.RawFs
 	local mem = support.memoryFs(files)
 	return {
 		read = function(path: string, max: number?): string
+			table.insert(reads, path)
+			-- Like tern.fs.read with max_bytes: oversize files raise instead of being truncated.
+			local whole = files[path]
+			if whole and max and #whole > max then
+				error("file exceeds max_bytes: " .. path)
+			end
 			local data = mem.read(path, max)
 			if data == nil then
 				error("not found: " .. path)
@@ -96,12 +103,14 @@ local function world(opts: { config: any?, kv: any? }?): World
 		files[DATA .. "/config.json"] = encodeJson(o.config)
 	end
 	local kvStore: { [string]: any } = { state = o.kv }
+	local reads: { string } = {}
 	local w: any = {
 		files = files,
 		kv = kvStore,
 		css = {},
 		timers = {},
 		logs = {},
+		reads = reads,
 		clock = clock.fake({ now_ms = 10000, wall_s = f.WALL_S, hour = 12 }),
 	}
 	w.ports = {
@@ -109,7 +118,7 @@ local function world(opts: { config: any?, kv: any? }?): World
 		wall_ms = function()
 			return w.clock.wall_s() * 1000
 		end,
-		fs = fsAdapter.new(rawFs(files, dirs)),
+		fs = fsAdapter.new(rawFs(files, dirs, reads)),
 		json = jsonAdapter.new({
 			encode = function(value: any, _pretty: boolean?): string
 				return serde.encode("json", value)
@@ -222,6 +231,38 @@ describe("window/controller start", function()
 		controller.start(c)
 		expect(c.pack and c.pack.manifest.id).toBe("void")
 	end)
+
+	-- A full pack scan inside one timer callback can exceed the 50 ms window budget, which
+	-- disables every timer of that window (overlay, polling) until reload.
+	it("finds a pack in a differently named folder over several ticks, one pack per tick", function()
+		local w = world({ config = { cat = { appearance = "fancy" } } })
+		addPack(w.files, DATA .. "/packs/a-folder", "other")
+		addPack(w.files, DATA .. "/packs/my-cat", "fancy")
+		addPack(w.files, DATA .. "/packs/z-folder", "zed")
+		local c = controller.new(w.ports)
+		controller.start(c)
+		expect(c.pack and c.pack.manifest.id).toBe("orange-menace")
+		local ticks = 0
+		while not (c.pack and c.pack.manifest.id == "fancy") do
+			local live = pending(w)
+			expect(live[1].ms).toBeLessThanOrEqual(100)
+			local before = #w.reads
+			fire(w)
+			ticks += 1
+			local manifests = 0
+			for i = before + 1, #w.reads do
+				if string.sub(w.reads[i], -#"/pack.json") == "/pack.json" then
+					manifests += 1
+				end
+			end
+			expect(manifests).toBeLessThanOrEqual(1)
+			assert(ticks < 20, "pack never selected")
+		end
+		expect(ticks).toBeGreaterThan(1)
+		for _, line in w.logs do
+			expect(line).notToContain("not available")
+		end
+	end)
 end)
 
 describe("window/controller loop", function()
@@ -273,6 +314,59 @@ describe("window/controller loop", function()
 		expect(c.config.rendering.overlay).toBe(false)
 		expect(c.pack and c.pack.manifest.id).toBe("void")
 		expect(lastCss(w)).toBe(HIDDEN)
+	end)
+
+	it("hides the overlay while allow_visual_obscuring is off and shows it when turned back on", function()
+		local w = world({ config = { behavior = { allow_visual_obscuring = false } } })
+		local c = controller.new(w.ports)
+		controller.start(c)
+		expect(lastCss(w)).toBe(HIDDEN)
+		w.files[DATA .. "/config.json"] = encodeJson({ behavior = { allow_visual_obscuring = true } })
+		for _ = 1, 10 do
+			fire(w)
+		end
+		expect(lastCss(w)).toContain("tern-cat-")
+	end)
+
+	-- A symlinked or oversize config.json is not "no config": silently falling back to defaults
+	-- would re-enable an overlay the user turned off.
+	it("keeps the last good config and warns once when config.json becomes unreadable", function()
+		local w = world({ config = { rendering = { overlay = false } } })
+		local c = controller.new(w.ports)
+		controller.start(c)
+		expect(lastCss(w)).toBe(HIDDEN)
+		w.files[DATA .. "/config.json"] = string.rep(" ", 300 * 1024) .. "{}"
+		for _ = 1, 20 do
+			fire(w)
+		end
+		expect(c.config.rendering.overlay).toBe(false)
+		expect(lastCss(w)).toBe(HIDDEN)
+		local warnings = 0
+		for _, line in w.logs do
+			if string.find(line, "could not be read", 1, true) then
+				warnings += 1
+				expect(string.sub(line, 1, 5)).toBe("warn:")
+			end
+		end
+		expect(warnings).toBe(1)
+		w.files[DATA .. "/config.json"] = encodeJson({ cat = { appearance = "void" }, rendering = { overlay = false } })
+		for _ = 1, 10 do
+			fire(w)
+		end
+		expect(c.pack and c.pack.manifest.id).toBe("void")
+	end)
+
+	it("uses defaults and warns when config.json is unreadable on first load", function()
+		local w = world()
+		w.files[DATA .. "/config.json"] = string.rep(" ", 300 * 1024) .. "{}"
+		local c = controller.new(w.ports)
+		controller.start(c)
+		expect(c.pack and c.pack.manifest.id).toBe("orange-menace")
+		local found = false
+		for _, line in w.logs do
+			found = found or string.find(line, "could not be read", 1, true) ~= nil
+		end
+		expect(found).toBe(true)
 	end)
 end)
 
@@ -343,6 +437,58 @@ describe("window/controller intents", function()
 		controller.start(c)
 		expect(controller.request(c, "snooze", { minutes = 30 }, "window").ok).toBe(true)
 		expect(lastCss(w)).toContain("tern-cat-sleep")
+	end)
+
+	-- A looping or prompt-injected Carly turn must not drive a config/kv write storm on the host.
+	it("rate-limits Carly requests to a small burst, then about ten a minute", function()
+		local w = world()
+		local c = controller.new(w.ports)
+		controller.start(c)
+		for _ = 1, controller.RATE_LIMITS.carly.burst do
+			expect(controller.request(c, "pet", {}, "carly").ok).toBe(true)
+		end
+		local n = count(inbox(w))
+		local limited = controller.request(c, "pet", {}, "carly")
+		expect(limited.ok).toBe(false)
+		expect(limited.error).toBe("rate limited")
+		expect(count(inbox(w))).toBe(n)
+		w.clock.advance(6000)
+		expect(controller.request(c, "pet", {}, "carly").ok).toBe(true)
+		expect(controller.request(c, "pet", {}, "carly").ok).toBe(false)
+	end)
+
+	it("keeps keyboard and window requests generous and separate from Carly's budget", function()
+		local w = world()
+		local c = controller.new(w.ports)
+		controller.start(c)
+		for _ = 1, controller.RATE_LIMITS.carly.burst do
+			controller.request(c, "pet", {}, "carly")
+		end
+		for _ = 1, 5 do
+			expect(controller.request(c, "pet", {}, "window").ok).toBe(true)
+			expect(controller.request(c, "pet", {}, "keyboard").ok).toBe(true)
+		end
+		while controller.request(c, "pet", {}, "window").ok do
+			assert(count(inbox(w)) < 60, "window requests never limited")
+		end
+		w.clock.advance(200)
+		expect(controller.request(c, "pet", {}, "window").ok).toBe(true)
+	end)
+
+	-- If the host is not draining the inbox, producers must stop instead of piling up files.
+	it("refuses to write when the inbox already holds more than 64 files", function()
+		local w = world()
+		local c = controller.new(w.ports)
+		controller.start(c)
+		for i = 1, 65 do
+			w.files[string.format("%s/inbox/%d-0000abcd.json", DATA, i)] = "{}"
+		end
+		local result = controller.request(c, "pet", {}, "window")
+		expect(result.ok).toBe(false)
+		expect(result.error).toContain("inbox")
+		expect(count(inbox(w))).toBe(65)
+		w.files[DATA .. "/inbox/1-0000abcd.json"] = nil
+		expect(controller.request(c, "pet", {}, "window").ok).toBe(true)
 	end)
 end)
 

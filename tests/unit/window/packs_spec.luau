@@ -73,6 +73,28 @@ local function touched(log: { string }, needle: string): boolean
 	return false
 end
 
+local function manifestReads(log: { string }, from: number): number
+	local n = 0
+	for i = from + 1, #log do
+		if string.sub(log[i], -#"/pack.json") == "/pack.json" then
+			n += 1
+		end
+	end
+	return n
+end
+
+-- Drives the incremental full scan to the end, then selects again.
+local function settle(cache: packs.Cache, wanted: string?): (any, string?)
+	packs.select(cache, wanted)
+	local steps = 0
+	while packs.scanning(cache) do
+		packs.step(cache)
+		steps += 1
+		assert(steps < 1000, "scan never finished")
+	end
+	return packs.select(cache, wanted)
+end
+
 describe("window/packs.select", function()
 	it("loads only the wanted and default pack directories", function()
 		local files = {}
@@ -87,11 +109,11 @@ describe("window/packs.select", function()
 		expect(touched(log, "/tuxedo/")).toBe(false)
 	end)
 
-	it("falls back to the default pack with a warning", function()
+	it("falls back to the default pack with a warning once the scan finds nothing", function()
 		local files = {}
 		addPack(files, BUNDLED .. "/orange-menace", "orange-menace")
 		local cache = make(files)
-		local pack, warning = packs.select(cache, "missing")
+		local pack, warning = settle(cache, "missing")
 		assert(pack, "pack")
 		expect(pack.manifest.id).toBe("orange-menace")
 		expect(warning).toContain("missing")
@@ -117,12 +139,12 @@ describe("window/packs.select", function()
 		expect(pack.source).toBe("bundled")
 	end)
 
-	it("scans everything when a pack lives in a directory not named after its id", function()
+	it("finds a pack whose directory is not named after its id through the full scan", function()
 		local files = {}
 		addPack(files, BUNDLED .. "/orange-menace", "orange-menace")
 		addPack(files, USER .. "/my-cat", "fancy")
 		local cache = make(files)
-		local pack = packs.select(cache, "fancy")
+		local pack = settle(cache, "fancy")
 		assert(pack, "pack")
 		expect(pack.manifest.id).toBe("fancy")
 	end)
@@ -142,9 +164,63 @@ describe("window/packs.select", function()
 
 	it("returns nil when no pack is usable", function()
 		local cache = make({})
-		local pack, warning = packs.select(cache, "orange-menace")
+		local pack, warning = settle(cache, "orange-menace")
 		expect(pack).toBeNil()
 		expect(warning).toContain("no valid sprite packs")
+	end)
+end)
+
+-- Window timer callbacks have a 50 ms budget and a trip disables every timer of that window,
+-- so the fallback full scan must be spread across calls instead of validating every pack at once.
+describe("window/packs full scan", function()
+	local function manyPacks(): { [string]: string }
+		local files = {}
+		addPack(files, BUNDLED .. "/orange-menace", "orange-menace")
+		addPack(files, BUNDLED .. "/void", "void")
+		for i = 1, 5 do
+			addPack(files, USER .. "/folder-" .. i, "user-" .. i)
+		end
+		return files
+	end
+
+	it("keeps the default pack and validates nothing beyond the named folders while selecting", function()
+		local cache, log = make(manyPacks())
+		local pack, warning = packs.select(cache, "user-4")
+		assert(pack, "pack")
+		expect(pack.manifest.id).toBe("orange-menace")
+		expect(warning).toBeNil()
+		expect(manifestReads(log, 0)).toBeLessThanOrEqual(1)
+		expect(packs.scanning(cache)).toBe(true)
+	end)
+
+	it("validates at most one pack per step and completes the selection over several steps", function()
+		local cache, log = make(manyPacks())
+		packs.select(cache, "user-4")
+		local steps = 0
+		while packs.scanning(cache) do
+			local before = #log
+			packs.step(cache)
+			steps += 1
+			expect(manifestReads(log, before)).toBeLessThanOrEqual(1)
+			assert(steps < 100, "scan never finished")
+		end
+		expect(steps).toBeGreaterThan(1)
+		local pack, warning = packs.select(cache, "user-4")
+		assert(pack, "pack")
+		expect(pack.manifest.id).toBe("user-4")
+		expect(warning).toBeNil()
+	end)
+
+	it("does not rescan after the scan finished until invalidated", function()
+		local cache, log = make(manyPacks())
+		settle(cache, "nope")
+		local n = #log
+		packs.select(cache, "still-nope")
+		expect(packs.scanning(cache)).toBe(false)
+		expect(manifestReads(log, n)).toBe(0)
+		packs.invalidate(cache)
+		packs.select(cache, "still-nope")
+		expect(packs.scanning(cache)).toBe(true)
 	end)
 end)
 
