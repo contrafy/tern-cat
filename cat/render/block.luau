@@ -26,12 +26,15 @@ export type Ui = {
 
 export type Sprite = { anim: string, blob: string }
 
-export type PackChoice = { id: string, name: string, preview: string? }
+-- `removable`: a user-installed pack (bundled packs can never be removed).
+export type PackChoice = { id: string, name: string, preview: string?, removable: boolean? }
 
 export type SettingsModel = {
 	page: string,
 	editing: string?,
 	confirm_reset: boolean,
+	-- Id of the pack whose Remove was clicked and awaits Confirm.
+	confirm_remove: string?,
 	packs: { PackChoice },
 	ai_reason: string,
 	last_export: string?,
@@ -379,18 +382,35 @@ local function sections(model: Model, s: SettingsModel): { any }
 		for _, p in s.packs do
 			table.insert(options, { value = p.id, label = p.name })
 		end
+		local rows: { any } = {
+			row(c, base, "cat.appearance", { label = "Sprite pack" }, {
+				k = "choice",
+				style = "menu",
+				value = c.cat.appearance,
+				options = options,
+			}),
+		}
+		for _, p in s.packs do
+			if p.removable then
+				local armed = s.confirm_remove == p.id
+				table.insert(rows, {
+					id = controls.removePackRow(p.id),
+					label = `Remove {p.name}`,
+					hint = "Deletes this pack's folder from your packs folder.",
+					warning = if armed then "Click Confirm to delete this pack." else nil,
+					control = {
+						k = "action",
+						act = if armed then "remove-pack-confirm" else "remove-pack",
+						label = if armed then "Confirm" else "Remove...",
+					},
+				})
+			end
+		end
 		return {
 			{
 				id = "appearance",
 				title = "Appearance",
-				rows = {
-					row(c, base, "cat.appearance", { label = "Sprite pack" }, {
-						k = "choice",
-						style = "menu",
-						value = c.cat.appearance,
-						options = options,
-					}),
-				},
+				rows = rows,
 			},
 		}
 	elseif page == "personality" then

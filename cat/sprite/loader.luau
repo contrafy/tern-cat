@@ -157,11 +157,54 @@ local function framePath(pack: T.LoadedPack, animation: string, index: number): 
 	return assetPath(pack, rel)
 end
 
+-- `path` with repeated and trailing slashes collapsed, or nil when it is empty, the filesystem
+-- root, or has a `.`/`..` segment, a backslash or a colon (never resolved: refused).
+local function plainPath(path: string): string?
+	if path == "" or string.find(path, "\\", 1, true) or string.find(path, ":", 1, true) then
+		return nil
+	end
+	local absolute = string.sub(path, 1, 1) == "/"
+	local segments: { string } = {}
+	for segment in string.gmatch(path, "[^/]+") do
+		if segment == "." or segment == ".." then
+			return nil
+		end
+		table.insert(segments, segment)
+	end
+	if #segments == 0 then
+		return nil
+	end
+	return (if absolute then "/" else "") .. table.concat(segments, "/")
+end
+
+-- The folder to delete when removing `pack`: only a user pack whose root is a direct child of
+-- `userRoot` with a folder name the loader itself would scan. Returns (nil, reason) otherwise.
+local function removableDir(pack: T.LoadedPack, userRoot: string): (string?, string?)
+	if pack.source ~= "user" then
+		return nil, "bundled packs cannot be removed"
+	end
+	local root = plainPath(userRoot)
+	if root == nil then
+		return nil, "the user packs folder is not a plain path"
+	end
+	local outside = "the pack is not a folder directly inside the user packs folder"
+	local dir = plainPath(pack.root)
+	if dir == nil then
+		return nil, outside
+	end
+	local parent, name = string.match(dir, "^(.*)/([^/]+)$")
+	if parent ~= root or not isPackDirName(name) then
+		return nil, outside
+	end
+	return dir, nil
+end
+
 return {
 	loadAll = loadAll,
 	isPackDirName = isPackDirName,
 	select = select,
 	assetPath = assetPath,
 	framePath = framePath,
+	removableDir = removableDir,
 	MANIFEST_FILE = MANIFEST_FILE,
 }

@@ -156,10 +156,36 @@ describe("window/packs.select", function()
 		packs.select(cache, "orange-menace")
 		local n = #log
 		packs.select(cache, "orange-menace")
-		expect(#log).toBe(n)
+		-- A cache hit only checks that the manifest still exists; nothing is read or listed again.
+		expect(#log).toBe(n + 1)
+		expect(log[#log]).toBe(BUNDLED .. "/orange-menace/pack.json")
 		packs.invalidate(cache)
 		packs.select(cache, "orange-menace")
-		expect(#log).toBeGreaterThan(n)
+		expect(#log).toBeGreaterThan(n + 1)
+	end)
+
+	-- A pack removed from the block (or deleted by hand) must not keep showing from the cache.
+	it("drops a cached pack whose folder was removed and falls back to the default", function()
+		local files = {}
+		addPack(files, BUNDLED .. "/orange-menace", "orange-menace")
+		addPack(files, USER .. "/calico", "calico")
+		local cache = make(files)
+		local first = packs.select(cache, "calico")
+		assert(first, "pack")
+		packs.asset(cache, first, "idle")
+		for path in table.clone(files) do
+			if string.sub(path, 1, #USER + 8) == USER .. "/calico/" then
+				files[path] = nil
+			end
+		end
+		local pack, warning = settle(cache, "calico")
+		assert(pack, "pack")
+		expect(pack.manifest.id).toBe("orange-menace")
+		expect(warning).toContain("calico")
+		expect(cache.packs.calico).toBeNil()
+		for key in cache.assets do
+			expect(key).notToContain("/calico:")
+		end
 	end)
 
 	it("returns nil when no pack is usable", function()

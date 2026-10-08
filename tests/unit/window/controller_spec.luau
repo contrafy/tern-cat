@@ -369,6 +369,47 @@ describe("window/controller loop", function()
 		end
 		expect(found).toBe(true)
 	end)
+
+	-- Removing a pack from the block deletes its folder; every window must stop drawing it, both
+	-- when the host switched config.json back to the default and when it could not.
+	describe("when the selected pack is removed", function()
+		local function withCalico(): (World, controller.Controller)
+			local w = world({ config = { cat = { appearance = "calico" } } })
+			addPack(w.files, DATA .. "/packs/calico", "calico")
+			local c = controller.new(w.ports)
+			controller.start(c)
+			expect(c.pack and c.pack.manifest.id).toBe("calico")
+			return w, c
+		end
+
+		local function deleteCalico(w: World)
+			for path in table.clone(w.files) do
+				if string.sub(path, 1, #DATA + 14) == DATA .. "/packs/calico/" then
+					w.files[path] = nil
+				end
+			end
+		end
+
+		it("follows the host back to the default pack", function()
+			local w, c = withCalico()
+			deleteCalico(w)
+			w.files[DATA .. "/config.json"] = encodeJson({ cat = { appearance = "orange-menace" } })
+			for _ = 1, 10 do
+				fire(w)
+			end
+			expect(c.pack and c.pack.manifest.id).toBe("orange-menace")
+		end)
+
+		it("falls back to the default pack while config.json still names it", function()
+			local w, c = withCalico()
+			deleteCalico(w)
+			for _ = 1, 20 do
+				fire(w)
+			end
+			expect(c.pack and c.pack.manifest.id).toBe("orange-menace")
+			expect(c.packs.packs.calico).toBeNil()
+		end)
+	end)
 end)
 
 describe("window/controller intents", function()

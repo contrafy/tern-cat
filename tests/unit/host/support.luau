@@ -12,6 +12,9 @@ export type MemFs = {
 	dirs: { [string]: boolean },
 	fs: fsAdapter.Fs,
 	failWrites: boolean,
+	failRemoves: boolean,
+	-- Every path passed to remove, in order.
+	removed: { string },
 	-- Paths whose bounded read raises although they exist (symlink, oversize, I/O error).
 	unreadable: { [string]: boolean },
 	-- Relative paths not present in `files` are read from the repo (read-only).
@@ -28,6 +31,8 @@ local function memFs(files: { [string]: string }?, real: boolean?): MemFs
 		dirs = {},
 		fs = nil :: any,
 		failWrites = false,
+		failRemoves = false,
+		removed = {},
 		unreadable = {},
 		real = real == true,
 	}
@@ -115,11 +120,30 @@ local function memFs(files: { [string]: string }?, real: boolean?): MemFs
 				cur = parentOf(cur)
 			end
 		end,
+		-- Like tern.fs.remove: a file, or a directory recursively.
 		remove = function(path: string)
-			if m.files[path] == nil then
+			table.insert(m.removed, path)
+			if m.failRemoves then
+				error("permission denied")
+			end
+			local prefix = path .. "/"
+			local found = m.files[path] ~= nil or m.dirs[path] == true
+			m.files[path] = nil
+			m.dirs[path] = nil
+			for p in table.clone(m.files) do
+				if string.sub(p, 1, #prefix) == prefix then
+					m.files[p] = nil
+					found = true
+				end
+			end
+			for d in table.clone(m.dirs) do
+				if string.sub(d, 1, #prefix) == prefix then
+					m.dirs[d] = nil
+				end
+			end
+			if not found then
 				error("no such file " .. path)
 			end
-			m.files[path] = nil
 		end,
 	}
 	m.fs = fsAdapter.new(raw)

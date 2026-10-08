@@ -269,6 +269,33 @@ describe("block view", function()
 			expect(previews[2].p.actions.click).toBe("pack=void")
 		end)
 
+		it("offers Remove only for user-installed packs, with a confirm step", function()
+			local packs = {
+				{ id = "orange-menace", name = "Orange Menace", preview = "pv-o", removable = false },
+				{ id = "calico", name = "Calico", preview = "pv-c", removable = true },
+			}
+			local function removeRows(extra: { [string]: any }): { any }
+				extra.packs = packs
+				local out = {}
+				for _, r in prefs(settingsModel("appearance", extra)).p.sections[1].rows do
+					if string.sub(r.id, 1, 12) == "pack.remove." then
+						table.insert(out, r)
+					end
+				end
+				return out
+			end
+			local rows = removeRows({})
+			expect(#rows).toBe(1)
+			-- Prefs action controls report the row id as the event value: it carries the pack id.
+			expect(rows[1].id).toBe("pack.remove.calico")
+			expect(rows[1].control.act).toBe("remove-pack")
+			expect(rows[1].warning).toBeNil()
+			local armed = removeRows({ confirm_remove = "calico" })
+			expect(armed[1].control.act).toBe("remove-pack-confirm")
+			expect(armed[1].control.label).toBe("Confirm")
+			expect(armed[1].warning).notToBeNil()
+		end)
+
 		it("keeps a non-hour quiet time selectable", function()
 			local m = settingsModel("quiet")
 			m.config = factories.config({ quiet = { start = "22:30" } })

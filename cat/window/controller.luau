@@ -272,6 +272,11 @@ local function onTimer(c: Controller, info: TickInfo?)
 		if now >= c.next_cfg_ms then
 			c.next_cfg_ms = now + CONFIG_POLL_MS
 			reloaded = loadConfig(c, false)
+			if not reloaded and c.pack then
+				-- Notices a selected pack whose folder was removed while config.json still names it
+				-- (packs.select re-checks that a cached pack's manifest exists).
+				selectPack(c)
+			end
 		end
 		-- One pack per tick keeps the fallback full scan inside the timer budget.
 		if not reloaded and packsMod.scanning(c.packs) then
