@@ -11,7 +11,9 @@ local util = require("../core/util")
 
 local CURRENT_VERSION = 1
 
-local ACTIVITIES = { "quiet_office", "orange_menace", "chaos", "zen" }
+local ACTIVITIES = { "quiet_office", "menace", "chaos", "zen" }
+-- Old activity names still accepted silently; they resolve to the current name.
+local ACTIVITY_ALIASES: { [string]: string } = { orange_menace = "menace" }
 local REDUCED_MOTION = { "follow_tern", "on", "off" }
 local BLOCK_PLACEMENTS = { "float", "split" }
 local PANE_TRANSITIONS = { "portal", "vent", "box", "off" }
@@ -153,7 +155,7 @@ local function defaults(): T.Config
 	return {
 		schema_version = CURRENT_VERSION,
 		cat = {
-			name = "Orange Menace",
+			name = "Menace",
 			appearance = "orange-menace",
 		},
 		personality = {
@@ -179,7 +181,7 @@ local function defaults(): T.Config
 			pane_transition = "portal",
 		},
 		behavior = {
-			activity = "orange_menace",
+			activity = "menace",
 			allow_visual_obscuring = true,
 			allow_swats = true,
 			allow_command_reactions = true,
@@ -237,7 +239,7 @@ local PRESETS: { [string]: { [string]: any } } = {
 			reaction_cooldown_s = 180,
 		},
 	},
-	orange_menace = {},
+	menace = {},
 	chaos = {
 		personality = { curiosity = 1, mischief = 1, energy = 0.95, talkativeness = 0.4 },
 		behavior = {
@@ -362,6 +364,9 @@ local function checkField(path: string, value: any): (any, string?)
 		end
 		return out, nil
 	end
+	if path == "behavior.activity" and type(value) == "string" and ACTIVITY_ALIASES[value] then
+		value = ACTIVITY_ALIASES[value]
+	end
 	return checkSpec(field, value)
 end
 
@@ -388,6 +393,10 @@ local function migrate(raw: any): ({ [string]: any }, { string })
 		)
 	end
 	out.schema_version = CURRENT_VERSION
+	local behavior = out.behavior
+	if util.isDict(behavior) and type(behavior.activity) == "string" and ACTIVITY_ALIASES[behavior.activity] then
+		behavior.activity = ACTIVITY_ALIASES[behavior.activity]
+	end
 	return out, warnings
 end
 
@@ -396,7 +405,7 @@ local function resolveActivity(raw: { [string]: any }): string
 	if util.isDict(behavior) and util.contains(ACTIVITIES, behavior.activity) then
 		return behavior.activity
 	end
-	return "orange_menace"
+	return "menace"
 end
 
 local function resolveUnsafe(input: any): (T.Config, { string })
@@ -486,7 +495,7 @@ end
 -- Sparse user view: only fields that differ from defaults + the activity preset, plus the
 -- activity and schema_version. Writing this keeps presets effective for untouched fields.
 local function serialize(config: T.Config): { [string]: any }
-	local activity = (config.behavior and config.behavior.activity) or "orange_menace"
+	local activity = (config.behavior and config.behavior.activity) or "menace"
 	local base = util.deepMerge(defaults(), preset(activity))
 	local out: { [string]: any } = { schema_version = CURRENT_VERSION }
 	local cfg = config :: any
@@ -517,7 +526,7 @@ local function serialize(config: T.Config): { [string]: any }
 			out[section.key] = diff
 		end
 	end
-	if activity ~= "orange_menace" then
+	if activity ~= "menace" then
 		out.behavior = out.behavior or {}
 		out.behavior.activity = activity
 	end

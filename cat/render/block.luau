@@ -334,7 +334,7 @@ local function sections(model: Model, s: SettingsModel): { any }
 						value = c.behavior.activity,
 						options = choiceOptions(schema.ACTIVITIES, {
 							quiet_office = "Quiet office",
-							orange_menace = "Orange menace",
+							menace = "Menace",
 							chaos = "Chaos",
 							zen = "Zen",
 						}),

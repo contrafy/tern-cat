@@ -170,7 +170,7 @@ export type Clock = {
 
 -- Configuration ------------------------------------------------------------------------
 
-export type Activity = "quiet_office" | "orange_menace" | "chaos" | "zen"
+export type Activity = "quiet_office" | "menace" | "chaos" | "zen"
 
 export type ReducedMotion = "follow_tern" | "on" | "off"
 

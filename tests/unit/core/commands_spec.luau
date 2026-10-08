@@ -178,6 +178,13 @@ describe("commands", function()
 			expect(intent.args).toEqual({ values = { ["behavior.allow_pacing"] = false } })
 		end)
 
+		it("accepts the menace preset and maps the old orange_menace name to it", function()
+			local intent = accepts("set_config", { key = "behavior.activity", value = "menace" })
+			expect(intent.args.values["behavior.activity"]).toBe("menace")
+			local old = accepts("set_config", { key = "behavior.activity", value = "orange_menace" })
+			expect(old.args.values["behavior.activity"]).toBe("menace")
+		end)
+
 		it("rejects keys outside the allowlist, even valid config paths", function()
 			expect(rejects(factories.intent("set_config", { key = "ai.enabled", value = true }))).toContain(
 				"ai.enabled"
