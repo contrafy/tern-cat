@@ -15,6 +15,11 @@ Idle: one control window with the overlay on, no input; CPU of the window and da
 (`pip float br`) and once without a block. Memory: RSS and USS of both processes after --settle
 seconds in three states (plugin unlinked, overlay only, block floated), --repeats times each,
 every repeat on a fresh daemon and window. Writes JSON results to --out and prints a summary.
+
+--transition replaces both with an A/B of rendering.pane_transition (--styles, default
+off,portal,vent,box; --repeats rounds, interleaved): a fresh window with a two-pane split,
+zen without pacing and frozen host timers (TERN_CAT_TEST=frozen,seed=7), --ab-seconds of no
+input, then --switches `focus next` every --switch-gap seconds; CPU and `stats` frames each.
 """
 
 from __future__ import annotations
@@ -151,7 +156,7 @@ def wait_until(secs: float, cond) -> bool:
     return False
 
 
-def start(plugin: bool, block: bool) -> tuple[psutil.Process, psutil.Process]:
+def start(plugin: bool, block: bool, env: dict[str, str] | None = None) -> tuple[psutil.Process, psutil.Process]:
     stop()
     (SB / "work").mkdir(exist_ok=True)
     with open(SB / "logs" / "perf-window.out", "ab") as out:
@@ -161,6 +166,7 @@ def start(plugin: bool, block: bool) -> tuple[psutil.Process, psutil.Process]:
             stdout=out,
             stderr=out,
             start_new_session=True,
+            env={**os.environ, **(env or {})},
         )
     if not wait_until(30, lambda: (SB / "perf.sock").exists()):
         sys.exit("perf: window did not start")
@@ -241,6 +247,65 @@ def mem(settle: float, repeats: int) -> dict:
     return runs
 
 
+def frames() -> int:
+    try:
+        return int(json.loads(ctl("stats")).get("frames", -1))
+    except (json.JSONDecodeError, ValueError):
+        return -1
+
+
+def measure(w: psutil.Process, d: psutil.Process, secs: float, action=None, every: float = 0) -> dict:
+    """CPU (percent of one core) of window and daemon and frames/s over secs, optionally running
+    action every `every` seconds (first call at the start)."""
+    f0, cw, cd, t0 = frames(), cpu_seconds(w), cpu_seconds(d), time.monotonic()
+    n = 0
+    while time.monotonic() - t0 < secs:
+        if action and time.monotonic() - t0 >= n * every:
+            action()
+            n += 1
+        time.sleep(0.05)
+    dt = time.monotonic() - t0
+    f1 = frames()
+    return {
+        "secs": dt,
+        "actions": n,
+        "window": 100 * (cpu_seconds(w) - cw) / dt,
+        "daemon": 100 * (cpu_seconds(d) - cd) / dt,
+        "frames": f1 - f0,
+        "fps": (f1 - f0) / dt,
+    }
+
+
+def transition_ab(styles: list[str], secs: float, repeats: int, switches: int, gap: float, settle: float) -> list[dict]:
+    """Idle A/B of rendering.pane_transition, then per-switch cost, each run on a fresh daemon and
+    window with a two-pane split, frozen host timers (TERN_CAT_TEST=frozen,seed=7) and a fresh
+    plugin state, so every run shows the same overlay animation."""
+    data = Path(os.environ["TERN_CONFIG_DIR"]) / "plugin-data" / "tern-cat"
+    runs = []
+    for rep in range(repeats):
+        for style in styles:
+            shutil.rmtree(data, ignore_errors=True)
+            data.mkdir(parents=True)
+            (data / "config.json").write_text(json.dumps({
+                "schema_version": 1,
+                "behavior": {"activity": "zen", "allow_visual_obscuring": True, "allow_pacing": False},
+                "rendering": {"overlay": True, "block_placement": "float", "pane_transition": style},
+            }))
+            w, d = start(plugin=True, block=False, env={"TERN_CAT_TEST": "frozen,seed=7"})
+            ctl("split", "right")
+            ctl("ready")
+            time.sleep(settle)
+            log(f"transition rep {rep + 1}/{repeats} {style}: idle {secs} s")
+            idle_m = measure(w, d, secs)
+            log(f"transition rep {rep + 1}/{repeats} {style}: {switches} switches every {gap} s")
+            sw = measure(w, d, switches * gap, lambda: ctl("focus", "next"), gap)
+            sw["extra_frames_per_switch"] = (sw["frames"] - idle_m["fps"] * sw["secs"]) / max(1, sw["actions"])
+            runs.append({"style": style, "rep": rep + 1, "idle": idle_m, "switch": sw})
+            stop()
+    shutil.rmtree(data, ignore_errors=True)
+    return runs
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--idle-minutes", type=float, default=10)
@@ -249,22 +314,39 @@ def main() -> None:
     ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--skip-idle", action="store_true")
     ap.add_argument("--skip-mem", action="store_true")
+    ap.add_argument("--transition", action="store_true", help="pane_transition A/B instead of idle/memory")
+    ap.add_argument("--styles", default="off,portal,vent,box")
+    ap.add_argument("--ab-seconds", type=float, default=60)
+    ap.add_argument("--switches", type=int, default=20)
+    ap.add_argument("--switch-gap", type=float, default=2)
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
     if not str(SB) or not os.environ.get("TERN_CONFIG_DIR", "").startswith(str(SB)):
         sys.exit("perf: source scripts/sandbox-env.sh first")
     result: dict = {"cpu_count": psutil.cpu_count()}
     try:
-        if not a.skip_idle:
-            result["idle"] = [idle(True, a.idle_minutes, a.interval), idle(False, a.idle_minutes, a.interval)]
-        if not a.skip_mem:
-            result["memory"] = mem(a.settle, a.repeats)
+        if a.transition:
+            result["transition"] = transition_ab(
+                a.styles.split(","), a.ab_seconds, a.repeats, a.switches, a.switch_gap, min(a.settle, 15)
+            )
+        else:
+            if not a.skip_idle:
+                result["idle"] = [idle(True, a.idle_minutes, a.interval), idle(False, a.idle_minutes, a.interval)]
+            if not a.skip_mem:
+                result["memory"] = mem(a.settle, a.repeats)
     finally:
         stop()
         link(True)
     out = Path(a.out or SB / "perf.json")
     out.write_text(json.dumps(result, indent=2))
     log(f"wrote {out}")
+    for run in result.get("transition", []):
+        i, s = run["idle"], run["switch"]
+        print(
+            f"transition {run['style']:6} rep {run['rep']} idle window {i['window']:.2f}% daemon {i['daemon']:.2f}% "
+            f"{i['fps']:.2f} fps | switch window {s['window']:.2f}% daemon {s['daemon']:.2f}% {s['fps']:.2f} fps "
+            f"{s['extra_frames_per_switch']:.1f} extra frames/switch"
+        )
     for run in result.get("idle", []):
         label = "block floated" if run["block"] else "block closed"
         for name in ("window", "daemon"):
