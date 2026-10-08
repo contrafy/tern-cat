@@ -47,6 +47,8 @@ for _, name in
 		"flop",
 		"stare",
 		"hop",
+		"dive",
+		"emerge",
 	}
 do
 	CANONICAL[name] = true

@@ -25,6 +25,8 @@ local ALL = {
 	"flop",
 	"stare",
 	"hop",
+	"dive",
+	"emerge",
 }
 
 local function only(...: string): { [string]: boolean }
@@ -74,6 +76,8 @@ describe("render.animations", function()
 		expect(animations.resolve(only("idle", "hop"), "startled")).toBe("hop")
 		expect(animations.resolve(only("idle", "happy"), "eat")).toBe("happy")
 		expect(animations.resolve(only("idle", "blink"), "wake")).toBe("blink")
+		expect(animations.resolve(only("idle", "hop"), "dive")).toBe("hop")
+		expect(animations.resolve(only("idle", "blink"), "emerge")).toBe("blink")
 	end)
 
 	it("always lands on idle for minimal packs and unknown names", function()
@@ -94,7 +98,7 @@ describe("render.animations", function()
 		for _, name in { "idle", "walk", "sit", "sleep" } do
 			expect(animations.isLoop(name)).toBeTruthy()
 		end
-		for _, name in { "happy", "swat", "flop", "wake", "poke", "hop", "blink" } do
+		for _, name in { "happy", "swat", "flop", "wake", "poke", "hop", "blink", "dive", "emerge" } do
 			expect(animations.isLoop(name)).toBeFalsy()
 		end
 	end)
@@ -104,5 +108,19 @@ describe("render.animations", function()
 			expect(animations.defaultDurationMs(name)).toBeGreaterThan(0)
 		end
 		expect(animations.defaultDurationMs("blink")).toBeLessThan(animations.defaultDurationMs("sleep"))
+	end)
+
+	it("times the pane-switch animations for the overlay transition", function()
+		expect(animations.defaultDurationMs("dive")).toBe(480)
+		expect(animations.defaultDurationMs("emerge")).toBe(640)
+	end)
+
+	it("keeps the pane-switch animations out of performances", function()
+		for _, name in ALL do
+			local transition = name == "dive" or name == "emerge"
+			expect(animations.isPerformable(name)).toBe(not transition)
+		end
+		expect(animations.isPerformable("moonwalk")).toBe(false)
+		expect(animations.isPerformable(nil)).toBe(false)
 	end)
 end)

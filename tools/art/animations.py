@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from . import poses as P
-from .cat import Pose
+from .cat import SIZE, Pose
 from .props import glyph as g
 
 
@@ -390,6 +390,59 @@ def _hop() -> Anim:
     )
 
 
+# The frame's bottom edge is the floor (and the portal's opening): shifting a pose down by
+# `dy` sinks it into the floor, and BELOW puts the whole cat under it (an empty frame).
+BELOW = SIZE
+
+
+def _dive() -> Anim:
+    # Equal frame durations: the overlay plays the dive as a stepped CSS transition, which
+    # can only step evenly. The last frame is empty and is held once the cat is gone.
+    ms = 60
+    return Anim(
+        "dive",
+        False,
+        [
+            (P.crouch(0), ms),
+            (P.crouch(1, tail_over=False).but(eyes="narrow"), ms),
+            (P.stand(legs="tuck", dy=-5, tail="high", ears="perk", eyes="happy"), ms),
+            (P.plunge(0, eyes="squeeze", dy=-1), ms),
+            (P.plunge(1, eyes="squeeze", dy=7), ms),
+            (P.plunge(0, eyes="squeeze", dy=15), ms),
+            (P.plunge(1, eyes="squeeze", dy=23), ms),
+            (P.plunge(0, dy=BELOW), ms),
+        ],
+    )
+
+
+def _emerge() -> Anim:
+    # Starts empty while the portal opens, then ears, head, a scramble onto the rim, a hop
+    # out, the landing and a shake. The last frame matches idle's first frame.
+    return Anim(
+        "emerge",
+        False,
+        [
+            (P.climb(dy=BELOW), 160),
+            (P.climb(ears="perk", dy=15), 70),
+            (P.climb(ears="perk", eyes="wide", dy=10), 70),
+            (P.climb(ears="perk", eyes="squeeze"), 80),
+            (P.stand(legs="tuck", dy=-4, tail="high", ears="perk", eyes="happy"), 80),
+            (P.stand(body_dy=1, legs="stretch", ears="back", eyes="blink", tail="curl"), 60),
+            (
+                P.stand(
+                    fur_up=True,
+                    eyes="squeeze",
+                    ears="flat",
+                    tail="sway",
+                    props=[g("purr_a", 0, 12), g("purr_b", 29, 12)],
+                ),
+                60,
+            ),
+            (P.stand(tail="up"), 60),
+        ],
+    )
+
+
 BUILDERS = [
     _idle,
     _walk,
@@ -411,6 +464,8 @@ BUILDERS = [
     _flop,
     _stare,
     _hop,
+    _dive,
+    _emerge,
 ]
 
 

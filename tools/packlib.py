@@ -1,4 +1,5 @@
-"""Deterministic PNG/APNG/sheet encoders shared by tools/build_packs.py and tools/pack_build.py.
+"""Deterministic PNG/APNG/sheet encoders shared by tools/build_packs.py, tools/build_portals.py
+and tools/pack_build.py.
 
 Every encoder returns bytes so callers can either write them or compare them against files
 on disk. Images are re-created from raw RGBA pixels before encoding, so no source metadata
@@ -13,6 +14,7 @@ from __future__ import annotations
 import io
 import struct
 import zlib
+from pathlib import Path
 
 from PIL import Image
 
@@ -143,3 +145,28 @@ def same_image(a: bytes, b: bytes) -> bool:
         return True
     da = decoded(a)
     return da is not None and da == decoded(b)
+
+
+def write_image(path: Path, data: bytes, keep: set[Path]) -> None:
+    """Writes `data` unless `path` already decodes to the same image.
+
+    Compressed bytes depend on the platform's zlib, so rebuilding on another OS must not
+    rewrite committed images whose content is unchanged.
+    """
+    keep.add(path)
+    if path.is_file() and same_image(path.read_bytes(), data):
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+
+
+def prune(root: Path, keep: set[Path]) -> None:
+    """Deletes files under `root` that this build did not produce, then empty directories."""
+    if not root.is_dir():
+        return
+    for p in sorted(root.rglob("*"), reverse=True):
+        if p.is_file() or p.is_symlink():
+            if p not in keep:
+                p.unlink()
+        elif p.is_dir() and not any(p.iterdir()):
+            p.rmdir()

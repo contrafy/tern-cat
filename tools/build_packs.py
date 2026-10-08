@@ -35,7 +35,7 @@ from art.animations import Anim, all_animations  # noqa: E402
 from art.cat import SIZE, render  # noqa: E402
 from art.palettes import CAT_INDICES, PACKS, rgba  # noqa: E402
 from art.raster import Canvas  # noqa: E402
-from packlib import encode_apng, encode_png, encode_sheet, same_image  # noqa: E402
+from packlib import encode_apng, encode_png, encode_sheet, prune, write_image  # noqa: E402
 
 AUTHOR = "Ahmad Raaiyan"
 LICENSE = "CC-BY-4.0"
@@ -53,6 +53,8 @@ PREVIEW_ANIMS = [
     ("swat", 2),
     ("startled", 1),
     ("flop", 3),
+    ("dive", 3),
+    ("emerge", 3),
 ]
 PREVIEW_SCALE = 4
 LIGHT_BG = (246, 244, 239, 255)
@@ -63,31 +65,6 @@ def to_image(canvas: Canvas, pack_id: str) -> Image.Image:
     im = Image.new("RGBA", (canvas.width, canvas.height))
     im.putdata([rgba(pack_id, c) for row in canvas.px for c in row])
     return im
-
-
-def write_image(path: Path, data: bytes, keep: set[Path]) -> None:
-    """Writes `data` unless `path` already decodes to the same image.
-
-    Compressed bytes depend on the platform's zlib, so rebuilding on another OS must not
-    rewrite committed images whose content is unchanged.
-    """
-    keep.add(path)
-    if path.is_file() and same_image(path.read_bytes(), data):
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
-
-
-def prune(root: Path, keep: set[Path]) -> None:
-    """Deletes files under `root` that this build did not produce, then empty directories."""
-    if not root.is_dir():
-        return
-    for p in sorted(root.rglob("*"), reverse=True):
-        if p.is_file() or p.is_symlink():
-            if p not in keep:
-                p.unlink()
-        elif p.is_dir() and not any(p.iterdir()):
-            p.rmdir()
 
 
 def hitbox(canvases: list[Canvas]) -> list[int]:

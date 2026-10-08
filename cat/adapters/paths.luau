@@ -10,6 +10,8 @@ export type Paths = {
 	user_packs: string,
 	bundled_packs: string,
 	bundled_sounds: string,
+	-- Pane-switch props (assets/portals/portals.json and its sheets).
+	bundled_portals: string,
 	user_sounds: string,
 	example_config: string,
 	-- tern.kv's backing file (read only for corruption recovery).
@@ -36,6 +38,7 @@ local function fromPlugin(info: { dir: string, data: string }): Paths
 		user_packs = join(info.data, "packs"),
 		bundled_packs = join(info.dir, "assets/packs"),
 		bundled_sounds = join(info.dir, "assets/sounds"),
+		bundled_portals = join(info.dir, "assets/portals"),
 		user_sounds = join(info.data, "sounds"),
 		example_config = join(info.dir, "config/example.json"),
 		kv_file = join(info.data, "kv.json"),

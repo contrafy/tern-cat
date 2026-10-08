@@ -850,6 +850,13 @@ describe("core.behavior", function()
 			expect(d).toBeNil()
 		end)
 
+		it("never performs the pane-switch animations", function()
+			for _, anim in { "dive", "emerge" } do
+				local _, d = behavior.react(behavior.newState(0), gestureEv("perform", anim), makeCtx({ now_ms = 10 }))
+				expect(d).toBeNil()
+			end
+		end)
+
 		it("counts gestures as activity and responds despite reaction cooldowns", function()
 			local s = behavior.newState(0)
 			local d

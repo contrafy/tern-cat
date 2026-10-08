@@ -292,3 +292,43 @@ def crouch(wiggle: int = 0, **kw) -> Pose:
         eyes="wide",
         **kw,
     )
+
+
+def plunge(tail: int = 0, **kw) -> Pose:
+    """Nose-first dive: body vertical, head down (face toward the floor), rear and tail up.
+
+    Pitched forward 90 degrees, so the back faces right and the legs trail on the left.
+    `tail` 0/1 swaps the tail between a straight and a flicked tip.
+    """
+    tip = [(19.5, 1.0), (21.0, -0.5)] if tail else [(18.5, 0.5), (19.0, -1.0)]
+    return Pose(
+        torso=[(16.0, 15.0, 4.0, 5.5), (15.5, 8.5, 3.6, 3.6)],
+        chest=(13.0, 17.5, 1.8, 2.5),
+        legs=[
+            Leg((13.5, 15), (11.5, 27.5), near=False, paw_forward=0),
+            Leg((14.5, 17), (12.5, 29.0), paw_forward=0, lined=True, over_head=True),
+            Leg((13.0, 9), (10.0, 3.0), near=False, paw_forward=0),
+            Leg((14.0, 10), (11.5, 3.5), knee=(11.5, 7.5), paw_forward=0, lined=True),
+        ],
+        tail=[(17.5, 6.0), (18.0, 3.0)] + tip,
+        head=(10, 18),
+        head_turn="cw",
+        mouth=kw.pop("mouth", "none"),
+        **kw,
+    )
+
+
+def climb(**kw) -> Pose:
+    """Climbing out of a hole in the floor: head up, front paws planted on the rim, body below."""
+    return Pose(
+        torso=[(14.5, 28.0, 5.0, 6.0)],
+        chest=(17.5, 27.5, 2.6, 4.0),
+        legs=[
+            Leg((19.0, 25), (24.5, 30.0), knee=(22.5, 25.0), near=False),
+            Leg((11.0, 25), (7.0, 30.0), knee=(8.5, 25.0), paw_forward=-1),
+            Leg((19.5, 26), (26.0, 30.5), knee=(24.0, 26.0), lined=True, over_head=True),
+        ],
+        tail=[(10.0, 33.0), (10.0, 34.0)],
+        head=(10, 14),
+        **kw,
+    )

@@ -14,6 +14,8 @@ local CURRENT_VERSION = 1
 local ACTIVITIES = { "quiet_office", "orange_menace", "chaos", "zen" }
 local REDUCED_MOTION = { "follow_tern", "on", "off" }
 local BLOCK_PLACEMENTS = { "float", "split" }
+local PANE_TRANSITIONS = { "portal", "vent", "box", "off" }
+local OVERLAY_POSITIONS = { "top-right", "top-left", "bottom-right", "bottom-left" }
 local AI_PROVIDERS = { "none", "mock", "carly_schedule" }
 local SOUND_IDS = { "meow", "purr", "surprise", "happy", "swat" }
 
@@ -77,10 +79,13 @@ local SECTIONS: { SectionSpec } = {
 		key = "rendering",
 		fields = {
 			bool("overlay"),
+			enum("overlay_position", OVERLAY_POSITIONS),
+			num("overlay_offset_px", 0, 200, true),
 			num("overlay_scale", 1, 8, true),
 			num("block_scale", 1, 12, true),
 			enum("reduced_motion", REDUCED_MOTION),
 			enum("block_placement", BLOCK_PLACEMENTS),
+			enum("pane_transition", PANE_TRANSITIONS),
 		},
 	},
 	{
@@ -165,10 +170,13 @@ local function defaults(): T.Config
 		},
 		rendering = {
 			overlay = true,
+			overlay_position = "top-right",
+			overlay_offset_px = 12,
 			overlay_scale = 2,
 			block_scale = 4,
 			reduced_motion = "follow_tern",
 			block_placement = "float",
+			pane_transition = "portal",
 		},
 		behavior = {
 			activity = "orange_menace",
@@ -525,6 +533,8 @@ return {
 	NAME_MAX = NAME_MAX,
 	ACTIVITIES = ACTIVITIES,
 	SOUND_IDS = SOUND_IDS,
+	PANE_TRANSITIONS = PANE_TRANSITIONS,
+	OVERLAY_POSITIONS = OVERLAY_POSITIONS,
 	defaults = defaults,
 	preset = preset,
 	migrate = migrate,

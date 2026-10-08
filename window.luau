@@ -61,6 +61,7 @@ local BOOT_MODULES = {
 	"adapters/config",
 	"window/presenter",
 	"window/packs",
+	"window/portals",
 	"window/intents",
 	"window/mirror",
 	"window/controller",

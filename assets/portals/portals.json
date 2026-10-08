@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "frame": {
+    "width": 48,
+    "height": 24
+  },
+  "anchor": [
+    24,
+    12
+  ],
+  "styles": {
+    "portal": {
+      "name": "Swirly portal",
+      "enter": {
+        "back": {
+          "sheet": "portal/enter-back.sheet.png",
+          "frames": 13,
+          "durations_ms": [
+            40,
+            40,
+            40,
+            40,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            60,
+            50,
+            50
+          ]
+        }
+      },
+      "exit": {
+        "back": {
+          "sheet": "portal/exit-back.sheet.png",
+          "frames": 8,
+          "durations_ms": [
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80
+          ]
+        }
+      }
+    },
+    "vent": {
+      "name": "Floor vent",
+      "enter": {
+        "back": {
+          "sheet": "vent/enter-back.sheet.png",
+          "frames": 11,
+          "durations_ms": [
+            40,
+            40,
+            40,
+            40,
+            80,
+            80,
+            320,
+            40,
+            40,
+            40,
+            40
+          ]
+        }
+      },
+      "exit": {
+        "back": {
+          "sheet": "vent/exit-back.sheet.png",
+          "frames": 8,
+          "durations_ms": [
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80
+          ]
+        }
+      }
+    },
+    "box": {
+      "name": "Cardboard box",
+      "enter": {
+        "back": {
+          "sheet": "box/enter-back.sheet.png",
+          "frames": 8,
+          "durations_ms": [
+            40,
+            40,
+            40,
+            40,
+            480,
+            60,
+            50,
+            50
+          ]
+        },
+        "front": {
+          "sheet": "box/enter-front.sheet.png",
+          "frames": 8,
+          "durations_ms": [
+            40,
+            40,
+            40,
+            40,
+            480,
+            60,
+            50,
+            50
+          ]
+        }
+      },
+      "exit": {
+        "back": {
+          "sheet": "box/exit-back.sheet.png",
+          "frames": 8,
+          "durations_ms": [
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80
+          ]
+        },
+        "front": {
+          "sheet": "box/exit-front.sheet.png",
+          "frames": 8,
+          "durations_ms": [
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80
+          ]
+        }
+      }
+    }
+  }
+}

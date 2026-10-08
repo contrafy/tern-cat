@@ -269,6 +269,43 @@ describe("block view", function()
 			expect(previews[2].p.actions.click).toBe("pack=void")
 		end)
 
+		it("offers the overlay corner and gap on the appearance page", function()
+			local byId: { [string]: any } = {}
+			for _, r in prefs(settingsModel("appearance")).p.sections[1].rows do
+				byId[r.id] = r
+			end
+			local corner = byId["rendering.overlay_position"]
+			local gap = byId["rendering.overlay_offset_px"]
+			assert(corner and gap, "missing corner or gap row")
+			expect(corner.control.value).toBe("top-right")
+			local values = {}
+			for _, o in corner.control.options do
+				table.insert(values, o.value)
+			end
+			expect(values).toEqual({ "top-right", "top-left", "bottom-right", "bottom-left" })
+			expect(gap.control.k).toBe("number")
+			expect(gap.control.value).toBe(12)
+			expect(gap.control.max).toBe(200)
+		end)
+
+		it("offers the pane switch styles on the appearance page", function()
+			local rows = prefs(settingsModel("appearance")).p.sections[1].rows
+			local found: any = nil
+			for _, r in rows do
+				if r.id == "rendering.pane_transition" then
+					found = r
+				end
+			end
+			assert(found, "missing pane switch row")
+			expect(found.control.k).toBe("choice")
+			expect(found.control.value).toBe("portal")
+			local values = {}
+			for _, o in found.control.options do
+				table.insert(values, o.value)
+			end
+			expect(values).toEqual({ "portal", "vent", "box", "off" })
+		end)
+
 		it("offers Remove only for user-installed packs, with a confirm step", function()
 			local packs = {
 				{ id = "orange-menace", name = "Orange Menace", preview = "pv-o", removable = false },

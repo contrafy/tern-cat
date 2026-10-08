@@ -15,11 +15,23 @@ All notable changes to tern-cat are documented here. The format follows
   plugin, and a hover or press is not a pet. New `behavior.allow_pointer_reactions` (default
   `true`, `false` in `quiet_office`; settings row "React to the pointer (overlay)"; Carly may only
   turn it off).
+- Pane-switch transition: when the focused pane changes (focus, new pane, tab or session switch)
+  the overlay cat dives into a prop in the pane it leaves (if still on screen) and climbs out of
+  one in the pane it enters, in pure CSS. New `rendering.pane_transition` (`portal` default,
+  `vent`, `box`, `off`; settings row "Pane switch"; Carly may set it); off under reduced motion.
+  Props ship in `assets/portals/`; packs without the new canonical `dive`/`emerge` animations
+  sink and rise with a height clip. `dive` and `emerge` cannot be performed.
+- `rendering.overlay_position` (`top-right`, `top-left`, `bottom-right`, `bottom-left`) and
+  `rendering.overlay_offset_px` (0-200, default 12) place the overlay cat; settings rows
+  "Overlay corner" and "Overlay gap"; Carly may set both. Pacing walks into the pane along the
+  corner's edge and the cat starts out facing into the pane.
 
 ### Changed
 
 - The overlay cat is drawn on the focused pane's top effects layer
-  (`.tn-pane.on > .tn-body > .tv > .tv-fx.top::after`) instead of the pane body.
+  (`.tn-pane.on:not(.off) > .tn-body > .tv > .tv-fx.top::after`) instead of the pane body.
+- The overlay cat rests in the top-right corner by default (was bottom-right, where it often
+  covered the prompt line, right prompts and TUI status lines).
 
 ## [0.1.0] - 2026-10-08
 

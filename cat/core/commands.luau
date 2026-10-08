@@ -46,7 +46,10 @@ local SET_CONFIG_KEYS = {
 	"sound.enabled",
 	"sound.volume",
 	"rendering.overlay",
+	"rendering.overlay_position",
+	"rendering.overlay_offset_px",
 	"rendering.reduced_motion",
+	"rendering.pane_transition",
 	"quiet.hours_enabled",
 	"quiet.start",
 	"quiet.stop",
@@ -198,8 +201,8 @@ local function validateArgs(kind: string, args: Args, source: string): (Args?, s
 		if err then
 			return nil, err
 		end
-		if not animations.isCanonical(args.animation) then
-			return nil, "animation must be a canonical animation name"
+		if not animations.isPerformable(args.animation) then
+			return nil, "animation must be a canonical animation name other than dive or emerge"
 		end
 		return { animation = args.animation }, nil
 	elseif kind == "set_personality" then

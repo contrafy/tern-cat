@@ -20,6 +20,8 @@ export type View = {
 	pace: boolean,
 	-- CSS-only pointer reactions (look while near, swat when pressed).
 	reactions: boolean,
+	-- Pane-switch prop style; "off" while still or hidden.
+	transition: T.PaneTransition,
 	facing: Facing,
 	seq: number,
 }
@@ -71,6 +73,11 @@ local MIN_DELAY_MS = 1000
 local MAX_DELAY_MS = 5000
 local ID_PREFIX = "wev"
 
+-- The facing that looks into the pane from the overlay's corner (sprites face right unmirrored).
+local function inward(config: T.Config): Facing
+	return if string.sub(config.rendering.overlay_position, -5) == "-left" then "right" else "left"
+end
+
 local function new(opts: Options): Presenter
 	return {
 		clock = opts.clock,
@@ -83,7 +90,7 @@ local function new(opts: Options): Presenter
 		tern_reduce_motion = false,
 		covered = false,
 		overlay_override = nil,
-		facing = "right",
+		facing = inward(opts.config),
 		seq = 0,
 	}
 end
@@ -239,6 +246,9 @@ local function nextDelayMs(p: Presenter): number
 end
 
 local function setConfig(p: Presenter, config: T.Config)
+	if config.rendering.overlay_position ~= p.config.rendering.overlay_position then
+		p.facing = inward(config)
+	end
 	p.config = config
 	if p.overlay_override ~= nil and p.overlay_override == config.rendering.overlay then
 		p.overlay_override = nil
@@ -274,6 +284,8 @@ local function view(p: Presenter): View
 		still = isStill,
 		pace = animation == "walk" and p.config.behavior.allow_pacing and not isStill,
 		reactions = not hidden and p.config.behavior.allow_pointer_reactions,
+		-- Reduced motion: the cat simply appears in the newly focused pane.
+		transition = if hidden or isStill then "off" else p.config.rendering.pane_transition,
 		facing = p.facing,
 		seq = p.seq,
 	}
@@ -286,7 +298,14 @@ local function reaction(a: Asset?): overlay.Reaction?
 	return { sheet_url = a.sheet_url, durations_ms = a.durations_ms, loop = a.loop }
 end
 
-local function params(p: Presenter, v: View, asset: Asset?, reactions: ReactionAssets?): overlay.Params
+-- `transition` is the pane-switch prop and the pack's dive/emerge sheets for `v.transition`.
+local function params(
+	p: Presenter,
+	v: View,
+	asset: Asset?,
+	reactions: ReactionAssets?,
+	transition: overlay.Transition?
+): overlay.Params
 	if asset == nil or v.hidden then
 		return { hidden = true } :: any
 	end
@@ -298,6 +317,8 @@ local function params(p: Presenter, v: View, asset: Asset?, reactions: ReactionA
 		durations_ms = asset.durations_ms,
 		loop = asset.loop,
 		scale = p.config.rendering.overlay_scale,
+		position = p.config.rendering.overlay_position,
+		offset_px = p.config.rendering.overlay_offset_px,
 		facing = v.facing,
 		pace = v.pace,
 		still = v.still,
@@ -306,6 +327,7 @@ local function params(p: Presenter, v: View, asset: Asset?, reactions: ReactionA
 		reactions = if v.reactions and reactions
 			then { hover = reaction(reactions.hover), press = reaction(reactions.press) }
 			else nil,
+		transition = if v.transition ~= "off" then transition else nil,
 	}
 end
 
