@@ -112,7 +112,7 @@ All numbers from 0 to 1. The settings page shows them as percentages.
 | `overlay_scale` | integer 1-8 | `2` | Pixel scale of the overlay sprite. |
 | `block_scale` | integer 1-12 | `4` | Pixel scale of the sprite in the block. |
 | `reduced_motion` | `"follow_tern"`, `"on"`, `"off"` | `"follow_tern"` | `on`: still frames in the overlay and the block. `follow_tern`: the overlay follows Tern's reduced-motion setting; the block keeps animating (the host cannot read that setting). `off`: does not override Tern: when Tern reduces motion, its stylesheet stops every animation, including the cat's. |
-| `block_placement` | `"float"`, `"split"` | `"float"` | How the palette command **Open cat** (and **Cat settings**) places a new block: a floating card in the bottom-right corner of the focused pane, or a split beside it. If floating fails the block stays a split. |
+| `block_placement` | `"float"`, `"split"` | `"float"` | How the palette command **Open cat** (and **Cat settings**) brings the cat to the focused pane when its tab does not already show one: a floating card in the bottom-right corner of the focused pane (moving a cat card that floats in another tab or is parked), or a split beside it. If floating fails the block stays a split. Tern's own **New Tern Cat block** ignores this key. |
 
 ### `behavior`
 

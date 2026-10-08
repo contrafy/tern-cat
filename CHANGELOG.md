@@ -101,5 +101,10 @@ Targets Tern 0.6.2.
 - Command statistics are persisted at most every 1.5 s under command storms.
 - A window no longer keeps drawing a sprite pack whose folder was removed; it falls back to the
   default pack within about 3 s, even if `config.json` still names the removed pack.
+- **Open cat** (and **Cat settings**) no longer jump to a cat block tiled in another tab, such as
+  one from **New Tern Cat block** or restored from an earlier session, instead of floating: a cat
+  already in the focused tab is focused, a cat card floating in another tab or parked moves over
+  the focused pane, and otherwise a new card floats there. The decision is logged at debug level;
+  when floating fails, the warning is logged and toasted.
 
 [Unreleased]: https://github.com/contrafy/tern-cat/commits/master
