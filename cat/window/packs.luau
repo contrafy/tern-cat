@@ -1,7 +1,9 @@
 --!strict
 -- Window-side sprite pack access for the overlay: validates only the packs it needs (the wanted
--- and the default directory first, a full scan only when those miss) and turns each animation's
--- sheet into a cached data URL. Keeps window loads inside the 50 ms budget.
+-- and the default directory first) and turns each animation's sheet into a cached data URL.
+-- When those miss, the full scan runs one pack directory per `step` call (one per timer tick) so a
+-- window timer callback never validates every pack at once: a tripped 50 ms budget would disable
+-- every timer of that window.
 
 local T = require("../types")
 local loader = require("../sprite/loader")
@@ -25,22 +27,31 @@ export type Deps = {
 	default_id: string,
 }
 
+-- One pack directory still to validate in the full scan.
+type Pending = { root: loader.Root, name: string }
+
 export type Cache = {
 	deps: Deps,
 	packs: { [string]: T.LoadedPack },
 	scanned: { [string]: boolean },
+	-- Full scan queue; nil when no scan was started since the last invalidate.
+	queue: { Pending }?,
 	full: boolean,
 	assets: { [string]: Asset | false },
 	problems: { string },
 }
 
+-- Same per-root bound as the loader.
+local MAX_PACKS_PER_ROOT = 64
+
 local function new(deps: Deps): Cache
-	return { deps = deps, packs = {}, scanned = {}, full = false, assets = {}, problems = {} }
+	return { deps = deps, packs = {}, scanned = {}, queue = nil, full = false, assets = {}, problems = {} }
 end
 
 local function invalidate(c: Cache)
 	c.packs = {}
 	c.scanned = {}
+	c.queue = nil
 	c.full = false
 	c.assets = {}
 	c.problems = {}
@@ -100,30 +111,77 @@ local function loadNamed(c: Cache, ids: { string })
 	end
 end
 
-local function loadEverything(c: Cache)
-	if c.full then
-		return
-	end
-	c.full = true
-	local result = loader.loadAll(c.deps.fs, c.deps.decode, c.deps.roots)
-	merge(c, result.packs)
-	for _, p in result.problems do
-		if not table.find(c.problems, p) then
-			table.insert(c.problems, p)
+-- Lists the roots (cheap) and queues every directory the named loads did not cover.
+local function startScan(c: Cache)
+	local queue: { Pending } = {}
+	for _, root in c.deps.roots do
+		local entries = c.deps.fs.list(root.dir)
+		if entries == nil then
+			continue
+		end
+		local names = table.clone(entries)
+		table.sort(names)
+		local n = 0
+		for _, name in names do
+			if c.scanned[name] then
+				continue
+			end
+			if n >= MAX_PACKS_PER_ROOT then
+				table.insert(
+					c.problems,
+					`{root.source} packs at {root.dir}: more than {MAX_PACKS_PER_ROOT} entries, rest ignored`
+				)
+				break
+			end
+			n += 1
+			table.insert(queue, { root = root, name = name })
 		end
 	end
+	c.queue = queue
+	c.full = #queue == 0
 end
 
+local function scanning(c: Cache): boolean
+	return c.queue ~= nil and not c.full
+end
+
+-- Validates at most one queued pack directory. Returns true when the scan is complete.
+local function step(c: Cache): boolean
+	local queue = c.queue
+	if queue == nil or c.full then
+		return c.full
+	end
+	local item = table.remove(queue, 1)
+	if item then
+		local roots = { item.root }
+		local result = loader.loadAll(filteredFs(c.deps.fs, roots, { [item.name] = true }), c.deps.decode, roots)
+		merge(c, result.packs)
+		for _, p in result.problems do
+			if not table.find(c.problems, p) then
+				table.insert(c.problems, p)
+			end
+		end
+	end
+	c.full = #queue == 0
+	return c.full
+end
+
+-- Never runs the full scan itself: when the wanted pack is not in its own directory, it starts the
+-- scan and returns the default pack (without a warning) until `step` has finished it.
 local function select(c: Cache, wanted: string?): (T.LoadedPack?, string?)
 	local id = if wanted and wanted ~= "" then wanted else c.deps.default_id
 	if c.packs[id] then
 		return c.packs[id], nil
 	end
 	loadNamed(c, { id, c.deps.default_id })
-	if c.packs[id] == nil then
-		loadEverything(c)
+	if c.packs[id] == nil and c.queue == nil then
+		startScan(c)
 	end
-	return loader.select(c.packs, id, c.deps.default_id)
+	local pack, warning = loader.select(c.packs, id, c.deps.default_id)
+	if scanning(c) then
+		return pack, nil
+	end
+	return pack, warning
 end
 
 local function build(c: Cache, pack: T.LoadedPack, anim: T.Animation): Asset?
@@ -178,5 +236,7 @@ return {
 	new = new,
 	invalidate = invalidate,
 	select = select,
+	scanning = scanning,
+	step = step,
 	asset = asset,
 }

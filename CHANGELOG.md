@@ -65,4 +65,29 @@ Targets Tern 0.6.2.
 - Documentation: sprite pack specification, security and privacy, developer guide, release
   checklist, contributing guide, issue and pull request templates.
 
+### Changed
+
+- Carly may only mute sound and turn quiet hours on; it can no longer enable sound or loosen
+  quiet hours. Window and Carly requests are rate limited (Carly: burst 3, then 10 per minute)
+  and refused while more than 64 requests are pending.
+- `behavior.allow_visual_obscuring: false` now keeps the overlay off terminal panes entirely; the
+  `quiet_office` preset sets it.
+
+### Removed
+
+- `rendering.animation_fps` and `behavior.obscure_max_ms`, which never had an effect.
+
+### Fixed
+
+- A napping cat now regains energy while Tern stays open; `offline_hours_cap` no longer freezes
+  needs in session.
+- Wake and unsnooze actually wake the cat in the block.
+- A transient state read error or an unwritable backup can no longer overwrite or delete a saved
+  cat; an unreadable (symlinked or oversize) `config.json` is never overwritten.
+- The inbox only deletes its own intent files; foreign files and directories are left alone.
+- Host and windows discover the same user packs; renames longer than the name limit are rejected
+  up front instead of silently reverting.
+- Full pack scans in a window run one pack per timer slice to stay inside Tern's 50 ms budget.
+- Command statistics are persisted at most every 1.5 s under command storms.
+
 [Unreleased]: https://github.com/contrafy/tern-cat/commits/master

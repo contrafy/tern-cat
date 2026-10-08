@@ -1,6 +1,8 @@
 --!strict
 local t = require("../../lib/test")
 local support = require("./support")
+local lfs = require("@lune/fs")
+local serde = require("@lune/serde")
 local clockMod = require("../../../cat/core/clock")
 local paths = require("../../../cat/adapters/paths")
 local configFile = require("../../../cat/adapters/config")
@@ -82,6 +84,45 @@ local function cmdSeen(env: any): number
 	return n
 end
 
+local function countLogs(e: Env, needle: string): number
+	local n = 0
+	for _, line in e.logs do
+		if string.find(line, needle, 1, true) then
+			n += 1
+		end
+	end
+	return n
+end
+
+-- Copies a bundled pack into the fake user packs folder under another folder name and id.
+local function copyPack(files: { [string]: string }, from: string, folder: string, id: string)
+	local function walk(rel: string)
+		local dir = "assets/packs/" .. from .. (if rel == "" then "" else "/" .. rel)
+		for _, entry in lfs.readDir(dir) do
+			local sub = if rel == "" then entry else rel .. "/" .. entry
+			local path = dir .. "/" .. entry
+			if lfs.isDir(path) then
+				walk(sub)
+			else
+				files[DATA .. "/packs/" .. folder .. "/" .. sub] = lfs.readFile(path)
+			end
+		end
+	end
+	walk("")
+	local key = DATA .. "/packs/" .. folder .. "/pack.json"
+	local manifest = serde.decode("json", files[key])
+	manifest.id = id
+	files[key] = serde.encode("json", manifest)
+end
+
+-- Saved state of a cat that was petted once (as written by a previous session).
+local function savedCat(): ({ [string]: any }, string)
+	local first = setup()
+	local b1 = brain.load(first.deps)
+	brain.localIntent(b1, "pet")
+	return first.kv.data, first.m.files[DATA .. "/config.json"]
+end
+
 describe("brain", function()
 	describe("load", function()
 		it("creates config.json from the example, the inbox and a fresh saved cat", function()
@@ -141,6 +182,67 @@ describe("brain", function()
 			expect(e.m.files[DATA .. "/kv.json.corrupt-" .. WALL]).toBe('{"state": {"rev": 3, ')
 		end)
 
+		it("keeps a corrupt kv.json and claims no backup when the backup cannot be written", function()
+			local e = setup({
+				files = { [DATA .. "/kv.json"] = '{"state": {"rev": 3, ', [DATA .. "/config.json"] = "{}" },
+			})
+			e.kv.failGet = true
+			e.kv.blocked = function()
+				return e.m.files[DATA .. "/kv.json"] ~= nil
+			end
+			e.m.failWrites = true
+			local b = brain.load(e.deps)
+			expect(e.m.files[DATA .. "/kv.json"]).toBe('{"state": {"rev": 3, ')
+			expect(e.m.files[DATA .. "/kv.json.corrupt-" .. WALL]).toBeNil()
+			for _, note in b.notes do
+				expect(string.find(note, "backup", 1, true)).toBeNil()
+			end
+		end)
+
+		it("never overwrites a readable kv.json after a transient read error, and adopts it later", function()
+			local saved, config = savedCat()
+			local e = setup({ kv = saved, files = { [DATA .. "/config.json"] = config, [DATA .. "/kv.json"] = "{}" } })
+			e.kv.failGet = true
+			local b = brain.load(e.deps)
+			brain.localIntent(b, "poke")
+			e.clock.advance(10000)
+			brain.tick(b)
+			expect(e.kv.sets).toBe(0)
+			expect(e.kv.data.state.profile.stats.pets).toBe(1)
+			e.kv.failGet = false
+			e.clock.advance(10000)
+			brain.pollInbox(b)
+			expect(b.env.profile.cat_id).toBe(saved.state.profile.cat_id)
+			expect(b.env.profile.stats.pets).toBe(1)
+			expect(#b.notes).toBe(0)
+		end)
+
+		it("finds user packs whose folder name differs from the id, like the window does", function()
+			local files: { [string]: string } = { [DATA .. "/config.json"] = '{"cat":{"appearance":"calico"}}' }
+			copyPack(files, "void", "Calico", "calico")
+			local e = setup({ files = files })
+			local b = brain.load(e.deps)
+			expect((b.pack :: any).manifest.id).toBe("calico")
+			expect(b.pack_note).toBeNil()
+		end)
+
+		it("shows a note and never overwrites a config.json it cannot read (symlink, oversize)", function()
+			local user = '{"rendering":{"overlay":false},"cat":{"name":"Biscuit"}}'
+			local e = setup({ files = { [DATA .. "/config.json"] = user } })
+			e.m.unreadable[DATA .. "/config.json"] = true
+			local b = brain.load(e.deps)
+			expect(#b.notes).toBe(1)
+			local ok, err = brain.setConfig(b, { ["rendering.overlay"] = true })
+			expect(ok).toBe(false)
+			expect(err).notToBeNil()
+			local out = brain.applyIntent(b, intent("w-9", "set_overlay", { enabled = true }))
+			expect(out.ok).toBe(false)
+			expect(e.m.files[DATA .. "/config.json"]).toBe(user)
+			expect(countLogs(e, "config.json exists but could not be read")).toBe(1)
+			expect(brain.pollConfig(b)).toBe(false)
+			expect(#b.notes).toBe(1)
+		end)
+
 		it("recovers when kv.json is corrupted while running", function()
 			local e = setup()
 			local b = brain.load(e.deps)
@@ -193,9 +295,31 @@ describe("brain", function()
 			local b = brain.load(e.deps)
 			brain.onCommandFinished(b, { pane = 3, category = "build", status = 0, took_ms = 20 })
 			brain.onCommandFinished(b, { pane = 3, category = "test", status = 1, took_ms = 20 })
+			e.clock.advance(2000)
+			brain.pollInbox(b)
 			expect(cmdSeen(b.env)).toBe(2)
 			expect(cmdSeen(e.kv.data.state)).toBe(2)
 			expect(b.env.profile.fail_streak).toBe(1)
+		end)
+
+		it("coalesces a burst of finished commands into one save and no re-render", function()
+			local e = setup({ files = { [DATA .. "/config.json"] = '{"behavior":{"allow_command_reactions":false}}' } })
+			local b = brain.load(e.deps)
+			local whys: { string } = {}
+			brain.subscribe(b, function(why: string)
+				table.insert(whys, why)
+			end)
+			local sets = e.kv.sets
+			for _ = 1, 20 do
+				e.clock.advance(50)
+				brain.onCommandFinished(b, { pane = 1, category = "build", status = 0, took_ms = 5 })
+				brain.pollInbox(b)
+			end
+			e.clock.advance(2000)
+			brain.pollInbox(b)
+			expect(e.kv.sets - sets).toBe(1)
+			expect(cmdSeen(e.kv.data.state)).toBe(20)
+			expect(#whys).toBe(0)
 		end)
 
 		it("marks reactions and records the last reaction", function()
@@ -294,6 +418,21 @@ describe("brain", function()
 			expect(brain.environment(b).snoozed).toBe(false)
 		end)
 
+		it("plays wake on unsnooze even when the cat is not rested, like the overlay does", function()
+			for seed = 1, 10 do
+				local e = setup()
+				e.deps.seed = seed
+				local b = brain.load(e.deps)
+				b.env.profile.needs.energy = 0.6
+				brain.applyIntent(b, intent("w-3", "snooze", { minutes = 30 }))
+				e.clock.advance(60000)
+				brain.tick(b)
+				brain.applyIntent(b, intent("w-4", "unsnooze"))
+				expect((b.engine.current :: any).animation).toBe("wake")
+				expect(b.engine.posture).toBe("awake")
+			end
+		end)
+
 		it("exports the identity to the exports folder", function()
 			local e = setup()
 			local b = brain.load(e.deps)
@@ -337,6 +476,32 @@ describe("brain", function()
 				e.clock.advance(brain.tick(b))
 			end
 			expect(e.kv.sets).toBe(sets)
+		end)
+
+		it("lets a napping cat regain energy while Tern stays open", function()
+			local e = setup()
+			local b = brain.load(e.deps)
+			b.env.profile.needs.energy = 0.3
+			b.engine.posture = "asleep"
+			local elapsed = 0
+			while elapsed < 3600 * 1000 do
+				local wait = brain.tick(b)
+				e.clock.advance(wait)
+				elapsed += wait
+			end
+			expect(b.engine.posture).toBe("asleep")
+			expect(b.env.profile.needs.energy).toBeGreaterThan(0.38)
+		end)
+
+		it("keeps needs moving in session when offline simulation is capped to 0 hours", function()
+			local e = setup({ files = { [DATA .. "/config.json"] = '{"needs":{"offline_hours_cap":0}}' } })
+			local b = brain.load(e.deps)
+			local hunger = b.env.profile.needs.hunger
+			for _ = 1, 3 do
+				e.clock.advance(61000)
+				brain.tick(b)
+			end
+			expect(b.env.profile.needs.hunger).toBeGreaterThan(hunger)
 		end)
 
 		it("does nothing while frozen", function()

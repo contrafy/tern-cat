@@ -48,6 +48,11 @@ local function loadPack(
 	}, nil
 end
 
+-- Pack folder names the loader considers (the folder name need not equal the pack id).
+local function isPackDirName(name: any): boolean
+	return type(name) == "string" and #name <= 64 and string.match(name, "^[A-Za-z0-9][A-Za-z0-9._%-]*$") ~= nil
+end
+
 local function loadAll(fs: T.FsAdapter, decodeJson: (string) -> any, roots: { Root }): LoadResult
 	local packs: { [string]: T.LoadedPack } = {}
 	local problems: { string } = {}
@@ -72,7 +77,7 @@ local function loadAll(fs: T.FsAdapter, decodeJson: (string) -> any, roots: { Ro
 		end
 		local sorted: { string } = {}
 		for _, name in names do
-			if type(name) == "string" and string.match(name, "^[A-Za-z0-9][A-Za-z0-9._%-]*$") and #name <= 64 then
+			if isPackDirName(name) then
 				table.insert(sorted, name)
 			end
 		end
@@ -154,6 +159,7 @@ end
 
 return {
 	loadAll = loadAll,
+	isPackDirName = isPackDirName,
 	select = select,
 	assetPath = assetPath,
 	framePath = framePath,

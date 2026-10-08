@@ -20,7 +20,8 @@ local ASLEEP = { hunger = 0.05, energy = 0.12, affection = -0.015, boredom = 0.0
 
 -- Time away is spent awake for at most this long; the cat naps through the rest.
 local AWAKE_BEFORE_NAP_S = HOUR
--- With offline_progress off, only this much elapsed time counts (regular in-session ticks).
+-- Longest gap simulated as regular in-session ticks (also the only time that counts with
+-- offline_progress off). Longer in-session gaps (the computer slept) count as time away.
 local ONLINE_GAP_S = 300
 local MAX_CAP_HOURS = 168
 
@@ -57,8 +58,11 @@ local DEFAULT_PERSONALITY: T.Personality =
 	{ curiosity = 0.5, affection = 0.5, mischief = 0.5, energy = 0.5, talkativeness = 0.5 }
 
 -- Simulates the time between `last_s` and `now_s` (unix seconds). Clock skew counts as no
--- time; elapsed time is capped by `cap_hours`; with `offline_progress` off only a short
--- in-session gap counts. Disabled needs are pinned to neutral().
+-- time. `session_asleep` marks an in-session catch-up while the host runs: up to ONLINE_GAP_S
+-- of it uses the engine posture (asleep restores energy) and ignores `cap_hours`; anything
+-- beyond that, and every offline catch-up (`session_asleep` nil), is time away: capped by
+-- `cap_hours`, spent awake for an hour then napping. With `offline_progress` off only a short
+-- gap counts. Disabled needs are pinned to neutral().
 local function catchUp(
 	needs: T.Needs,
 	last_s: number,
@@ -66,7 +70,8 @@ local function catchUp(
 	cap_hours: number,
 	enabled: boolean,
 	offline_progress: boolean,
-	personality: T.Personality?
+	personality: T.Personality?,
+	session_asleep: boolean?
 ): T.Needs
 	if not enabled then
 		return neutral()
@@ -75,14 +80,23 @@ local function catchUp(
 	if elapsed <= 0 then
 		return table.clone(needs)
 	end
+	local p = personality or DEFAULT_PERSONALITY
+	local out = needs
+	if session_asleep ~= nil then
+		local session = math.min(elapsed, ONLINE_GAP_S)
+		out = decay(out, session, p, session_asleep)
+		elapsed -= session
+		if elapsed <= 0 or not offline_progress then
+			return out
+		end
+	end
 	local cap = if util.isFiniteNumber(cap_hours) then util.clamp(cap_hours, 0, MAX_CAP_HOURS) else 0
 	elapsed = math.min(elapsed, cap * HOUR)
 	if not offline_progress then
 		elapsed = math.min(elapsed, ONLINE_GAP_S)
 	end
-	local p = personality or DEFAULT_PERSONALITY
 	local awake = math.min(elapsed, AWAKE_BEFORE_NAP_S)
-	local out = decay(needs, awake, p, false)
+	out = decay(out, awake, p, false)
 	return decay(out, elapsed - awake, p, true)
 end
 

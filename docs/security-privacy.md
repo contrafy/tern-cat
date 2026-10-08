@@ -91,6 +91,10 @@ does not ask the user before Carly calls them, so:
   and is never applied;
 - mutating calls become intents that go through the same allowlist as every other source
   (`cat/core/commands.luau`: allowlisted kinds and per-kind arguments);
+- the `set_config` allowlist is source-aware: intents with source `carly` may not opt into sound
+  (the only feature that starts a process) or loosen quiet hours. Carly may set `sound.enabled`
+  only to `false` and `quiet.hours_enabled` only to `true`, and may not change `sound.volume`,
+  `quiet.start` or `quiet.stop`; the block, the window and the keyboard keep the full allowlist;
 - read-only views (status, explain, AI status, context) return small summaries; nothing returns
   command text, terminal output, file paths or journal summaries.
 
@@ -99,7 +103,9 @@ does not ask the user before Carly calls them, so:
 Tern has no audio API, so sound effects run a local player (`cat/integrations/sound.luau`):
 
 - macOS: `/usr/bin/afplay` (fixed path, checked for existence).
-- Linux: one fixed probe, `sh -c "command -v pw-play paplay aplay"`, then the first player found.
+- Linux: one fixed probe, `sh -c "command -v pw-play paplay aplay"` (fixed argv, no
+  interpolation), then the first player found.
+- Sound is opt-in (`sound.enabled`, default `false`) and Carly cannot turn it on (see above).
 - The argv is fixed per player; the only variable parts are the clamped volume and the file path.
 - The path comes from a validated sound pack: pack-relative, same segment rules as sprite paths,
   audio extension only.
@@ -150,8 +156,8 @@ writes inside its plugin directory. On a default install `tern.kv` lives at
 | Data | Location | Contents | Writer |
 |---|---|---|---|
 | Cat state | `tern.kv`, key `state` | One `StoreEnvelope` (`cat/types.luau`): schema version, `rev`, profile (cat id, needs, mood, counters of pets/pokes/feeds/plays/command reactions, fail streak, timestamps), journal (last 50 entries of time, event id, kind and a short fixed summary), `seen` ring (last 256 event/intent ids), last reaction, snooze time | host half only |
-| Config | `<data>/config.json` | Your settings (`config/example.json` documents every key). Human-editable | you; the host half for settings changes |
-| Inbox | `<data>/inbox/<ms>-<hex>.json` | One pending intent per file (`kind`, `source`, validated `args`, id, time). The host deletes each file after applying it; undecodable files are deleted after 5 s (`cat/host/inbox.luau`) | window halves |
+| Config | `<data>/config.json` | Your settings (`config/example.json` documents every key). Human-editable. A file that exists but cannot be read (symlink, over 256 KiB, read error) is never overwritten; settings changes fail with a note instead | you; the host half for settings changes |
+| Inbox | `<data>/inbox/<ms>-<hex>.json` | One pending intent per file (`kind`, `source`, validated `args`, id, time). The host deletes each file after applying it, and undecodable intent files after 5 s. It only ever deletes readable files with the intent name pattern; foreign names, directories and unreadable entries are logged once and left in place (`cat/host/inbox.luau`) | window halves |
 | Identity export | `<data>/exports/identity-<cat id>-<time>.json` | Written only when you request an export: cat name, appearance, personality and profile | host half |
 | User packs | `<data>/packs/<id>/`, `<data>/sounds/<id>/` | Packs you install | you |
 

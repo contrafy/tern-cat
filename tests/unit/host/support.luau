@@ -12,6 +12,8 @@ export type MemFs = {
 	dirs: { [string]: boolean },
 	fs: fsAdapter.Fs,
 	failWrites: boolean,
+	-- Paths whose bounded read raises although they exist (symlink, oversize, I/O error).
+	unreadable: { [string]: boolean },
 	-- Relative paths not present in `files` are read from the repo (read-only).
 	real: boolean,
 }
@@ -21,13 +23,23 @@ local function parentOf(path: string): string?
 end
 
 local function memFs(files: { [string]: string }?, real: boolean?): MemFs
-	local m: MemFs = { files = files or {}, dirs = {}, fs = nil :: any, failWrites = false, real = real == true }
+	local m: MemFs = {
+		files = files or {},
+		dirs = {},
+		fs = nil :: any,
+		failWrites = false,
+		unreadable = {},
+		real = real == true,
+	}
 	local function onDisk(path: string): boolean
 		return m.real and string.sub(path, 1, 1) ~= "/"
 	end
 	local raw: fsAdapter.RawFs = {
 		read = function(path: string, max_bytes: number?): string
 			local data = m.files[path]
+			if m.unreadable[path] then
+				error("refusing to read a symlink " .. path)
+			end
 			if data == nil and onDisk(path) and lfs.isFile(path) then
 				data = lfs.readFile(path)
 			end

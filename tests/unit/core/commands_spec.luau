@@ -2,6 +2,7 @@
 local t = require("../../lib/test")
 local factories = require("../../lib/factories")
 local commands = require("../../../cat/core/commands")
+local schema = require("../../../cat/config/schema")
 
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -130,6 +131,16 @@ describe("commands", function()
 			rejects(factories.intent("rename", { name = 5 }))
 		end)
 
+		it("rename accepts only names the config schema keeps, so a rename never silently reverts", function()
+			local cjk = string.rep("猫", 30)
+			local renamed = accepts("rename", { name = cjk }).args.name
+			local cfg, warnings = schema.resolve({ cat = { name = renamed } })
+			expect(cfg.cat.name).toBe(cjk)
+			expect(#warnings).toBe(0)
+			rejects(factories.intent("rename", { name = string.rep("猫", 33) }))
+			expect(accepts("rename", { name = "Mo\194\133chi" }).args.name).toBe("Mochi")
+		end)
+
 		it("argument-free intents accept no args", function()
 			for _, kind in { "pet", "poke", "unsnooze", "reset_identity", "export_identity", "clear_ai_state" } do
 				accepts(kind)
@@ -183,6 +194,42 @@ describe("commands", function()
 			rejects(factories.intent("set_config", { values = {} }))
 			rejects(factories.intent("set_config", { key = "sound.enabled" }))
 			rejects(factories.intent("set_config", { key = "sound.enabled", value = true, values = {} }))
+		end)
+
+		it("never lets Carly turn sound on or loosen quiet hours (no user consent on that surface)", function()
+			local carly = { source = "carly" }
+			expect(rejects(factories.intent("set_config", { key = "sound.enabled", value = true }, carly))).toContain(
+				"Carly"
+			)
+			rejects(factories.intent("set_config", { key = "sound.volume", value = 1 }, carly))
+			rejects(factories.intent("set_config", { key = "quiet.hours_enabled", value = false }, carly))
+			rejects(factories.intent("set_config", { key = "quiet.start", value = "23:00" }, carly))
+			rejects(factories.intent("set_config", { key = "quiet.stop", value = "06:00" }, carly))
+			rejects(
+				factories.intent(
+					"set_config",
+					{ values = { ["rendering.overlay"] = false, ["sound.enabled"] = true } },
+					carly
+				)
+			)
+		end)
+
+		it("lets Carly make privacy-reducing changes and other safe settings", function()
+			local carly = { source = "carly" }
+			expect(accepts("set_config", { key = "sound.enabled", value = false }, carly).args.values["sound.enabled"]).toBe(
+				false
+			)
+			expect(
+				accepts("set_config", { key = "quiet.hours_enabled", value = true }, carly).args.values["quiet.hours_enabled"]
+			).toBe(true)
+			accepts("set_config", { key = "behavior.allow_swats", value = false }, carly)
+		end)
+
+		it("keeps sound and quiet settings available to the user's own surfaces", function()
+			for _, source in { "block", "window", "keyboard" } do
+				accepts("set_config", { key = "sound.enabled", value = true }, { source = source })
+				accepts("set_config", { key = "quiet.start", value = "23:00" }, { source = source })
+			end
 		end)
 	end)
 

@@ -35,8 +35,16 @@ describe("config schema", function()
 			expect(d.rendering.reduced_motion).toBe("follow_tern")
 		end)
 
-		it("keeps visual obscuring short by default", function()
-			expect(schema.defaults().behavior.obscure_max_ms).toBeLessThanOrEqual(1500)
+		it("drops keys that never had an effect; old config files only get an unknown-key warning", function()
+			local d = schema.defaults() :: any
+			expect(d.rendering.animation_fps).toBeNil()
+			expect(d.behavior.obscure_max_ms).toBeNil()
+			local cfg, warnings =
+				schema.resolve({ rendering = { animation_fps = 8 }, behavior = { obscure_max_ms = 1500 } })
+			expect((cfg :: any).rendering.animation_fps).toBeNil()
+			expect(hasWarning(warnings, "rendering.animation_fps")).toBe(true)
+			expect(hasWarning(warnings, "behavior.obscure_max_ms")).toBe(true)
+			expect(schema.preset("quiet_office").rendering).toBeNil()
 		end)
 
 		it("returns a fresh table each call so callers cannot corrupt defaults", function()
@@ -152,11 +160,9 @@ describe("config schema", function()
 			local cfg, warnings = schema.resolve({
 				personality = { mischief = 7 },
 				sound = { volume = -1 },
-				behavior = { obscure_max_ms = 999999 },
 			})
 			expect(cfg.personality.mischief).toBe(1)
 			expect(cfg.sound.volume).toBe(0)
-			expect(cfg.behavior.obscure_max_ms).toBeLessThanOrEqual(3000)
 			expect(hasWarning(warnings, "personality.mischief")).toBe(true)
 			expect(hasWarning(warnings, "sound.volume")).toBe(true)
 		end)
@@ -248,9 +254,16 @@ describe("config schema", function()
 		end)
 
 		it("rounds integer settings", function()
-			local cfg, warnings = schema.resolve({ rendering = { animation_fps = 9.6 } })
-			expect(cfg.rendering.animation_fps).toBe(10)
-			expect(hasWarning(warnings, "rendering.animation_fps")).toBe(true)
+			local cfg, warnings = schema.resolve({ rendering = { block_scale = 3.6 } })
+			expect(cfg.rendering.block_scale).toBe(4)
+			expect(hasWarning(warnings, "rendering.block_scale")).toBe(true)
+		end)
+
+		it("measures cat.name in characters, like rename intents", function()
+			local name = string.rep("猫", 32)
+			expect(schema.resolve({ cat = { name = name } }).cat.name).toBe(name)
+			local _, warnings = schema.resolve({ cat = { name = string.rep("猫", 33) } })
+			expect(hasWarning(warnings, "cat.name")).toBe(true)
 		end)
 	end)
 

@@ -32,8 +32,18 @@ The file is created from `config/example.json` the first time the plugin runs if
 exist. The settings page in the block changes only the edited keys in your existing file and
 writes it back as pretty JSON in the example's key order. If the file is not valid JSON, the cat uses the defaults, shows
 `config.json is not valid JSON; using defaults` in the block, and leaves the file untouched. If a
-settings change has to replace an unreadable file, the old file is first saved as
+settings change has to replace an unparsable file, the old file is first saved as
 `config.json.broken-<unix seconds>`.
+
+If `config.json` exists but cannot be read at all (it is a symlink, it is larger than 256 KiB, or
+the read fails), the file is never written: the block shows a note, settings changes from the
+block, the overlay toggle or Carly fail with an error instead of replacing the file, and the
+cat keeps its current settings (the defaults if it could not be read at startup). Replace the
+symlink with a regular file or shrink the file; the note clears once it reads again.
+
+Unknown keys are ignored with a warning in the log. Older files may still contain
+`rendering.animation_fps` and `behavior.obscure_max_ms`; they never had an effect and were
+removed, so they now only produce that warning.
 
 Changes are picked up within about 3 seconds (the host and each window re-read the file every
 3 s) or immediately with **Reload config**.
@@ -58,9 +68,9 @@ the `allow_*` toggles, then preset and personality weights
 | Preset | Changes from the defaults |
 |---|---|
 | `orange_menace` (default) | None. |
-| `quiet_office` | `personality`: mischief 0.3, energy 0.4, talkativeness 0.05. `rendering.animation_fps` 8. `behavior`: `allow_visual_obscuring`, `allow_swats` and `allow_pacing` off, `reaction_sample_rate` 0.1, `reaction_cooldown_s` 180. Fewer swats, hops and walks. |
+| `quiet_office` | `personality`: mischief 0.3, energy 0.4, talkativeness 0.05. `behavior`: `allow_visual_obscuring`, `allow_swats` and `allow_pacing` off, `reaction_sample_rate` 0.1, `reaction_cooldown_s` 180. No overlay over terminal panes; fewer swats and hops. |
 | `chaos` | `personality`: curiosity 1, mischief 1, energy 0.95, talkativeness 0.4. Every `allow_*` toggle on, `reaction_sample_rate` 0.8, `reaction_cooldown_s` 10. About three times as many swats and hops, twice as much walking. |
-| `zen` | `personality`: curiosity 0.4, mischief 0.1, energy 0.15, talkativeness 0.05. `allow_visual_obscuring`, `allow_swats` and `allow_pacing` off, `allow_idle_sleep` on, `reaction_sample_rate` 0.05, `reaction_cooldown_s` 600. Mostly sitting and sleeping. |
+| `zen` | `personality`: curiosity 0.4, mischief 0.1, energy 0.15, talkativeness 0.05. `allow_visual_obscuring`, `allow_swats` and `allow_pacing` off, `allow_idle_sleep` on, `reaction_sample_rate` 0.05, `reaction_cooldown_s` 600. No overlay over terminal panes; mostly sitting and sleeping. |
 
 ## Keys
 
@@ -71,7 +81,7 @@ versions are migrated on load.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `name` | string, 1-64 chars | `"Orange Menace"` | Name shown in the block and in Carly's context line (control characters and quotes are stripped there). |
+| `name` | string, 1-32 characters | `"Orange Menace"` | Name shown in the block and in Carly's context line (control characters and quotes are stripped there). Renames use the same limit. |
 | `appearance` | pack id (`^[a-z][a-z0-9-]*$`, at most 32) | `"orange-menace"` | Sprite pack. Bundled: `orange-menace`, `void`, `tuxedo`. User packs go in `<data>/packs/<id>/` ([sprite-pack-spec.md](sprite-pack-spec.md)). An unknown or invalid pack falls back to the default pack. |
 
 ### `personality`
@@ -91,8 +101,8 @@ All numbers from 0 to 1. The settings page shows them as percentages.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Hunger, energy, affection and boredom change over time. They never punish: stats are never reduced. |
-| `offline_progress` | boolean | `true` | Simulate time that passed while Tern was closed. Off: only a short gap counts. |
-| `offline_hours_cap` | number 0-168 | `12` | Cap on simulated offline hours. |
+| `offline_progress` | boolean | `true` | Simulate time that passed while Tern was closed (awake for up to an hour, then napping). Off: only a short gap counts. |
+| `offline_hours_cap` | number 0-168 | `12` | Cap on simulated offline hours. Applies only to time away; needs keep changing while Tern is open (a napping cat regains energy) even with `0`. |
 
 ### `rendering`
 
@@ -101,7 +111,6 @@ All numbers from 0 to 1. The settings page shows them as percentages.
 | `overlay` | boolean | `true` | Show the decorative overlay cat in every window. Toggled by **Hide or show the overlay cat**, the global chord, the block's Overlay button or `h`. |
 | `overlay_scale` | integer 1-8 | `2` | Pixel scale of the overlay sprite. |
 | `block_scale` | integer 1-12 | `4` | Pixel scale of the sprite in the block. |
-| `animation_fps` | integer 1-30 | `10` | Validated and stored, but in this version it has no effect: frame timing comes from the pack's `durations_ms`. |
 | `reduced_motion` | `"follow_tern"`, `"on"`, `"off"` | `"follow_tern"` | `on`: still frames in the overlay and the block. `follow_tern`: the overlay follows Tern's reduced-motion setting; the block keeps animating (the host cannot read that setting). `off`: does not override Tern: when Tern reduces motion, its stylesheet stops every animation, including the cat's. |
 | `block_placement` | `"float"`, `"split"` | `"float"` | How the palette command **Open cat** (and **Cat settings**) places a new block: a floating card in the bottom-right corner of the focused pane, or a split beside it. If floating fails the block stays a split. |
 
@@ -110,8 +119,7 @@ All numbers from 0 to 1. The settings page shows them as percentages.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `activity` | `"quiet_office"`, `"orange_menace"`, `"chaos"`, `"zen"` | `"orange_menace"` | Preset (see above). |
-| `allow_visual_obscuring` | boolean | `true` | Settings label "May briefly cover text (overlay)". In this version the overlay always sits in the pane's bottom-right corner and this flag does not change its placement; turn the overlay off to keep it off your text. |
-| `obscure_max_ms` | integer 0-3000 | `1500` | Validated and stored; not used by this version. |
+| `allow_visual_obscuring` | boolean | `true` | Settings label "Draw over terminal panes (overlay)". `false`: the overlay cat is not drawn over terminal panes at all, so it never covers your text; the block cat is unaffected. `rendering.overlay` hides the overlay everywhere. |
 | `allow_swats` | boolean | `true` | Allows `swat` and ambient `hop`, the swat when you play, and the `ls` swat. |
 | `allow_command_reactions` | boolean | `true` | React to commands finishing (and `stare` at `sudo`). |
 | `allow_development_reactions` | boolean | `true` | Development-specific reactions: `flop` after 3 failed test runs in a row, the `ls` swat. |
@@ -173,6 +181,10 @@ Sounds also stay silent while snoozed and play at most once every 2 seconds.
   `behavior.allow_pane_reactions`, `behavior.allow_idle_sleep`, `behavior.allow_pacing`,
   `sound.enabled`, `sound.volume`, `rendering.overlay`, `rendering.reduced_motion`,
   `quiet.hours_enabled`, `quiet.start`, `quiet.stop`, `needs.enabled`.
+- Carly is held to less than that, because it calls exports without asking you: it may set
+  `sound.enabled` only to `false` and `quiet.hours_enabled` only to `true`, and may not change
+  `sound.volume`, `quiet.start` or `quiet.stop`. Turning sound on or loosening quiet hours takes
+  the block's settings page or an edit to `config.json`.
 
 Only the host half writes the file. AI settings, appearance and sharing are never changeable
 through Carly.

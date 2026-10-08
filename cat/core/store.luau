@@ -190,7 +190,14 @@ end
 
 -- Time -------------------------------------------------------------------------------------
 
-local function catchUp(env: T.StoreEnvelope, wall_s: number, config: T.Config): T.StoreEnvelope
+-- `session_asleep` (nil for offline catch-up at load) is the engine posture during an
+-- in-session catch-up; see needs.catchUp.
+local function catchUp(
+	env: T.StoreEnvelope,
+	wall_s: number,
+	config: T.Config,
+	session_asleep: boolean?
+): T.StoreEnvelope
 	if not util.isFiniteNumber(wall_s) then
 		return env
 	end
@@ -202,7 +209,8 @@ local function catchUp(env: T.StoreEnvelope, wall_s: number, config: T.Config): 
 		config.needs.offline_hours_cap,
 		config.needs.enabled,
 		config.needs.offline_progress,
-		config.personality
+		config.personality,
+		session_asleep
 	)
 	local mood: T.Mood = needsMod.deriveMood(nextNeeds, config.personality, { fail_streak = profile.fail_streak })
 	local snooze = env.snooze_until

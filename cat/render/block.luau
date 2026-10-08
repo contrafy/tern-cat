@@ -419,7 +419,7 @@ local function sections(model: Model, s: SettingsModel): { any }
 					switch(c, base, "behavior.allow_pane_reactions", "React to panes opening and closing"),
 					switch(c, base, "behavior.allow_idle_sleep", "Nap when idle"),
 					switch(c, base, "behavior.allow_pacing", "Pace around (overlay)"),
-					switch(c, base, "behavior.allow_visual_obscuring", "May briefly cover text (overlay)"),
+					switch(c, base, "behavior.allow_visual_obscuring", "Draw over terminal panes (overlay)"),
 					percent(c, base, "behavior.reaction_sample_rate", "Reaction rate"),
 					row(c, base, "behavior.reaction_cooldown_s", { label = "Reaction cooldown" }, {
 						k = "number",

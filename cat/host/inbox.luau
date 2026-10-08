@@ -1,6 +1,8 @@
 --!strict
 -- Intent inbox: windows drop one JSON file per intent into <data>/inbox; the host drains it.
--- Undecodable files (a write may still be in progress) are retried for GRACE_MS, then deleted.
+-- Only readable files with the intent name pattern are ever removed: undecodable ones (a write
+-- may still be in progress) are retried for GRACE_MS, then deleted. Foreign names and entries
+-- that stay unreadable (directories, symlinks, oversize files) are reported once and left alone.
 
 local util = require("../core/util")
 local fsMod = require("../adapters/fs")
@@ -14,25 +16,40 @@ local NAME_PATTERN = "^%d+%-%x%x%x%x%x%x%x%x%.json$"
 export type State = {
 	-- File name -> engine ms when it was first seen unusable.
 	first_seen: { [string]: number },
+	-- Names already reported as ignored (never touched again while present).
+	ignored: { [string]: boolean },
 }
 
 export type Item = { name: string, intent: { [string]: any } }
 export type Discard = { name: string, reason: string }
-export type PollResult = { items: { Item }, discarded: { Discard } }
+export type PollResult = {
+	items: { Item },
+	-- Intent files that were deleted unused.
+	discarded: { Discard },
+	-- Entries newly found to be left alone (reported once per name).
+	ignored: { Discard },
+}
 
 local function newState(): State
-	return { first_seen = {} }
+	return { first_seen = {}, ignored = {} }
 end
 
 local function isIntentName(name: string): boolean
 	return string.match(name, NAME_PATTERN) ~= nil
 end
 
+local function ignore(state: State, result: PollResult, name: string, reason: string)
+	state.first_seen[name] = nil
+	state.ignored[name] = true
+	table.insert(result.ignored, { name = name, reason = reason })
+end
+
 local function poll(state: State, fs: fsMod.Fs, json: jsonMod.Json, dir: string, now_ms: number): PollResult
-	local result: PollResult = { items = {}, discarded = {} }
+	local result: PollResult = { items = {}, discarded = {}, ignored = {} }
 	local names = fs.list(dir)
 	if names == nil then
 		state.first_seen = {}
+		state.ignored = {}
 		return result
 	end
 	local sorted = table.clone(names)
@@ -42,45 +59,56 @@ local function poll(state: State, fs: fsMod.Fs, json: jsonMod.Json, dir: string,
 	local handled = 0
 	for _, name in sorted do
 		present[name] = true
+		if state.ignored[name] then
+			continue
+		end
+		if not isIntentName(name) then
+			ignore(state, result, name, "unexpected name; left in place")
+			continue
+		end
 		if handled >= MAX_PER_POLL then
 			continue
 		end
 		local path = dir .. "/" .. name
-		local reason: string? = nil
-		if isIntentName(name) then
-			local text = fs.read(path, MAX_BYTES + 1)
-			if text ~= nil and #text > MAX_BYTES then
-				handled += 1
-				fs.remove(path)
-				state.first_seen[name] = nil
-				table.insert(result.discarded, { name = name, reason = "file too large" })
-				continue
-			end
-			local value = if text then json.decode(text) else nil
-			if util.isDict(value) then
-				handled += 1
-				fs.remove(path)
-				state.first_seen[name] = nil
-				table.insert(result.items, { name = name, intent = value })
-				continue
-			end
-			reason = if text == nil then "unreadable" else "not a JSON object"
-		else
-			reason = "unexpected file name"
+		local text = fs.read(path, MAX_BYTES + 1)
+		if text ~= nil and #text > MAX_BYTES then
+			handled += 1
+			fs.remove(path)
+			state.first_seen[name] = nil
+			table.insert(result.discarded, { name = name, reason = "file too large" })
+			continue
+		end
+		local value = if text then json.decode(text) else nil
+		if util.isDict(value) then
+			handled += 1
+			fs.remove(path)
+			state.first_seen[name] = nil
+			table.insert(result.items, { name = name, intent = value })
+			continue
 		end
 		local first = state.first_seen[name]
 		if first == nil then
 			state.first_seen[name] = now_ms
 		elseif now_ms - first >= GRACE_MS then
 			handled += 1
-			fs.remove(path)
-			state.first_seen[name] = nil
-			table.insert(result.discarded, { name = name, reason = reason :: string })
+			if text == nil then
+				-- Not a readable regular file (directory, symlink, oversize): never delete it.
+				ignore(state, result, name, "unreadable; left in place")
+			else
+				fs.remove(path)
+				state.first_seen[name] = nil
+				table.insert(result.discarded, { name = name, reason = "not a JSON object" })
+			end
 		end
 	end
 	for name in state.first_seen do
 		if not present[name] then
 			state.first_seen[name] = nil
+		end
+	end
+	for name in state.ignored do
+		if not present[name] then
+			state.ignored[name] = nil
 		end
 	end
 	return result

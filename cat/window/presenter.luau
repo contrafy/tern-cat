@@ -230,7 +230,8 @@ local function view(p: Presenter): View
 	local animation: T.Animation = if current then current.animation else "idle"
 	local isStill = still(p)
 	return {
-		hidden = not visible(p) or p.covered,
+		-- The overlay is drawn over terminal panes, so it only shows while covering text is allowed.
+		hidden = not visible(p) or p.covered or not p.config.behavior.allow_visual_obscuring,
 		animation = animation,
 		still = isStill,
 		pace = animation == "walk" and p.config.behavior.allow_pacing and not isStill,

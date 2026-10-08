@@ -109,6 +109,35 @@ describe("needs", function()
 			local start = { hunger = 0.7, energy = 0.2, affection = 0.3, boredom = 0.8 }
 			expect(needs.catchUp(start, 0, 8 * HOUR, 12, false, true, personality())).toEqual(needs.neutral())
 		end)
+
+		it("restores energy during an in-session nap so a working day does not leave the cat stuck sleepy", function()
+			local start = { hunger = 0.3, energy = 0.3, affection = 0.6, boredom = 0.3 }
+			local after = start
+			for i = 1, 60 do
+				after = needs.catchUp(after, (i - 1) * 60, i * 60, 12, true, true, personality(), true)
+			end
+			expect(after.energy).toBeGreaterThan(start.energy + 0.1)
+		end)
+
+		it("spends in-session time awake at awake rates while the engine is awake", function()
+			local start = needs.neutral()
+			local after = needs.catchUp(start, 0, 60, 12, true, true, personality(), false)
+			expect(after.energy).toBeLessThan(start.energy)
+		end)
+
+		it("keeps needs moving in session when offline simulation is capped to 0 hours", function()
+			local start = needs.neutral()
+			local after = needs.catchUp(start, 0, 60, 0, true, true, personality(), false)
+			expect(after.hunger).toBeGreaterThan(start.hunger)
+			expect(needs.catchUp(start, 0, 8 * HOUR, 0, true, true, personality())).toEqual(start)
+		end)
+
+		it("treats an in-session gap longer than a regular tick as time away (laptop sleep)", function()
+			local start = needs.neutral()
+			local away = needs.catchUp(start, 0, 8 * HOUR, 12, true, true, personality())
+			local session = needs.catchUp(start, 0, 8 * HOUR, 12, true, true, personality(), false)
+			expect(math.abs(session.hunger - away.hunger)).toBeLessThan(0.01)
+		end)
 	end)
 
 	describe("applyGesture", function()

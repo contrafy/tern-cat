@@ -71,6 +71,17 @@ describe("window/presenter view", function()
 		expect(presenter.view(p).hidden).toBe(false)
 	end)
 
+	-- The overlay is drawn over terminal panes; users who forbid covering text get no overlay.
+	it("is hidden when the cat may not cover terminal text, and shown again when allowed", function()
+		local p = make({ behavior = { allow_visual_obscuring = false } })
+		expect(presenter.view(p).hidden).toBe(true)
+		local allowed = table.clone(p.config)
+		allowed.behavior = table.clone(p.config.behavior)
+		allowed.behavior.allow_visual_obscuring = true
+		presenter.setConfig(p, allowed)
+		expect(presenter.view(p).hidden).toBe(false)
+	end)
+
 	it("drops the override once config agrees with it", function()
 		local p = make()
 		presenter.setOverlayOverride(p, false)

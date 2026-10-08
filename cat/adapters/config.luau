@@ -10,6 +10,9 @@ local jsonMod = require("./json")
 
 local MAX_BYTES = 256 * 1024
 
+local UNREADABLE_ERROR =
+	"config.json exists but could not be read (a symlink, over 256 KiB, or a read error); it is left untouched and settings changes are not saved"
+
 -- Change value that deletes the key (reset to default).
 local REMOVE = table.freeze({ remove = true })
 
@@ -22,6 +25,9 @@ export type Loaded = {
 	warnings: { string },
 	-- Set when the file exists but cannot be used (shown as a recovery note).
 	error: string?,
+	-- The file exists but the bounded read failed (symlink, oversize, I/O error). Writers must
+	-- never replace it; readers show `error` instead of silently using defaults.
+	unreadable: boolean?,
 }
 
 local function parse(text: string?, json: jsonMod.Json): Loaded
@@ -53,8 +59,16 @@ local function parse(text: string?, json: jsonMod.Json): Loaded
 	return { text = text, raw = decoded, config = config, warnings = warnings, error = nil }
 end
 
+-- Reads and resolves config.json. A file that exists but cannot be read is reported as
+-- `unreadable` (with `error`) rather than as missing.
 local function read(fs: fsMod.Fs | T.FsAdapter, json: jsonMod.Json, path: string): Loaded
-	return parse(fs.read(path, MAX_BYTES), json)
+	local text = fs.read(path, MAX_BYTES)
+	local loaded = parse(text, json)
+	if text == nil and fs.exists(path) then
+		loaded.unreadable = true
+		loaded.error = UNREADABLE_ERROR
+	end
+	return loaded
 end
 
 -- Keys in order of first appearance in `template` (the example config), for stable output.
@@ -141,6 +155,7 @@ end
 
 return {
 	MAX_BYTES = MAX_BYTES,
+	UNREADABLE_ERROR = UNREADABLE_ERROR,
 	REMOVE = REMOVE,
 	parse = parse,
 	read = read,

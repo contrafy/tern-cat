@@ -52,6 +52,17 @@ local SET_CONFIG_KEYS = {
 }
 local MAX_SET_CONFIG_ENTRIES = #SET_CONFIG_KEYS
 
+-- Carly calls exports without asking the user, so it may not opt into sound (the only feature
+-- that starts a process) or loosen quiet hours. For these keys Carly may only set the listed
+-- privacy-reducing value; keys mapped to nil are refused outright.
+local CARLY_RESTRICTED: { [string]: { value: any? } } = {
+	["sound.enabled"] = { value = false },
+	["sound.volume"] = {},
+	["quiet.hours_enabled"] = { value = true },
+	["quiet.start"] = {},
+	["quiet.stop"] = {},
+}
+
 local SCOPE_BY_SOURCE: { [string]: T.EventScope } = {
 	block = "block",
 	keyboard = "block",
@@ -60,7 +71,7 @@ local SCOPE_BY_SOURCE: { [string]: T.EventScope } = {
 }
 
 local ID_MAX = 64
-local NAME_MAX = 32
+local NAME_MAX = schema.NAME_MAX
 local NAME_INPUT_MAX = 256
 local SNOOZE_DEFAULT_MIN = 30
 local SNOOZE_MAX_MIN = 480
@@ -103,6 +114,8 @@ local function optionalChoice(args: Args, key: string, choices: { string }, defa
 	return { [key] = value }, nil
 end
 
+-- Same unit and limit as the cat.name config field, so an accepted rename is never reverted
+-- when config.json is resolved.
 local function cleanName(value: any): (string?, string?)
 	if type(value) ~= "string" then
 		return nil, "name must be a string"
@@ -110,17 +123,14 @@ local function cleanName(value: any): (string?, string?)
 	if #value > NAME_INPUT_MAX or utf8.len(value) == nil then
 		return nil, "name must be valid text"
 	end
-	local s = util.stripControl(value)
-	s = string.gsub(s, "\194[\128-\159]", "")
-	s = string.match(s, "^%s*(.-)%s*$") or ""
-	local len = utf8.len(s) or 0
-	if len < 1 or len > NAME_MAX then
+	local s = schema.checkField("cat.name", value)
+	if s == nil then
 		return nil, `name must be 1..{NAME_MAX} printable characters`
 	end
 	return s, nil
 end
 
-local function validateSetConfig(args: Args): (Args?, string?)
+local function validateSetConfig(args: Args, source: string): (Args?, string?)
 	local err = onlyKeys(args, { "key", "value", "values" })
 	if err then
 		return nil, err
@@ -156,6 +166,14 @@ local function validateSetConfig(args: Args): (Args?, string?)
 		if not util.contains(SET_CONFIG_KEYS, key) then
 			return nil, `setting {describeValue(key)} cannot be changed by an intent`
 		end
+		local restricted = if source == "carly" then CARLY_RESTRICTED[key] else nil
+		if restricted then
+			if restricted.value == nil then
+				return nil, `setting {key} cannot be changed by Carly`
+			elseif entries[key] ~= restricted.value then
+				return nil, `{key}: Carly may only set this to {tostring(restricted.value)}`
+			end
+		end
 		local value, problem = schema.checkField(key, entries[key])
 		if value == nil then
 			return nil, `{key}: {problem or "invalid value"}`
@@ -165,7 +183,7 @@ local function validateSetConfig(args: Args): (Args?, string?)
 	return { values = out }, nil
 end
 
-local function validateArgs(kind: string, args: Args): (Args?, string?)
+local function validateArgs(kind: string, args: Args, source: string): (Args?, string?)
 	if kind == "feed" then
 		return optionalChoice(args, "item", FOODS, "kibble")
 	elseif kind == "play" then
@@ -196,7 +214,7 @@ local function validateArgs(kind: string, args: Args): (Args?, string?)
 		end
 		return out, nil
 	elseif kind == "set_config" then
-		return validateSetConfig(args)
+		return validateSetConfig(args, source)
 	elseif kind == "snooze" then
 		local err = onlyKeys(args, { "minutes" })
 		if err then
@@ -268,7 +286,7 @@ local function validate(raw: any): (T.Intent?, string?)
 	if not util.isDict(rawArgs) then
 		return nil, "intent: args must be an object"
 	end
-	local args, err = validateArgs(kind, rawArgs)
+	local args, err = validateArgs(kind, rawArgs, raw.source)
 	if not args then
 		return nil, `intent {kind}: {err or "invalid arguments"}`
 	end
