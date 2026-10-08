@@ -18,7 +18,6 @@ local soundMod = require("./cat/integrations/sound")
 
 local INBOX_MS = 500
 local CONFIG_MS = 3000
-local CONFIRM_MS = 10000
 
 local function log(level: string, msg: string)
 	local fn = (tern.log :: any)[level] or tern.log.info
@@ -82,7 +81,8 @@ type BlockState = {
 	page: string,
 	settings_page: string,
 	editing: string?,
-	confirm_until: number?,
+	-- The armed first click of Reset identity ("reset") or Remove ("pack:<id>").
+	confirm: controls.Confirm?,
 	sprite_key: string?,
 	sprites: { blockView.Sprite },
 	canvas: { width: number, height: number },
@@ -136,7 +136,12 @@ local function ensurePreviews(state: BlockState, cx: BlockCx): { blockView.PackC
 				state.previews[id] = cx:blob(bytes, "image/png")
 			end
 		end
-		table.insert(out, { id = id, name = pack.manifest.name, preview = state.previews[id] })
+		table.insert(out, {
+			id = id,
+			name = pack.manifest.name,
+			preview = state.previews[id],
+			removable = pack.source == "user",
+		})
 	end
 	return out
 end
@@ -154,10 +159,21 @@ local function modelFor(state: BlockState, cx: BlockCx?): blockView.Model
 	end
 	local settings: blockView.SettingsModel? = nil
 	if state.page == "settings" then
+		local now = clock.now_ms()
+		local pending = state.confirm
+		local removing: string? = nil
+		if
+			pending
+			and string.sub(pending.target, 1, 5) == "pack:"
+			and controls.isArmed(pending, pending.target, now)
+		then
+			removing = string.sub(pending.target, 6)
+		end
 		settings = {
 			page = state.settings_page,
 			editing = state.editing,
-			confirm_reset = state.confirm_until ~= nil and clock.now_ms() < (state.confirm_until :: number),
+			confirm_reset = controls.isArmed(pending, "reset", now),
+			confirm_remove = removing,
 			packs = if cx and state.settings_page == "appearance" then ensurePreviews(state, cx) else {},
 			ai_reason = ai.carlyScheduleProvider().unavailable_reason or "Not available in this version.",
 			last_export = brain.last_export,
@@ -231,6 +247,26 @@ local function applySettings(cx: BlockCx, changes: { [string]: any }?, err: stri
 	end
 end
 
+local function removePack(cx: BlockCx, id: string)
+	local out = brainMod.removePack(brain, id)
+	if not out.ok then
+		toast(cx, "error", "Pack not removed", out.error)
+		return
+	end
+	for _, b in live do
+		b.state.previews[id] = nil
+	end
+	local name = out.name or id
+	if out.config_error then
+		toast(cx, "error", `Removed {name}, but the appearance was not saved`, out.config_error)
+	elseif out.switched then
+		local current = if brain.pack then brain.pack.manifest.name else brainMod.DEFAULT_PACK
+		toast(cx, "success", `Removed {name}`, `Switched back to {current}.`)
+	else
+		toast(cx, "success", `Removed {name}`)
+	end
+end
+
 local function runAction(state: BlockState, act: string, cx: BlockCx)
 	local cmd = controls.resolveAction(act)
 	if cmd == nil then
@@ -262,7 +298,7 @@ local function handleEvent(state: BlockState, ev: UiEvent, cx: BlockCx)
 		elseif act == "page" and type(ev.value) == "string" then
 			state.settings_page = ev.value
 			state.editing = nil
-			state.confirm_until = nil
+			state.confirm = nil
 		elseif act == "pack" then
 			applySettings(cx, controls.settingsChange("cat.appearance", ev.value))
 		elseif act == "export" then
@@ -273,13 +309,30 @@ local function handleEvent(state: BlockState, ev: UiEvent, cx: BlockCx)
 				toast(cx, "error", "Export failed", "See the Tern log for details.")
 			end
 		elseif act == "reset" then
-			state.confirm_until = clock.now_ms() + CONFIRM_MS
+			state.confirm = controls.armConfirm("reset", clock.now_ms())
 		elseif act == "reset-confirm" then
-			if state.confirm_until and clock.now_ms() < state.confirm_until then
+			if controls.isArmed(state.confirm, "reset", clock.now_ms()) then
 				brainMod.localIntent(brain, "reset_identity")
 				toast(cx, "info", "A new cat moved in")
 			end
-			state.confirm_until = nil
+			state.confirm = nil
+		elseif act == "remove-pack" or act == "remove-pack-confirm" then
+			local id = controls.removePackId(ev.value)
+			if id == nil then
+				return
+			end
+			local target = "pack:" .. id
+			if act == "remove-pack" then
+				state.confirm = controls.armConfirm(target, clock.now_ms())
+				return
+			end
+			local armed = controls.isArmed(state.confirm, target, clock.now_ms())
+			state.confirm = nil
+			if armed then
+				removePack(cx, id)
+			else
+				toast(cx, "info", "Pack not removed", "The confirmation expired; click Remove again.")
+			end
 		elseif act == "clear-ai" then
 			brainMod.localIntent(brain, "clear_ai_state")
 			toast(cx, "info", "AI state cleared")
@@ -320,7 +373,7 @@ local cat: BlockDef<BlockState> = {
 			page = if hasArg(args, "settings") or s.page == "settings" then "settings" else "main",
 			settings_page = if type(s.settings_page) == "string" then s.settings_page else "general",
 			editing = nil,
-			confirm_until = nil,
+			confirm = nil,
 			sprite_key = nil,
 			sprites = {},
 			canvas = { width = 32, height = 32 },
