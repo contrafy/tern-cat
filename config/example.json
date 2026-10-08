@@ -18,6 +18,8 @@
   },
   "rendering": {
     "overlay": true,
+    "overlay_position": "top-right",
+    "overlay_offset_px": 12,
     "overlay_scale": 2,
     "block_scale": 4,
     "reduced_motion": "follow_tern",

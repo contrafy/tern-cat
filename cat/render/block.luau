@@ -389,6 +389,26 @@ local function sections(model: Model, s: SettingsModel): { any }
 				value = c.cat.appearance,
 				options = options,
 			}),
+			row(c, base, "rendering.overlay_position", {
+				label = "Overlay corner",
+				hint = "Where the window overlay cat rests in the focused pane.",
+			}, {
+				k = "choice",
+				value = c.rendering.overlay_position,
+				options = choiceOptions(schema.OVERLAY_POSITIONS, {
+					["top-right"] = "Top right",
+					["top-left"] = "Top left",
+					["bottom-right"] = "Bottom right",
+					["bottom-left"] = "Bottom left",
+				}),
+			}),
+			row(c, base, "rendering.overlay_offset_px", { label = "Overlay gap" }, {
+				k = "number",
+				value = c.rendering.overlay_offset_px,
+				min = 0,
+				max = 200,
+				unit = "px",
+			}),
 			row(c, base, "rendering.pane_transition", {
 				label = "Pane switch",
 				hint = "What the overlay cat dives into and climbs out of when you switch panes.",

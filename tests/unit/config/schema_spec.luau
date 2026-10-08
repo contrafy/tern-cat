@@ -209,6 +209,26 @@ describe("config schema", function()
 			expect(hasWarning(warnings, "rendering.block_placement")).toBe(true)
 		end)
 
+		it("rests the overlay in the top-right corner 12 px from the edges by default", function()
+			local d = schema.defaults()
+			expect(d.rendering.overlay_position).toBe("top-right")
+			expect(d.rendering.overlay_offset_px).toBe(12)
+			for _, corner in { "top-right", "top-left", "bottom-right", "bottom-left" } do
+				local cfg = schema.resolve({ rendering = { overlay_position = corner } })
+				expect(cfg.rendering.overlay_position).toBe(corner)
+			end
+			local cfg, warnings = schema.resolve({
+				rendering = { overlay_position = "center; color: red", overlay_offset_px = 999 },
+			})
+			expect(cfg.rendering.overlay_position).toBe("top-right")
+			expect(cfg.rendering.overlay_offset_px).toBe(200)
+			expect(hasWarning(warnings, "rendering.overlay_position")).toBe(true)
+			expect(hasWarning(warnings, "rendering.overlay_offset_px")).toBe(true)
+			expect(schema.checkField("rendering.overlay_offset_px", 7.6)).toBe(8)
+			expect(schema.checkField("rendering.overlay_offset_px", "12px")).toBeNil()
+			expect(schema.checkField("rendering.overlay_position", "TOP-RIGHT")).toBeNil()
+		end)
+
 		it("resolves the pane transition with the portal as the default", function()
 			expect(schema.defaults().rendering.pane_transition).toBe("portal")
 			for _, style in { "portal", "vent", "box", "off" } do

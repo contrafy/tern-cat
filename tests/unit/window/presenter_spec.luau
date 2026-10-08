@@ -37,13 +37,24 @@ local ASSET = {
 }
 
 describe("window/presenter view", function()
-	it("starts idle, visible and facing right", function()
+	it("starts idle, visible and facing into the pane from its corner", function()
 		local p = make()
 		local v = presenter.view(p)
 		expect(v.animation).toBe("idle")
 		expect(v.hidden).toBe(false)
 		expect(v.still).toBe(false)
-		expect(v.facing).toBe("right")
+		expect(v.facing).toBe("left")
+		for corner, facing in
+			{ ["top-right"] = "left", ["bottom-right"] = "left", ["top-left"] = "right", ["bottom-left"] = "right" }
+		do
+			expect(presenter.view((make({ rendering = { overlay_position = corner } }))).facing).toBe(facing)
+		end
+	end)
+
+	it("turns into the pane when the corner changes", function()
+		local p = make()
+		presenter.setConfig(p, f.config({ rendering = { overlay_position = "bottom-left" } }))
+		expect(presenter.view(p).facing).toBe("right")
 	end)
 
 	it("is hidden when the overlay is disabled in config", function()
@@ -318,6 +329,12 @@ describe("window/presenter.params", function()
 		expect(params.durations_ms).toEqual({ 100, 100, 100 })
 		expect(params.loop).toBe(false)
 		expect(params.facing).toBe(v.facing)
+		expect(params.position).toBe("top-right")
+		expect(params.offset_px).toBe(12)
+		local q = make({ rendering = { overlay_position = "bottom-left", overlay_offset_px = 30 } })
+		local qp = presenter.params(q, presenter.view(q), ASSET)
+		expect(qp.position).toBe("bottom-left")
+		expect(qp.offset_px).toBe(30)
 	end)
 
 	it("restarts non-looping animations with a fresh keyframe name", function()

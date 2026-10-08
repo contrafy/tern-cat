@@ -100,6 +100,13 @@ describe("controls", function()
 				"vent"
 			)
 			expect((controls.settingsChange("rendering.pane_transition", "warp"))).toBeNil()
+			expect(
+				(controls.settingsChange("rendering.overlay_position", "bottom-left") :: any)["rendering.overlay_position"]
+			).toBe("bottom-left")
+			expect((controls.settingsChange("rendering.overlay_offset_px", 300) :: any)["rendering.overlay_offset_px"]).toBe(
+				200
+			)
+			expect((controls.settingsChange("rendering.overlay_position", "middle"))).toBeNil()
 			expect((controls.settingsChange("behavior.focus_mode", true) :: any)["behavior.focus_mode"]).toBe(true)
 			expect(
 				(controls.settingsChange("behavior.allow_pointer_reactions", false) :: any)["behavior.allow_pointer_reactions"]

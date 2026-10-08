@@ -85,7 +85,8 @@ describe("render/overlay.css", function()
 			expect(css).toContain("visibility: visible")
 			expect(css).toContain("position: absolute")
 			expect(css).toContain("right: 12px")
-			expect(css).toContain("bottom: 12px")
+			expect(css).toContain("top: 12px")
+			expect(css).notToContain("bottom:")
 			expect(css).toContain("image-rendering: pixelated")
 			expect(css).notToContain(":hover")
 			expect(css).notToContain(":active")
@@ -101,11 +102,40 @@ describe("render/overlay.css", function()
 			expect(css).toContain("background-size: 192px 64px")
 		end)
 
-		it("honours custom offsets and z-index", function()
-			local css = overlay.css(params({ offset_px = { right = 40, bottom = 5 }, z = 77 }))
+		it("honours a custom gap and z-index", function()
+			local css = overlay.css(params({ offset_px = 40, z = 77 }))
 			expect(css).toContain("right: 40px")
-			expect(css).toContain("bottom: 5px")
+			expect(css).toContain("top: 40px")
 			expect(css).toContain("z-index: 77")
+		end)
+
+		local corners = {
+			{ "top-right", "top", "right" },
+			{ "top-left", "top", "left" },
+			{ "bottom-right", "bottom", "right" },
+			{ "bottom-left", "bottom", "left" },
+		}
+		for _, c in corners do
+			it(`rests in the {c[1]} corner`, function()
+				local cat = block(overlay.css(params({ position = c[1], offset_px = 20 })), SELECTOR)
+				assert(cat, "missing cat rule")
+				expect(cat).toContain(`{c[2]}: 20px`)
+				expect(cat).toContain(`{c[3]}: 20px`)
+				local other = if c[2] == "top" then "bottom" else "top"
+				local otherH = if c[3] == "left" then "right" else "left"
+				expect(cat).notToContain(`{other}:`)
+				expect(cat).notToContain(`\t{otherH}:`)
+			end)
+		end
+
+		it("falls back to the top-right corner for anything but a known corner", function()
+			for _, bad in { "middle", "top-right; color: red", 3, "TOP-LEFT" } do
+				local cat = block(overlay.css(params({ position = bad :: any })), SELECTOR)
+				assert(cat, "missing cat rule")
+				expect(cat).toContain("top: 12px")
+				expect(cat).toContain("right: 12px")
+				expect(cat).notToContain("color: red")
+			end
 		end)
 	end)
 
@@ -146,6 +176,22 @@ describe("render/overlay.css", function()
 			expect(css).toContain("translateX(-160px) scaleX(1)")
 			expect(css).toContain("tern-cat-pace-idle-1 ")
 			expect(balanced(css)).toBe(true)
+		end)
+
+		it("walks into the pane from either side: leftwards from right corners, rightwards from left", function()
+			for _, corner in { "top-right", "bottom-right" } do
+				local css = overlay.css(params({ pace = true, position = corner }))
+				expect(css).toContain("0% { transform: translateX(0px) scaleX(-1);")
+				expect(css).toContain("48% { transform: translateX(-160px) scaleX(-1);")
+				expect(css).notToContain("translateX(160px)")
+			end
+			for _, corner in { "top-left", "bottom-left" } do
+				local css = overlay.css(params({ pace = true, position = corner }))
+				expect(css).toContain("0% { transform: translateX(0px) scaleX(1);")
+				expect(css).toContain("48% { transform: translateX(160px) scaleX(1);")
+				expect(css).toContain("50% { transform: translateX(160px) scaleX(-1);")
+				expect(css).notToContain("translateX(-160px)")
+			end
 		end)
 
 		it("never uses a smooth (display-rate) timing function", function()
@@ -232,7 +278,7 @@ describe("render/overlay.css", function()
 				scale = -5,
 				z = "1; color: red" :: any,
 				durations_ms = { -1, 1e12, 0 / 0 },
-				offset_px = { right = -1e9, bottom = "2px; x" :: any },
+				offset_px = "2px; x" :: any,
 			}))
 			expect(css).notToContain("nan")
 			expect(css).notToContain("infpx")
@@ -306,16 +352,46 @@ describe("render/overlay.css", function()
 			local ring = block(overlay.css(reactive()), HOST .. "::before")
 			assert(ring, "missing ring")
 			expect(ring).toContain("right: 0px")
-			expect(ring).toContain("bottom: 0px")
+			expect(ring).toContain("top: 0px")
 			expect(ring).toContain("width: 124px")
 			expect(ring).toContain("height: 124px")
-			expect(ring).toContain("padding: 48px 12px 12px 48px")
-			expect(ring).toContain("transform-origin: 80px 80px")
-			local far = block(overlay.css(reactive({ offset_px = { right = 100, bottom = 60 } })), HOST .. "::before")
+			expect(ring).toContain("padding: 12px 12px 48px 48px")
+			expect(ring).toContain("transform-origin: 80px 44px")
+			local far = block(overlay.css(reactive({ offset_px = 60 })), HOST .. "::before")
 			assert(far, "missing ring")
-			expect(far).toContain("right: 52px")
-			expect(far).toContain("bottom: 12px")
+			expect(far).toContain("right: 12px")
+			expect(far).toContain("top: 12px")
 			expect(far).toContain("padding: 48px 48px 48px 48px")
+		end)
+
+		it("shrinks the ring only on the two edges at the cat's corner", function()
+			local cases = {
+				["top-left"] = {
+					"left: 0px",
+					"top: 0px",
+					"padding: 12px 48px 48px 12px",
+					"transform-origin: 44px 44px",
+				},
+				["bottom-right"] = {
+					"right: 0px",
+					"bottom: 0px",
+					"padding: 48px 12px 12px 48px",
+					"transform-origin: 80px 80px",
+				},
+				["bottom-left"] = {
+					"left: 0px",
+					"bottom: 0px",
+					"padding: 48px 48px 12px 12px",
+					"transform-origin: 44px 80px",
+				},
+			}
+			for corner, want in cases do
+				local ring = block(overlay.css(reactive({ position = corner })), HOST .. "::before")
+				assert(ring, `missing ring at {corner}`)
+				for _, line in want do
+					expect(ring).toContain(line)
+				end
+			end
 		end)
 
 		it("plays the hover sheet once while the pointer is near or on the cat", function()

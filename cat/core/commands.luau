@@ -46,6 +46,8 @@ local SET_CONFIG_KEYS = {
 	"sound.enabled",
 	"sound.volume",
 	"rendering.overlay",
+	"rendering.overlay_position",
+	"rendering.overlay_offset_px",
 	"rendering.reduced_motion",
 	"rendering.pane_transition",
 	"quiet.hours_enabled",

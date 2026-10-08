@@ -71,6 +71,11 @@ local MIN_DELAY_MS = 1000
 local MAX_DELAY_MS = 5000
 local ID_PREFIX = "wev"
 
+-- The facing that looks into the pane from the overlay's corner (sprites face right unmirrored).
+local function inward(config: T.Config): Facing
+	return if string.sub(config.rendering.overlay_position, -5) == "-left" then "right" else "left"
+end
+
 local function new(opts: Options): Presenter
 	return {
 		clock = opts.clock,
@@ -83,7 +88,7 @@ local function new(opts: Options): Presenter
 		tern_reduce_motion = false,
 		covered = false,
 		overlay_override = nil,
-		facing = "right",
+		facing = inward(opts.config),
 		seq = 0,
 	}
 end
@@ -239,6 +244,9 @@ local function nextDelayMs(p: Presenter): number
 end
 
 local function setConfig(p: Presenter, config: T.Config)
+	if config.rendering.overlay_position ~= p.config.rendering.overlay_position then
+		p.facing = inward(config)
+	end
 	p.config = config
 	if p.overlay_override ~= nil and p.overlay_override == config.rendering.overlay then
 		p.overlay_override = nil
@@ -298,6 +306,8 @@ local function params(p: Presenter, v: View, asset: Asset?, reactions: ReactionA
 		durations_ms = asset.durations_ms,
 		loop = asset.loop,
 		scale = p.config.rendering.overlay_scale,
+		position = p.config.rendering.overlay_position,
+		offset_px = p.config.rendering.overlay_offset_px,
 		facing = v.facing,
 		pace = v.pace,
 		still = v.still,

@@ -1,9 +1,9 @@
 --!strict
--- Window overlay stylesheet generator (pure). The sheet draws a sprite-sheet animation in the
--- focused pane's corner. With reactions, the cat and an invisible proximity ring around it take
--- `:hover`/`:active` (Tern still delivers every click, drag and key to the terminal), so the cat
--- looks at a nearby pointer and swats when pressed; nothing about the pointer reaches Lua. Every
--- interpolated value is sanitized so a hostile pack cannot inject CSS.
+-- Window overlay stylesheet generator (pure). The sheet draws a sprite-sheet animation in one
+-- corner of the focused pane. With reactions, the cat and an invisible proximity ring around it
+-- take `:hover`/`:active` (Tern still delivers every click, drag and key to the terminal), so the
+-- cat looks at a nearby pointer and swats when pressed; nothing about the pointer reaches Lua.
+-- Every interpolated value is sanitized so a hostile pack cannot inject CSS.
 
 local manifest = require("../sprite/manifest")
 
@@ -13,6 +13,9 @@ export type Reaction = {
 	durations_ms: { number },
 	loop: boolean?,
 }
+
+-- Resting corner of the focused pane.
+export type Corner = "top-right" | "top-left" | "bottom-right" | "bottom-left"
 
 export type Params = {
 	sheet_url: string,
@@ -28,7 +31,9 @@ export type Params = {
 	-- Reduced motion: show frame 0 without frame or pacing animation.
 	still: boolean?,
 	z: number?,
-	offset_px: { right: number, bottom: number }?,
+	-- Resting corner (default top-right) and its gap from both edges in CSS px (default 12).
+	position: Corner?,
+	offset_px: number?,
 	-- Pointer reactions: `hover` plays while the pointer is on the cat or its proximity ring,
 	-- `press` while the button is down there (held briefly after release). Nil: no reactions,
 	-- the cat takes no pointer state at all.
@@ -48,6 +53,15 @@ local DATA_PREFIX = "data:image/png;base64,"
 local MAX_URL_BYTES = 4 * 1024 * 1024
 local DEFAULT_Z = 2147483000
 local DEFAULT_OFFSET = 12
+type Side = { v: "top" | "bottom", h: "left" | "right" }
+local CORNERS: { [string]: Side } = {
+	["top-right"] = { v = "top", h = "right" },
+	["top-left"] = { v = "top", h = "left" },
+	["bottom-right"] = { v = "bottom", h = "right" },
+	["bottom-left"] = { v = "bottom", h = "left" },
+}
+local DEFAULT_CORNER = "top-right"
+-- Pacing walks along the corner's horizontal edge into the pane and back.
 local PACE_PX = 160
 local PACE_STEP_PX = 8
 local PACE_SPEED_PX_S = 40
@@ -124,15 +138,19 @@ local function frameKeyframes(name: string, durations: { number }, stepPx: numbe
 	return table.concat(lines, "\n")
 end
 
-local function paceKeyframes(name: string, steps: number): string
-	local far = px(-PACE_PX)
+-- `dir` is -1 from a right corner (the first leg walks left) and 1 from a left corner. The sprite
+-- faces right unmirrored, so a leftward leg is mirrored.
+local function paceKeyframes(name: string, steps: number, dir: number): string
+	local far = px(dir * PACE_PX)
+	local out = if dir < 0 then "-1" else "1"
+	local back = if dir < 0 then "1" else "-1"
 	return table.concat({
 		`@keyframes {name} \{`,
-		`\t0% \{ transform: translateX(0px) scaleX(-1); animation-timing-function: steps({steps}, end); }`,
-		`\t48% \{ transform: translateX({far}) scaleX(-1); animation-timing-function: step-end; }`,
-		`\t50% \{ transform: translateX({far}) scaleX(1); animation-timing-function: steps({steps}, end); }`,
-		"\t98% { transform: translateX(0px) scaleX(1); animation-timing-function: step-end; }",
-		"\t100% { transform: translateX(0px) scaleX(1); }",
+		`\t0% \{ transform: translateX(0px) scaleX({out}); animation-timing-function: steps({steps}, end); }`,
+		`\t48% \{ transform: translateX({far}) scaleX({out}); animation-timing-function: step-end; }`,
+		`\t50% \{ transform: translateX({far}) scaleX({back}); animation-timing-function: steps({steps}, end); }`,
+		`\t98% \{ transform: translateX(0px) scaleX({back}); animation-timing-function: step-end; }`,
+		`\t100% \{ transform: translateX(0px) scaleX({back}); }`,
 		"}",
 	}, "\n")
 end
@@ -188,9 +206,9 @@ local function css(params: Params): string
 	local frameH = clampInt(params.frame_h, 1, 256, 32)
 	local scale = math.floor(clampNumber(params.scale, 0.25, 8, 1) * 100 + 0.5) / 100
 	local z = clampInt(params.z, 0, 2147483647, DEFAULT_Z)
-	local offset = if type(params.offset_px) == "table" then params.offset_px else {} :: any
-	local right = clampInt(offset.right, 0, 4096, DEFAULT_OFFSET)
-	local bottom = clampInt(offset.bottom, 0, 4096, DEFAULT_OFFSET)
+	local side = CORNERS[if type(params.position) == "string" then params.position else DEFAULT_CORNER]
+		or CORNERS[DEFAULT_CORNER]
+	local gap = clampInt(params.offset_px, 0, 4096, DEFAULT_OFFSET)
 	local durations = safeDurations(params.durations_ms)
 
 	local key = safeKey(params.anim_key)
@@ -214,7 +232,7 @@ local function css(params: Params): string
 		local legMs = PACE_PX / PACE_SPEED_PX_S * 1000
 		pace = `{paceName} {math.floor(legMs / 0.48 + 0.5)}ms step-end infinite`
 		table.insert(animations, pace :: string)
-		table.insert(blocks, paceKeyframes(paceName, steps))
+		table.insert(blocks, paceKeyframes(paceName, steps, if side.h == "right" then -1 else 1))
 	end
 
 	local reactions = if type(params.reactions) == "table" then params.reactions else {} :: any
@@ -227,8 +245,8 @@ local function css(params: Params): string
 		`{SELECTOR} \{`,
 		'\tcontent: "";',
 		"\tposition: absolute;",
-		`\tright: {px(right)};`,
-		`\tbottom: {px(bottom)};`,
+		`\t{side.h}: {px(gap)};`,
+		`\t{side.v}: {px(gap)};`,
 		`\twidth: {px(boxW)};`,
 		`\theight: {px(boxH)};`,
 		`\tpointer-events: {if reactive then "auto" else "none"};`,
@@ -255,25 +273,31 @@ local function css(params: Params): string
 	local reduced = { SELECTOR }
 	if reactive then
 		-- Invisible ring around the cat (it shares the host's single hover bit, so "near" and "on
-		-- the cat" look the same). Its padding keeps it inside the pane at small offsets; the
-		-- press sheet is drawn in its content box, exactly over the cat, while the cat hides.
-		local padR = math.min(RING_PX, right)
-		local padB = math.min(RING_PX, bottom)
+		-- the cat" look the same). On the two edges at the corner its padding shrinks to the gap so
+		-- it stays inside the pane; the press sheet is drawn in its content box, exactly over the
+		-- cat, while the cat hides.
+		local near = math.min(RING_PX, gap)
+		local pad = {
+			top = if side.v == "top" then near else RING_PX,
+			right = if side.h == "right" then near else RING_PX,
+			bottom = if side.v == "bottom" then near else RING_PX,
+			left = if side.h == "left" then near else RING_PX,
+		}
 		table.insert(rule, `{RING} \{`)
 		for _, line in
 			{
 				'\tcontent: "";',
 				"\tposition: absolute;",
-				`\tright: {px(right - padR)};`,
-				`\tbottom: {px(bottom - padB)};`,
-				`\twidth: {px(boxW + RING_PX + padR)};`,
-				`\theight: {px(boxH + RING_PX + padB)};`,
+				`\t{side.h}: {px(gap - near)};`,
+				`\t{side.v}: {px(gap - near)};`,
+				`\twidth: {px(boxW + RING_PX + near)};`,
+				`\theight: {px(boxH + RING_PX + near)};`,
 				"\tbox-sizing: border-box;",
-				`\tpadding: {px(RING_PX)} {px(padR)} {px(padB)} {px(RING_PX)};`,
+				`\tpadding: {px(pad.top)} {px(pad.right)} {px(pad.bottom)} {px(pad.left)};`,
 				"\tpointer-events: auto;",
 				"\tvisibility: visible;",
 				`\tz-index: {num(z)};`,
-				`\ttransform-origin: {px(RING_PX + boxW / 2)} {px(RING_PX + boxH / 2)};`,
+				`\ttransform-origin: {px(pad.left + boxW / 2)} {px(pad.top + boxH / 2)};`,
 			}
 		do
 			table.insert(rule, line)

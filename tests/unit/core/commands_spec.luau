@@ -162,6 +162,8 @@ describe("commands", function()
 					["rendering.overlay"] = false,
 					["rendering.reduced_motion"] = "on",
 					["rendering.pane_transition"] = "box",
+					["rendering.overlay_position"] = "bottom-left",
+					["rendering.overlay_offset_px"] = 20,
 					["quiet.hours_enabled"] = true,
 					["quiet.start"] = "21:30",
 					["needs.enabled"] = false,
@@ -238,6 +240,9 @@ describe("commands", function()
 				accepts("set_config", { key = "rendering.pane_transition", value = "off" }, carly).args.values["rendering.pane_transition"]
 			).toBe("off")
 			accepts("set_config", { key = "rendering.pane_transition", value = "vent" }, carly)
+			accepts("set_config", { key = "rendering.overlay_position", value = "top-left" }, carly)
+			accepts("set_config", { key = "rendering.overlay_offset_px", value = 0 }, carly)
+			rejects(factories.intent("set_config", { key = "rendering.overlay_position", value = "middle" }, carly))
 			rejects(factories.intent("set_config", { key = "rendering.pane_transition", value = "warp" }, carly))
 		end)
 
