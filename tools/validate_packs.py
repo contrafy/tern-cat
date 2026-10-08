@@ -72,6 +72,8 @@ CANONICAL = [
     "hop",
 ]
 SOUND_IDS = ["meow", "purr", "surprise", "happy", "swat"]
+    "dive",
+    "emerge",
 SOUND_LIMITS = {"max_seconds": 1.5, "max_bytes": 80 * 1024, "rates": (8000, 48000)}
 
 ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")

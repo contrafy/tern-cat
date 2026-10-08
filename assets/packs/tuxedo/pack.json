@@ -581,6 +581,76 @@
       ],
       "apng": "build/hop.apng",
       "sheet": "build/hop.sheet.png"
+    },
+    "dive": {
+      "frames": [
+        "frames/dive/01.png",
+        "frames/dive/02.png",
+        "frames/dive/03.png",
+        "frames/dive/04.png",
+        "frames/dive/05.png",
+        "frames/dive/06.png",
+        "frames/dive/07.png",
+        "frames/dive/08.png"
+      ],
+      "durations_ms": [
+        60,
+        60,
+        60,
+        60,
+        60,
+        60,
+        60,
+        60
+      ],
+      "loop": false,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        0,
+        32,
+        32
+      ],
+      "apng": "build/dive.apng",
+      "sheet": "build/dive.sheet.png"
+    },
+    "emerge": {
+      "frames": [
+        "frames/emerge/01.png",
+        "frames/emerge/02.png",
+        "frames/emerge/03.png",
+        "frames/emerge/04.png",
+        "frames/emerge/05.png",
+        "frames/emerge/06.png",
+        "frames/emerge/07.png",
+        "frames/emerge/08.png"
+      ],
+      "durations_ms": [
+        160,
+        70,
+        70,
+        80,
+        80,
+        60,
+        60,
+        60
+      ],
+      "loop": false,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        1,
+        31,
+        31
+      ],
+      "apng": "build/emerge.apng",
+      "sheet": "build/emerge.sheet.png"
     }
   }
 }
