@@ -10,6 +10,7 @@ local clockMod = require("../core/clock")
 local events = require("../core/events")
 local behavior = require("../core/behavior")
 local store = require("../core/store")
+local running = require("../core/running")
 local model = require("../core/model")
 local loader = require("../sprite/loader")
 local manifest = require("../sprite/manifest")
@@ -67,6 +68,8 @@ export type Brain = {
 	config_unreadable: boolean,
 	config_write_logged: boolean,
 	engine: T.EngineState,
+	-- Commands running in any local pane (focus mode).
+	running: running.Running,
 	-- Bumped whenever the engine adopts a decision (renderers restart one-shot animations on it).
 	decision_seq: number,
 	rng: T.Rng,
@@ -136,6 +139,7 @@ local function environment(b: Brain): T.Environment
 		reduced_motion = cfg.rendering.reduced_motion == "on",
 		quiet_hours = cfg.quiet.hours_enabled and clockMod.inQuietHours(c.local_hm(), cfg.quiet.start, cfg.quiet.stop),
 		snoozed = store.isSnoozed(b.env, c.wall_s()),
+		busy = cfg.behavior.focus_mode and running.busy(b.running, c.now_ms()),
 	}
 end
 
@@ -510,10 +514,13 @@ local function tick(b: Brain): number
 end
 
 -- Host hooks (callers pass the command category only; the line never reaches this module) ---
+-- Running commands are tracked before reacting, so a command's own start counts as busy and
+-- its finish does not (its reaction stays eligible unless another pane is still running).
 
 export type CommandArgs = { pane: number?, category: T.CommandCategory, status: number?, took_ms: number? }
 
 local function onCommandStarted(b: Brain, args: CommandArgs)
+	running.started(b.running, args.pane, b.deps.clock.now_ms())
 	local ev = events.commandStarted({
 		id = newId(b, "cms"),
 		time = b.deps.clock.wall_s(),
@@ -525,6 +532,7 @@ local function onCommandStarted(b: Brain, args: CommandArgs)
 end
 
 local function onCommandFinished(b: Brain, args: CommandArgs)
+	running.stopped(b.running, args.pane)
 	local ev = events.commandFinished({
 		id = newId(b, "cmd"),
 		time = b.deps.clock.wall_s(),
@@ -548,6 +556,9 @@ local function onCommandFinished(b: Brain, args: CommandArgs)
 end
 
 local function onPaneEvent(b: Brain, pane: number?, kind: string)
+	if kind == "exited" then
+		running.stopped(b.running, pane)
+	end
 	local ev = if kind == "cwd"
 		then events.cwdChanged({ id = newId(b, "cwd"), time = b.deps.clock.wall_s(), pane = pane })
 		else events.paneEvent({ id = newId(b, "pane"), time = b.deps.clock.wall_s(), pane = pane, kind = kind })
@@ -777,6 +788,7 @@ local function load(deps: Deps): Brain
 		config_unreadable = false,
 		config_write_logged = false,
 		engine = behavior.newState(started),
+		running = running.new(),
 		decision_seq = 0,
 		rng = rngMod.new(deps.seed),
 		ids = rngMod.new(deps.seed + 1),

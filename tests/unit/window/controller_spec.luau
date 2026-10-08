@@ -10,6 +10,7 @@ local kvAdapter = require("../../../cat/adapters/kv")
 local paths = require("../../../cat/adapters/paths")
 local commands = require("../../../cat/core/commands")
 local controller = require("../../../cat/window/controller")
+local presenter = require("../../../cat/window/presenter")
 
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -515,6 +516,25 @@ describe("window/controller shared state", function()
 		expect(c.mirror_key).toBe(key)
 	end)
 
+	-- The host never sees remote panes, so it may react while this window still runs a command.
+	it("in focus mode skips host command reactions while this window runs a command, not gestures", function()
+		local w = world({ config = { behavior = { focus_mode = true } } })
+		local c = controller.new(w.ports)
+		controller.start(c)
+		controller.onWindowEvent(c, "command_started", { pane = 9, line = "ssh build-box make" })
+		w.kv.state = envWith(
+			2,
+			{ at = f.WALL_S + 2.5, id = "react.command_ok", animation = "happy", reason = "A command succeeded." }
+		)
+		fire(w)
+		fire(w)
+		expect(lastCss(w)).notToContain("tern-cat-happy")
+		w.kv.state = envWith(3, { at = f.WALL_S + 6, id = "gesture.pet", animation = "pet", reason = "x" })
+		fire(w)
+		fire(w)
+		expect(lastCss(w)).toContain("tern-cat-pet")
+	end)
+
 	it("does not replay stale reactions after a reload", function()
 		local w =
 			world({ kv = envWith(5, { at = f.WALL_S - 60, id = "gesture.pet", animation = "pet", reason = "x" }) })
@@ -599,6 +619,27 @@ describe("window/controller window events", function()
 		local seq = c.presenter.seq
 		controller.onWindowEvent(c, "command_started", { pane = 1, line = "sudo ls" })
 		expect(c.presenter.seq).toBe(seq)
+	end)
+
+	it("in focus mode a running command suppresses its own reaction; its finish reacts again", function()
+		local w = world({ config = { behavior = { focus_mode = true, reaction_sample_rate = 1 } } })
+		local c = controller.new(w.ports)
+		controller.start(c)
+		controller.onWindowEvent(c, "command_started", { pane = 1, line = "sudo ls" })
+		expect(lastCss(w)).notToContain("tern-cat-stare")
+		expect(presenter.environment(c.presenter).busy).toBe(true)
+		controller.onWindowEvent(c, "command_finished", { pane = 1, line = "sudo ls", status = 0, took_ms = 20000 })
+		expect(presenter.environment(c.presenter).busy).toBe(false)
+		local current = c.presenter.engine.current
+		expect(current and string.sub(current.id, 1, 6)).toBe("react.")
+	end)
+
+	it("tracks running commands while the overlay is hidden", function()
+		local w = world({ config = { rendering = { overlay = false }, behavior = { focus_mode = true } } })
+		local c = controller.new(w.ports)
+		controller.start(c)
+		controller.onWindowEvent(c, "command_started", { pane = 1, line = "make" })
+		expect(presenter.environment(c.presenter).busy).toBe(true)
 	end)
 end)
 

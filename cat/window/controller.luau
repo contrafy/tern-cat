@@ -248,7 +248,7 @@ local function pollKv(c: Controller): boolean
 	c.mirror_key = key
 	local changed = false
 	if play and env.last_reaction and presenterMod.visible(c.presenter) then
-		changed = presenterMod.mirror(c.presenter, env.last_reaction.animation)
+		changed = presenterMod.mirror(c.presenter, env.last_reaction.animation, env.last_reaction.id)
 	end
 	refreshContext(c)
 	return changed
@@ -352,6 +352,7 @@ end
 
 local function onWindowEvent(c: Controller, name: string, payload: any)
 	local p = c.presenter
+	presenterMod.observe(p, name, payload)
 	if not presenterMod.visible(p) then
 		return
 	end

@@ -8,6 +8,7 @@ local behavior = require("../core/behavior")
 local events = require("../core/events")
 local rngMod = require("../core/rng")
 local clockMod = require("../core/clock")
+local running = require("../core/running")
 local overlay = require("../render/overlay")
 
 export type Facing = "left" | "right"
@@ -36,6 +37,8 @@ export type Presenter = {
 	profile: T.Profile,
 	engine: T.EngineState,
 	snooze_until: number?,
+	-- Commands running in this window's panes (focus mode).
+	running: running.Running,
 	tern_reduce_motion: boolean,
 	-- The interactive cat block floats over the focused pane's corner: the overlay steps aside.
 	covered: boolean,
@@ -64,6 +67,7 @@ local function new(opts: Options): Presenter
 		profile = opts.profile,
 		engine = behavior.newState(opts.clock.now_ms()),
 		snooze_until = nil,
+		running = running.new(),
 		tern_reduce_motion = false,
 		covered = false,
 		overlay_override = nil,
@@ -90,6 +94,7 @@ local function environment(p: Presenter): T.Environment
 		reduced_motion = still(p),
 		quiet_hours = quiet.hours_enabled and clockMod.inQuietHours(p.clock.local_hm(), quiet.start, quiet.stop),
 		snoozed = untilS ~= nil and p.clock.wall_s() < untilS,
+		busy = p.config.behavior.focus_mode and running.busy(p.running, p.clock.now_ms()),
 	}
 end
 
@@ -127,6 +132,21 @@ local function react(p: Presenter, event: T.CatEvent): boolean
 	return adopt(p, state, decision)
 end
 
+-- Tracks which of this window's panes run a command, from raw window events (before eventFor, so
+-- it also runs while the overlay is hidden). Call before reacting: a command's own start counts
+-- as busy, its finish does not.
+local function observe(p: Presenter, name: string, payload: any)
+	if type(payload) ~= "table" then
+		return
+	end
+	local pane = if type(payload.pane) == "number" then payload.pane else nil
+	if name == "command_started" then
+		running.started(p.running, pane, p.clock.now_ms())
+	elseif name == "command_finished" or name == "pane_closed" then
+		running.stopped(p.running, pane)
+	end
+end
+
 local function newEventId(p: Presenter): string
 	return events.newId(p.rng, ID_PREFIX)
 end
@@ -147,9 +167,14 @@ local function gesture(p: Presenter, kind: T.Gesture, extra: { [string]: any }?)
 	return react(p, ev)
 end
 
--- Plays a reaction decided elsewhere (the host) as a performed animation.
-local function mirror(p: Presenter, animation: any): boolean
+-- Plays a reaction decided elsewhere (the host) as a performed animation. `id` is the host's
+-- rule id: a host reaction (`react.*`) is skipped while focus mode holds this window busy, since
+-- the host never sees remote panes and may react while this window still runs a command.
+local function mirror(p: Presenter, animation: any, id: string?): boolean
 	if type(animation) ~= "string" then
+		return false
+	end
+	if id ~= nil and string.find(id, "react.", 1, true) ~= nil and environment(p).busy then
 		return false
 	end
 	return gesture(p, "perform", { animation = animation })
@@ -268,6 +293,7 @@ return {
 	environment = environment,
 	tick = tick,
 	react = react,
+	observe = observe,
 	gesture = gesture,
 	mirror = mirror,
 	eventFor = eventFor,
