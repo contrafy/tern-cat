@@ -5,21 +5,21 @@ Run: uv run --with pytest --with pillow pytest tests/tools
 
 from __future__ import annotations
 
+import io
 import json
-import re
 import shutil
 import sys
 from pathlib import Path
 
-import PIL
 import pytest
-from PIL import Image
+from PIL import Image, ImageSequence
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
 import pack_build  # noqa: E402
 import validate_packs  # noqa: E402
+from packlib import decoded, same_image  # noqa: E402
 
 W, H = 16, 12
 
@@ -116,7 +116,10 @@ def test_build_check_and_staleness(tmp_path: Path, capsys: pytest.CaptureFixture
 
     first = snapshot(pack)
     assert run(pack) == 0
-    assert snapshot(pack) == first  # rebuild is byte-identical
+    assert snapshot(pack) == first
+    shutil.rmtree(pack / "build")
+    assert run(pack) == 0
+    assert snapshot(pack) == first  # from-scratch rebuild on the same machine is byte-identical
     assert run("--check", pack) == 0
     assert snapshot(pack) == first
 
@@ -209,11 +212,8 @@ def test_identical_consecutive_frames_rejected(tmp_path: Path, capsys: pytest.Ca
 
 
 def test_reproduces_bundled_pack(tmp_path: Path) -> None:
-    header = (ROOT / "tools/pack_build.py").read_text(encoding="utf-8")
-    pinned = re.search(r'"pillow==([^"]+)"', header)
-    assert pinned
-    if PIL.__version__ != pinned.group(1):
-        pytest.skip(f"bundled bytes were encoded with Pillow {pinned.group(1)}, running {PIL.__version__}")
+    # Compressed bytes depend on the platform's zlib, so compare decoded content; the
+    # committed assets were built on another machine.
     src = ROOT / "assets/packs/orange-menace"
     pack = tmp_path / "orange-menace"
     shutil.copytree(src, pack, ignore=shutil.ignore_patterns("build"))
@@ -222,5 +222,68 @@ def test_reproduces_bundled_pack(tmp_path: Path) -> None:
         del spec["apng"], spec["sheet"]
     (pack / "pack.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     assert run(pack) == 0
-    assert snapshot(pack / "build") == snapshot(src / "build")
+    built, committed = snapshot(pack / "build"), snapshot(src / "build")
+    assert sorted(built) == sorted(committed)
+    for rel, data in built.items():
+        assert decoded(data) is not None, rel
+        assert decoded(data) == decoded(committed[rel]), rel
     assert (pack / "pack.json").read_bytes() == (src / "pack.json").read_bytes()
+    assert run("--check", src) == 0
+
+
+def recompress(path: Path) -> None:
+    """Rewrite `path` with different zlib settings: new bytes, same decoded content."""
+    with Image.open(path) as im:
+        frames = [f.convert("RGBA") for f in ImageSequence.Iterator(im)]
+        durations = [f.info.get("duration") for f in ImageSequence.Iterator(im)]
+        loop = im.info.get("loop")
+    buf = io.BytesIO()
+    if len(frames) > 1:
+        frames[0].save(
+            buf,
+            format="PNG",
+            save_all=True,
+            append_images=frames[1:],
+            duration=durations,
+            loop=loop,
+            disposal=0,
+            blend=0,
+            compress_level=1,
+        )
+    else:
+        frames[0].save(buf, format="PNG", compress_level=1)
+    assert buf.getvalue() != path.read_bytes()
+    path.write_bytes(buf.getvalue())
+
+
+def test_differently_compressed_outputs_are_fresh_and_kept(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    pack = make_pack(tmp_path / "tiny")
+    assert run(pack) == 0
+    recompress(pack / "build/idle.apng")
+    recompress(pack / "build/hop.sheet.png")
+    other_os = snapshot(pack)
+    assert run("--check", pack) == 0
+    assert run(pack) == 0
+    assert snapshot(pack) == other_os  # semantically identical files are not rewritten
+
+    manifest = json.loads((pack / "pack.json").read_text(encoding="utf-8"))
+    manifest["animations"]["idle"]["durations_ms"][1] = 160
+    manifest["animations"]["hop"]["loop"] = True
+    (pack / "pack.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    capsys.readouterr()
+    assert run("--check", pack) == 1
+    err = capsys.readouterr().err
+    assert "build/idle.apng is stale" in err and "build/hop.apng is stale" in err
+    assert "sheet.png is stale" not in err
+
+
+def test_decoded_distinguishes_semantics(tmp_path: Path) -> None:
+    pack = make_pack(tmp_path / "tiny")
+    assert run(pack) == 0
+    apng = (pack / "build/hop.apng").read_bytes()
+    sheet = (pack / "build/hop.sheet.png").read_bytes()
+    size, actl, frames = decoded(apng)
+    assert size == (W, H) and actl == (2, 1) and [d for d, _ in frames] == [90, 1200]
+    assert decoded(sheet)[0] == (2 * W, H) and decoded(sheet)[1] is None
+    assert decoded(b"not a png") is None
+    assert not same_image(apng, sheet)

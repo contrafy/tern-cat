@@ -13,6 +13,7 @@ local CURRENT_VERSION = 1
 
 local ACTIVITIES = { "quiet_office", "orange_menace", "chaos", "zen" }
 local REDUCED_MOTION = { "follow_tern", "on", "off" }
+local BLOCK_PLACEMENTS = { "float", "split" }
 local AI_PROVIDERS = { "none", "mock", "carly_schedule" }
 local SOUND_IDS = { "meow", "purr", "surprise", "happy", "swat" }
 
@@ -78,6 +79,7 @@ local SECTIONS: { SectionSpec } = {
 			num("block_scale", 1, 12, true),
 			num("animation_fps", 1, 30, true),
 			enum("reduced_motion", REDUCED_MOTION),
+			enum("block_placement", BLOCK_PLACEMENTS),
 		},
 	},
 	{
@@ -165,6 +167,7 @@ local function defaults(): T.Config
 			block_scale = 4,
 			animation_fps = 10,
 			reduced_motion = "follow_tern",
+			block_placement = "float",
 		},
 		behavior = {
 			activity = "orange_menace",

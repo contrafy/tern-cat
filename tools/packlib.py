@@ -3,7 +3,9 @@
 Every encoder returns bytes so callers can either write them or compare them against files
 on disk. Images are re-created from raw RGBA pixels before encoding, so no source metadata
 (ICC profiles, text chunks, gamma, dpi) reaches the output; together with fixed compression
-settings this makes the output bytes a pure function of pixels, durations and loop flag.
+settings this makes the output bytes a pure function of pixels, durations and loop flag for
+a given zlib build. Different platforms ship different zlib implementations, which can
+compress identical data to different bytes, so cross-machine comparisons use same_image.
 """
 
 from __future__ import annotations
@@ -96,3 +98,48 @@ def sheet_image(frames: list[Image.Image], width: int, height: int) -> Image.Ima
 
 def encode_sheet(frames: list[Image.Image], width: int, height: int) -> bytes:
     return encode_png(sheet_image(frames, width, height))
+
+
+PNG_SIG = b"\x89PNG\r\n\x1a\n"
+
+
+def _actl(data: bytes) -> tuple[int, int] | None:
+    """(num_frames, num_plays) from the acTL chunk, or None for a still PNG."""
+    pos = len(PNG_SIG)
+    while pos + 8 <= len(data):
+        length, kind = struct.unpack(">I4s", data[pos : pos + 8])
+        if kind == b"acTL" and length >= 8:
+            return struct.unpack(">II", data[pos + 8 : pos + 16])
+        if kind in (b"IDAT", b"IEND"):
+            return None
+        pos += 12 + length
+    return None
+
+
+def decoded(data: bytes) -> tuple | None:
+    """Compression-independent content of a PNG/APNG, or None when it cannot be decoded.
+
+    Covers dimensions, acTL (frame count and num_plays), and for every displayed frame its
+    duration and fully composited RGBA pixels.
+    """
+    if not data.startswith(PNG_SIG):
+        return None
+    actl = _actl(data)
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            frames = []
+            for i in range(getattr(im, "n_frames", 1)):
+                im.seek(i)
+                duration = im.info.get("duration") if actl else None
+                frames.append((duration, im.convert("RGBA").tobytes()))
+            return (im.size, actl, tuple(frames))
+    except Exception:  # noqa: BLE001 - any decoder failure means "not the same image"
+        return None
+
+
+def same_image(a: bytes, b: bytes) -> bool:
+    """True when two PNG/APNG files are byte-identical or decode to identical content."""
+    if a == b:
+        return True
+    da = decoded(a)
+    return da is not None and da == decoded(b)

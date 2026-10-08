@@ -12,8 +12,11 @@ For every animation in PACK_DIR/pack.json this reads the listed frame PNGs and w
   build/<anim>.sheet.png   horizontal strip of the frames, canvas.width * frames wide
 and sets the animation's "apng"/"sheet" fields to those paths. pack.json is rewritten with
 2-space indentation and a trailing newline; key order and all other fields are kept (new
-fields are appended to the animation object). Output bytes are deterministic: no PNG
-metadata, fixed compression, so rebuilding unchanged frames reproduces identical files.
+fields are appended to the animation object). Output is deterministic on a given machine:
+no PNG metadata, fixed compression, so rebuilding unchanged frames reproduces identical
+bytes. zlib builds differ between platforms, so compressed bytes may differ across OSes;
+an existing derived file is therefore only rewritten when its decoded content (size, RGBA
+pixels of every frame, frame count, per-frame durations, num_plays) differs from the build.
 Finally the pack is checked with tools/validate_packs.py and, when `lune` is on PATH, with
 `lune run tools/validate_pack.luau` (skip that with --no-lune).
 
@@ -25,7 +28,7 @@ which would no longer match the manifest. Delete the second frame and add its du
 the first instead.
 
 --check writes nothing and exits 1 when a derived file or a pack.json apng/sheet field is
-missing or stale (byte comparison against a fresh build). Exit codes: 0 ok, 1 build,
+missing or stale (decoded content differs from a fresh build, as above). Exit codes: 0 ok, 1 build,
 check or validation failure, 2 usage error.
 """
 
@@ -41,7 +44,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import validate_packs as vp  # noqa: E402
-from packlib import encode_apng, encode_sheet, first_duplicate  # noqa: E402
+from packlib import encode_apng, encode_sheet, first_duplicate, same_image  # noqa: E402
 
 LOSSLESS_MODES = {"1", "L", "LA", "P", "PA", "RGB", "RGBA"}
 
@@ -163,7 +166,7 @@ def process(root: Path, check: bool) -> bool:
             path = root / rel
             if not path.is_file():
                 stale.append(f"{rel} is missing")
-            elif path.read_bytes() != data:
+            elif not same_image(path.read_bytes(), data):
                 stale.append(f"{rel} is stale")
         for s in stale:
             print(f"FAIL {name}: {s}", file=sys.stderr)
@@ -176,7 +179,7 @@ def process(root: Path, check: bool) -> bool:
     written = 0
     for rel, data in outputs.items():
         path = root / rel
-        if path.is_file() and path.read_bytes() == data:
+        if path.is_file() and same_image(path.read_bytes(), data):
             continue
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)

@@ -1,0 +1,81 @@
+/* Tern Cat block (host). Scoped to the block surface; the window overlay installs its own sheet. */
+
+[data-surface='plugin.tern-cat.cat'] .sf-image[data-role^='tern-cat.'] {
+	image-rendering: pixelated;
+}
+
+/* Every animation stays mounted (so every blob stays referenced); inactive ones are hidden. */
+[data-surface='plugin.tern-cat.cat'] .sf-image[data-role='tern-cat.sprite-off'] {
+	display: none;
+}
+
+/* Sprites are transparent pixel art: drop Tern's rounded image frame and ring. */
+[data-surface='plugin.tern-cat.cat'] .sf-image[data-role^='tern-cat.'] .sf-img-frame,
+[data-surface='plugin.tern-cat.cat'] .sf-image[data-role^='tern-cat.'].sf-zoom:hover .sf-img-frame {
+	border-radius: 0;
+	box-shadow: none;
+	background: transparent;
+}
+
+[data-surface='plugin.tern-cat.cat'] .sf-image[data-role='tern-cat.sprite'] {
+	cursor: pointer;
+}
+
+[data-surface='plugin.tern-cat.cat'] .sf-image[data-role='tern-cat.preview'],
+[data-surface='plugin.tern-cat.cat'] .sf-image[data-role='tern-cat.preview-on'] {
+	cursor: pointer;
+	border-radius: 6px;
+}
+
+[data-surface='plugin.tern-cat.cat'] .sf-image[data-role='tern-cat.preview-on'] {
+	outline: 2px solid var(--accent, currentColor);
+	outline-offset: 2px;
+}
+
+[data-surface='plugin.tern-cat.cat'] button.tc-btn {
+	padding: 1px 9px;
+	border: 1px solid rgba(128, 128, 128, 0.45);
+	border-radius: 6px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+[data-surface='plugin.tern-cat.cat'] button.tc-btn:hover {
+	background: rgba(128, 128, 128, 0.16);
+}
+
+/* The in-block `ls` parody: a fixed fake listing where one letter gets knocked off. */
+[data-surface='plugin.tern-cat.cat'] .tc-ls {
+	font-family: var(--mono, ui-monospace, monospace);
+	white-space: pre;
+	opacity: 0.85;
+}
+
+[data-surface='plugin.tern-cat.cat'] .tc-ls .tc-prompt,
+[data-surface='plugin.tern-cat.cat'] .tc-ls .tc-entry {
+	margin-right: 0.9em;
+}
+
+[data-surface='plugin.tern-cat.cat'] .tc-ls .tc-prompt {
+	opacity: 0.6;
+}
+
+[data-surface='plugin.tern-cat.cat'] .tc-ls .tc-tumble {
+	display: inline-block;
+	margin-left: -0.9em;
+	animation: tern-cat-tumble 1.2s steps(6, end) 0.3s 1 both;
+}
+
+@keyframes tern-cat-tumble {
+	from {
+		transform: translate(0, 0) rotate(0deg);
+		opacity: 1;
+	}
+	to {
+		transform: translate(0.7em, 1.1em) rotate(200deg);
+		opacity: 0.35;
+	}
+}
