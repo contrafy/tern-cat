@@ -96,6 +96,10 @@ describe("controls", function()
 			expect((controls.settingsChange("rendering.block_placement", "split") :: any)["rendering.block_placement"]).toBe(
 				"split"
 			)
+			expect((controls.settingsChange("rendering.pane_transition", "vent") :: any)["rendering.pane_transition"]).toBe(
+				"vent"
+			)
+			expect((controls.settingsChange("rendering.pane_transition", "warp"))).toBeNil()
 			expect((controls.settingsChange("behavior.focus_mode", true) :: any)["behavior.focus_mode"]).toBe(true)
 			expect(
 				(controls.settingsChange("behavior.allow_pointer_reactions", false) :: any)["behavior.allow_pointer_reactions"]

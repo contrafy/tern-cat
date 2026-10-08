@@ -358,7 +358,7 @@ local function gestureDecision(attrs: T.EventAttributes, ctx: Ctx): Decision?
 		return decide("gesture.play", "play", "You played with the cat.", ctx)
 	elseif g == "perform" then
 		local anim = attrs.animation
-		if not animations.isCanonical(anim) then
+		if not animations.isPerformable(anim) then
 			return nil
 		end
 		return decide("gesture.perform", anim :: any, `You asked for {anim}.`, ctx)
@@ -440,7 +440,7 @@ local function reactiveDecision(state: T.EngineState, event: T.CatEvent, ctx: Ct
 		end
 	elseif kind == "ai" then
 		local anim = attrs.animation
-		if animations.isCanonical(anim) and anim ~= "sleep" and anim ~= "wake" and ready(state, "react.ai", ctx) then
+		if animations.isPerformable(anim) and anim ~= "sleep" and anim ~= "wake" and ready(state, "react.ai", ctx) then
 			return decide("react.ai", anim :: any, "Suggested by the AI provider.", ctx), "react.ai"
 		end
 	end

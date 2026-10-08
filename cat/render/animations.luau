@@ -1,6 +1,10 @@
 --!strict
 -- Canonical animation names, fallback chains for packs that lack an animation, and
 -- pack-independent loop/duration defaults. Pure.
+--
+-- `dive` and `emerge` are the overlay's pane-switch transition (the cat sinks into a portal in the
+-- pane it leaves and rises out of one in the pane it enters). They are canonical so packs can
+-- provide them, but they are never performed as a decision.
 
 local T = require("../types")
 
@@ -25,7 +29,11 @@ local CANONICAL: { T.Animation } = {
 	"flop",
 	"stare",
 	"hop",
+	"dive",
+	"emerge",
 }
+
+local TRANSITIONS: { [string]: boolean } = { dive = true, emerge = true }
 
 local CANONICAL_SET: { [string]: boolean } = {}
 for _, name in CANONICAL do
@@ -54,6 +62,8 @@ local FALLBACKS: { [string]: { T.Animation } } = {
 	flop = { "disappointed", "sit", "idle" },
 	stare = { "look", "sit", "idle" },
 	hop = { "look", "idle" },
+	dive = { "hop", "idle" },
+	emerge = { "wake", "blink", "idle" },
 }
 
 local LOOPS: { [string]: boolean } = { idle = true, walk = true, sit = true, sleep = true }
@@ -79,10 +89,18 @@ local DURATIONS_MS: { [string]: number } = {
 	flop = 2400,
 	stare = 2000,
 	hop = 900,
+	-- The overlay transition's timing (docs/sprite-pack-spec.md): bundled packs match it exactly.
+	dive = 480,
+	emerge = 640,
 }
 
 local function isCanonical(name: any): boolean
 	return type(name) == "string" and CANONICAL_SET[name] == true
+end
+
+-- Canonical and allowed as a performed decision (perform intents, AI suggestions).
+local function isPerformable(name: any): boolean
+	return isCanonical(name) and TRANSITIONS[name] ~= true
 end
 
 local function resolve(available: { [string]: any }, wanted: string): T.Animation
@@ -112,6 +130,7 @@ return {
 	CANONICAL = CANONICAL,
 	FALLBACKS = FALLBACKS,
 	isCanonical = isCanonical,
+	isPerformable = isPerformable,
 	resolve = resolve,
 	isLoop = isLoop,
 	defaultDurationMs = defaultDurationMs,

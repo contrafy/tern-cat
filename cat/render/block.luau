@@ -389,6 +389,19 @@ local function sections(model: Model, s: SettingsModel): { any }
 				value = c.cat.appearance,
 				options = options,
 			}),
+			row(c, base, "rendering.pane_transition", {
+				label = "Pane switch",
+				hint = "What the overlay cat dives into and climbs out of when you switch panes.",
+			}, {
+				k = "choice",
+				value = c.rendering.pane_transition,
+				options = choiceOptions(schema.PANE_TRANSITIONS, {
+					portal = "Swirly portal",
+					vent = "Floor vent",
+					box = "Cardboard box",
+					off = "Off",
+				}),
+			}),
 		}
 		for _, p in s.packs do
 			if p.removable then

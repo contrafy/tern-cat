@@ -21,7 +21,8 @@
     "overlay_scale": 2,
     "block_scale": 4,
     "reduced_motion": "follow_tern",
-    "block_placement": "float"
+    "block_placement": "float",
+    "pane_transition": "portal"
   },
   "behavior": {
     "activity": "orange_menace",

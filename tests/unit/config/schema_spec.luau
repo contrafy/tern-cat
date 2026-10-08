@@ -209,6 +209,20 @@ describe("config schema", function()
 			expect(hasWarning(warnings, "rendering.block_placement")).toBe(true)
 		end)
 
+		it("resolves the pane transition with the portal as the default", function()
+			expect(schema.defaults().rendering.pane_transition).toBe("portal")
+			for _, style in { "portal", "vent", "box", "off" } do
+				expect(schema.resolve({ rendering = { pane_transition = style } }).rendering.pane_transition).toBe(
+					style
+				)
+			end
+			local cfg, warnings = schema.resolve({ rendering = { pane_transition = "teleport" } })
+			expect(cfg.rendering.pane_transition).toBe("portal")
+			expect(hasWarning(warnings, "rendering.pane_transition")).toBe(true)
+			expect(schema.checkField("rendering.pane_transition", "box")).toBe("box")
+			expect(schema.checkField("rendering.pane_transition", true)).toBeNil()
+		end)
+
 		it("rejects malformed quiet hours", function()
 			local cfg, warnings = schema.resolve({ quiet = { hours_enabled = true, start = "25:00", stop = "7am" } })
 			expect(cfg.quiet.hours_enabled).toBe(true)

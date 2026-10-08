@@ -88,7 +88,8 @@ export type CatEvent = {
 -- Animations and behavior ---------------------------------------------------------------
 
 -- Canonical animation names. Packs must provide `idle`; everything else falls back
--- through cat/render/animations.luau.
+-- through cat/render/animations.luau. `dive` and `emerge` are only played by the overlay's
+-- pane-switch transition, never as a decision.
 export type Animation =
 	"idle"
 	| "walk"
@@ -110,6 +111,8 @@ export type Animation =
 	| "flop"
 	| "stare"
 	| "hop"
+	| "dive"
+	| "emerge"
 
 export type SoundId = "meow" | "purr" | "surprise" | "happy" | "swat"
 
@@ -173,6 +176,9 @@ export type ReducedMotion = "follow_tern" | "on" | "off"
 
 export type BlockPlacement = "float" | "split"
 
+-- Prop the overlay cat dives into and emerges from when the focused pane changes.
+export type PaneTransition = "portal" | "vent" | "box" | "off"
+
 export type AiProvider = "none" | "mock" | "carly_schedule"
 
 export type Config = {
@@ -193,6 +199,7 @@ export type Config = {
 		block_scale: number,
 		reduced_motion: ReducedMotion,
 		block_placement: BlockPlacement,
+		pane_transition: PaneTransition,
 	},
 	behavior: {
 		activity: Activity,

@@ -95,6 +95,8 @@ describe("commands", function()
 			rejects(factories.intent("perform", {}))
 			rejects(factories.intent("perform", { animation = "explode" }))
 			rejects(factories.intent("perform", { animation = 3 }))
+			rejects(factories.intent("perform", { animation = "dive" }))
+			rejects(factories.intent("perform", { animation = "emerge" }))
 		end)
 
 		it("set_personality clamps values and rejects unknown traits", function()
@@ -159,6 +161,7 @@ describe("commands", function()
 					["sound.volume"] = 0.5,
 					["rendering.overlay"] = false,
 					["rendering.reduced_motion"] = "on",
+					["rendering.pane_transition"] = "box",
 					["quiet.hours_enabled"] = true,
 					["quiet.start"] = "21:30",
 					["needs.enabled"] = false,
@@ -231,6 +234,11 @@ describe("commands", function()
 				accepts("set_config", { key = "behavior.focus_mode", value = true }, carly).args.values["behavior.focus_mode"]
 			).toBe(true)
 			accepts("set_config", { key = "behavior.allow_pointer_reactions", value = false }, carly)
+			expect(
+				accepts("set_config", { key = "rendering.pane_transition", value = "off" }, carly).args.values["rendering.pane_transition"]
+			).toBe("off")
+			accepts("set_config", { key = "rendering.pane_transition", value = "vent" }, carly)
+			rejects(factories.intent("set_config", { key = "rendering.pane_transition", value = "warp" }, carly))
 		end)
 
 		it("keeps sound and quiet settings available to the user's own surfaces", function()
