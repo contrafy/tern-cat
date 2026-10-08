@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "id": "good-full",
+  "name": "Good Full",
+  "license": "CC0-1.0",
+  "canvas": {
+    "width": 16,
+    "height": 16
+  },
+  "animations": {
+    "idle": {
+      "frames": [
+        "idle_0.png",
+        "idle_1.png"
+      ],
+      "durations_ms": [
+        500,
+        500
+      ],
+      "loop": true
+    },
+    "walk": {
+      "frames": [
+        "frames/walk_0.png",
+        "frames/walk_1.png",
+        "frames/walk_2.png"
+      ],
+      "durations_ms": [
+        100,
+        250,
+        100
+      ],
+      "loop": true,
+      "anchor": [
+        8,
+        16
+      ],
+      "hitbox": [
+        2,
+        8,
+        12,
+        8
+      ],
+      "apng": "walk.apng",
+      "sheet": "walk_sheet.png"
+    },
+    "moonwalk": {
+      "frames": [
+        "idle_0.png",
+        "idle_1.png"
+      ],
+      "durations_ms": [
+        100,
+        100
+      ],
+      "loop": true
+    }
+  },
+  "author": "tern-cat fixtures",
+  "description": "Fixture pack exercising optional fields.",
+  "homepage": "https://example.invalid/ignored"
+}

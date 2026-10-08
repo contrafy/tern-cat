@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "bad-sheet-dims",
+  "name": "Bad Sheet Dims",
+  "license": "CC0-1.0",
+  "canvas": {
+    "width": 16,
+    "height": 16
+  },
+  "animations": {
+    "idle": {
+      "frames": [
+        "idle_0.png",
+        "idle_1.png"
+      ],
+      "durations_ms": [
+        100,
+        100
+      ],
+      "loop": true,
+      "sheet": "idle_sheet.png"
+    }
+  }
+}

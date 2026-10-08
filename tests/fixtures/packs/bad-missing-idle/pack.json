@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "bad-missing-idle",
+  "name": "Bad Missing Idle",
+  "license": "CC0-1.0",
+  "canvas": {
+    "width": 16,
+    "height": 16
+  },
+  "animations": {
+    "walk": {
+      "frames": [
+        "idle_0.png",
+        "idle_1.png"
+      ],
+      "durations_ms": [
+        100,
+        100
+      ],
+      "loop": true
+    }
+  }
+}
