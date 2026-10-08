@@ -2,15 +2,16 @@
 # requires-python = ">=3.11"
 # dependencies = ["pillow==12.3.0"]
 # ///
-"""Validate sprite packs and sound packs (CI cross-check for cat/sprite/manifest.luau).
+"""Validate sprite packs, sound packs and the transition props (CI cross-check for cat/sprite/manifest.luau).
 
 Usage: uv run tools/validate_packs.py [--no-lune] [PACK_DIR ...]
 
-With no arguments, validates every directory under assets/packs/ and every sound pack
-under assets/sounds/. Sprite packs are checked here with Pillow (structure, limits, path
-safety, PNG signatures, frame/APNG/sheet dimensions, APNG frame counts) and then, when
-`lune` is on PATH, again with `lune run tools/validate_pack.luau` so both implementations
-must agree. Exits 1 when anything is invalid.
+With no arguments, validates every directory under assets/packs/, every sound pack under
+assets/sounds/ and assets/portals/portals.json. Sprite packs are checked here with Pillow
+(structure, limits, path safety, PNG signatures, frame/APNG/sheet dimensions, APNG frame
+counts) and then, when `lune` is on PATH, again with `lune run tools/validate_pack.luau` so
+both implementations must agree. A directory argument containing portals.json is checked as
+a transition-prop set. Exits 1 when anything is invalid.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 PACKS_DIR = ROOT / "assets" / "packs"
 SOUNDS_DIR = ROOT / "assets" / "sounds"
+PORTALS_DIR = ROOT / "assets" / "portals"
 LUAU_VALIDATOR = ROOT / "tools" / "validate_pack.luau"
 DEFAULT_PACK = "orange-menace"
 
@@ -70,11 +72,17 @@ CANONICAL = [
     "flop",
     "stare",
     "hop",
-]
-SOUND_IDS = ["meow", "purr", "surprise", "happy", "swat"]
     "dive",
     "emerge",
+]
+SOUND_IDS = ["meow", "purr", "surprise", "happy", "swat"]
 SOUND_LIMITS = {"max_seconds": 1.5, "max_bytes": 80 * 1024, "rates": (8000, 48000)}
+# Transition props (assets/portals/portals.json). The overlay steps exit timelines with a CSS
+# transition, which can only step evenly, so exit frames must all last the same.
+PORTAL_STYLES = ["portal", "vent", "box"]
+PORTAL_FRAME = (48, 24)
+PORTAL_TOTAL_MS = {"enter": 800, "exit": 640}
+PORTAL_LAYERS = ["back", "front"]
 
 ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -402,6 +410,136 @@ def validate_sound_pack(root: Path) -> bool:
     return r.emit()
 
 
+def validate_portals(root: Path, bundled: bool) -> bool:
+    """Checks a transition-prop set: portals.json plus its frame-strip sheets."""
+    r = Report(str(root.relative_to(ROOT)) if root.is_relative_to(ROOT) else str(root))
+    path = root / "portals.json"
+    if not path.is_file():
+        r.err("portals.json", "not found")
+        return r.emit()
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as e:
+        r.err("portals.json", f"is not valid JSON: {e}")
+        return r.emit()
+    if not isinstance(raw, dict):
+        r.err("manifest", "portals.json must contain a JSON object")
+        return r.emit()
+    if raw.get("schema_version") != 1:
+        r.err("schema_version", f"must be 1 (got {raw.get('schema_version')!r})")
+    for key in raw:
+        if key not in ("schema_version", "frame", "anchor", "styles"):
+            r.warn(key, "unknown key; it will be ignored")
+    fw, fh = PORTAL_FRAME
+    frame = raw.get("frame")
+    if not isinstance(frame, dict) or frame.get("width") != fw or frame.get("height") != fh:
+        r.err("frame", f'must be {{"width": {fw}, "height": {fh}}} (got {frame!r})')
+    anchor = int_list(r, "anchor", raw.get("anchor"), 2)
+    if anchor is None and "anchor" not in raw:
+        r.err("anchor", "is required")
+    elif anchor and not (0 <= anchor[0] <= fw and 0 <= anchor[1] <= fh):
+        r.err("anchor", f"point ({anchor[0]}, {anchor[1]}) is outside the {fw}x{fh} frame")
+    styles = raw.get("styles")
+    if not isinstance(styles, dict) or not styles:
+        r.err("styles", "must be a non-empty object keyed by style id")
+        return r.emit()
+    if bundled:
+        missing = [s for s in PORTAL_STYLES if s not in styles]
+        if missing:
+            r.err("styles", "bundled props must provide every style; missing " + ", ".join(missing))
+    for sid, style in styles.items():
+        base = f"styles.{sid}"
+        if sid not in PORTAL_STYLES:
+            r.warn(base, "unknown style id; it will be ignored")
+        if not isinstance(style, dict):
+            r.err(base, "must be an object")
+            continue
+        name = style.get("name")
+        if not isinstance(name, str) or not (1 <= len(name) <= LIMITS["name_max"]):
+            r.err(f"{base}.name", f"required string of 1..{LIMITS['name_max']} characters (got {name!r})")
+        for phase, total in PORTAL_TOTAL_MS.items():
+            timeline = style.get(phase)
+            if not isinstance(timeline, dict):
+                r.err(f"{base}.{phase}", "must be an object with a back layer (and optionally front)")
+                continue
+            for key in timeline:
+                if key not in PORTAL_LAYERS:
+                    r.warn(f"{base}.{phase}.{key}", "unknown layer; it will be ignored")
+            if "back" not in timeline:
+                r.err(f"{base}.{phase}.back", "is required")
+            timings: dict[str, list[int]] = {}
+            for layer in PORTAL_LAYERS:
+                if layer not in timeline:
+                    continue
+                durations = check_portal_layer(r, root, f"{base}.{phase}.{layer}", timeline[layer], phase, total)
+                if durations is not None:
+                    timings[layer] = durations
+            if len(timings) == 2 and timings["back"] != timings["front"]:
+                r.err(f"{base}.{phase}.front.durations_ms", "must equal the back layer's durations_ms")
+    return r.emit()
+
+
+def check_portal_layer(r: Report, root: Path, field: str, spec: object, phase: str, total: int) -> list[int] | None:
+    """Validates one prop layer; returns its durations when they are well-formed."""
+    if not isinstance(spec, dict):
+        r.err(field, "must be an object with sheet, frames and durations_ms")
+        return None
+    frames = spec.get("frames")
+    if not is_int(frames) or not (1 <= frames <= LIMITS["frames_max"]):
+        r.err(f"{field}.frames", f"must be an integer between 1 and {LIMITS['frames_max']} (got {frames!r})")
+        frames = None
+    durations = spec.get("durations_ms")
+    ok = isinstance(durations, list) and all(
+        is_int(d) and LIMITS["duration_min_ms"] <= d <= LIMITS["duration_max_ms"] for d in durations
+    )
+    if not ok:
+        r.err(
+            f"{field}.durations_ms",
+            f"must be a list of integers between {LIMITS['duration_min_ms']} and {LIMITS['duration_max_ms']}",
+        )
+        durations = None
+    else:
+        if frames is not None and len(durations) != frames:
+            r.err(f"{field}.durations_ms", f"has {len(durations)} entries but there are {frames} frames")
+        if sum(durations) != total:
+            r.err(f"{field}.durations_ms", f"total {sum(durations)} ms; {phase} timelines must total {total} ms")
+        if phase == "exit" and len(set(durations)) > 1:
+            r.err(f"{field}.durations_ms", "exit frames must all share one duration (the overlay steps them evenly)")
+    rel = spec.get("sheet")
+    why = check_path(rel, (".png",))
+    if why:
+        r.err(f"{field}.sheet", f"unsafe path {rel!r}: {why}")
+        return durations
+    path = inside(root, rel)
+    if path is None:
+        r.err(f"{field}.sheet", f"{rel!r} resolves outside {root.name}/")
+        return durations
+    if not path.is_file():
+        r.err(f"{field}.sheet", f"{rel!r}: file not found")
+        return durations
+    if path.stat().st_size > LIMITS["file_max_bytes"]:
+        r.err(f"{field}.sheet", f"{rel!r} exceeds {LIMITS['file_max_bytes']} bytes")
+        return durations
+    if not path.read_bytes().startswith(PNG_SIG):
+        r.err(f"{field}.sheet", f"{rel!r} is not a PNG (bad signature)")
+        return durations
+    try:
+        with Image.open(path) as im:
+            size, mode = im.size, im.mode
+    except Exception as e:  # noqa: BLE001 - report any decoder failure as invalid
+        r.err(f"{field}.sheet", f"{rel!r} could not be decoded: {e}")
+        return durations
+    if mode != "RGBA":
+        r.err(f"{field}.sheet", f"{rel!r} must be an RGBA PNG (got mode {mode})")
+    fw, fh = PORTAL_FRAME
+    if frames is not None and size != (fw * frames, fh):
+        r.err(
+            f"{field}.sheet",
+            f"{rel!r} is {size[0]}x{size[1]} but expected {fw * frames}x{fh} ({frames} frames of {fw}x{fh})",
+        )
+    return durations
+
+
 def run_lune(dirs: list[Path]) -> bool:
     lune = shutil.which("lune")
     if not lune:
@@ -421,18 +559,23 @@ def main(argv: list[str]) -> int:
     targets = [Path(a).resolve() for a in argv if a != "--no-lune"]
     sprite_dirs: list[Path]
     sound_dirs: list[Path]
+    portal_dirs: list[Path]
     if targets:
-        sprite_dirs = [t for t in targets if (t / "pack.json").exists() or not (t / "sounds.json").exists()]
+        portal_dirs = [t for t in targets if (t / "portals.json").exists()]
         sound_dirs = [t for t in targets if (t / "sounds.json").exists()]
+        sprite_dirs = [
+            t for t in targets if (t / "pack.json").exists() or (t not in sound_dirs and t not in portal_dirs)
+        ]
         bundled = False
     else:
         sprite_dirs = sorted(p for p in PACKS_DIR.iterdir() if p.is_dir()) if PACKS_DIR.is_dir() else []
         sound_dirs = sorted(p for p in SOUNDS_DIR.iterdir() if p.is_dir()) if SOUNDS_DIR.is_dir() else []
+        portal_dirs = [PORTALS_DIR]
         bundled = True
         if not (PACKS_DIR / DEFAULT_PACK).is_dir():
             print(f"FAIL assets/packs: default pack {DEFAULT_PACK!r} is missing", file=sys.stderr)
             return 1
-    if not sprite_dirs and not sound_dirs:
+    if not sprite_dirs and not sound_dirs and not portal_dirs:
         print("FAIL: no packs found", file=sys.stderr)
         return 1
     ok = True
@@ -440,6 +583,8 @@ def main(argv: list[str]) -> int:
         ok = validate_sprite_pack(d, bundled) and ok
     for d in sound_dirs:
         ok = validate_sound_pack(d) and ok
+    for d in portal_dirs:
+        ok = validate_portals(d, bundled) and ok
     if use_lune and sprite_dirs:
         ok = run_lune(sprite_dirs) and ok
     print("packs: passed" if ok else "packs: FAILED", file=sys.stderr if not ok else sys.stdout)

@@ -75,6 +75,15 @@ class Canvas:
         for a, b in zip(pts, pts[1:]):
             self.capsule(a, b, r, c, only)
 
+    def polygon(self, pts: Sequence[Point], c: str, only: str | None = None) -> None:
+        """Fill the pixels whose sample point lies inside (or on) the polygon `pts`."""
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        for y in self._span(min(ys), max(ys), self.height):
+            for x in self._span(min(xs), max(xs), self.width):
+                if _inside(pts, x, y):
+                    self.put(x, y, c, only)
+
     def stamp(self, x0: int, y0: int, rows: Sequence[str], only: str | None = None) -> None:
         for dy, row in enumerate(rows):
             for dx, c in enumerate(row):
@@ -104,6 +113,20 @@ class Canvas:
                 if c != CLEAR:
                     out.put(x + dx, y + dy, c)
         return out
+
+
+def _inside(pts: Sequence[Point], x: float, y: float) -> bool:
+    """Even-odd test, with points on an edge counted as inside."""
+    hit = False
+    n = len(pts)
+    for i in range(n):
+        (ax, ay), (bx, by) = pts[i], pts[(i + 1) % n]
+        cross = (bx - ax) * (y - ay) - (by - ay) * (x - ax)
+        if cross == 0 and min(ax, bx) <= x <= max(ax, bx) and min(ay, by) <= y <= max(ay, by):
+            return True
+        if (ay > y) != (by > y) and x < ax + (y - ay) * (bx - ax) / (by - ay):
+            hit = not hit
+    return hit
 
 
 def bezier(p0: Point, p1: Point, p2: Point, steps: int = 8) -> list[Point]:
