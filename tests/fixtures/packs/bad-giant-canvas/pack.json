@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "bad-giant-canvas",
+  "name": "Bad Giant Canvas",
+  "license": "CC0-1.0",
+  "canvas": {
+    "width": 4096,
+    "height": 4096
+  },
+  "animations": {
+    "idle": {
+      "frames": [
+        "idle_0.png",
+        "idle_1.png"
+      ],
+      "durations_ms": [
+        100,
+        100
+      ],
+      "loop": true
+    }
+  }
+}

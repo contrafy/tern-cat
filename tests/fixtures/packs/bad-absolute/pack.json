@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "bad-absolute",
+  "name": "Bad Absolute",
+  "license": "CC0-1.0",
+  "canvas": {
+    "width": 16,
+    "height": 16
+  },
+  "animations": {
+    "idle": {
+      "frames": [
+        "/etc/hosts.png"
+      ],
+      "durations_ms": [
+        100
+      ],
+      "loop": true
+    }
+  }
+}
