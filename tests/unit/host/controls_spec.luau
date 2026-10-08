@@ -128,6 +128,35 @@ describe("controls", function()
 		end)
 	end)
 
+	-- Destructive block actions (reset identity, remove a pack) need a second click on the same
+	-- target shortly after the first, so a stray or stale click never deletes anything.
+	describe("confirmations", function()
+		it("confirms only the armed target before the window closes", function()
+			local armed = controls.armConfirm("pack:calico", 1000)
+			expect(controls.isArmed(armed, "pack:calico", 1000)).toBe(true)
+			expect(controls.isArmed(armed, "pack:calico", 1000 + controls.CONFIRM_MS - 1)).toBe(true)
+			expect(controls.isArmed(armed, "pack:void", 1000)).toBe(false)
+			expect(controls.isArmed(armed, "reset", 1000)).toBe(false)
+		end)
+
+		it("expires after CONFIRM_MS", function()
+			local armed = controls.armConfirm("pack:calico", 1000)
+			expect(controls.isArmed(armed, "pack:calico", 1000 + controls.CONFIRM_MS)).toBe(false)
+		end)
+
+		it("is never armed without a first click", function()
+			expect(controls.isArmed(nil, "pack:calico", 0)).toBe(false)
+		end)
+
+		it("reads the pack id back from a remove row id only", function()
+			expect(controls.removePackId(controls.removePackRow("calico"))).toBe("calico")
+			expect(controls.removePackId("pack.remove.")).toBeNil()
+			expect(controls.removePackId("pack.remove.../x")).toBeNil()
+			expect(controls.removePackId("identity.reset")).toBeNil()
+			expect(controls.removePackId(nil)).toBeNil()
+		end)
+	end)
+
 	describe("test mode", function()
 		it("parses block args and the environment variable form", function()
 			expect(controls.parseTestMode({ "test", "seed=42", "frozen" })).toEqual({ seed = 42, frozen = true })

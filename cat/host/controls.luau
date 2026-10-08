@@ -8,6 +8,8 @@ local schema = require("../config/schema")
 local configFile = require("../adapters/config")
 
 local SNOOZE_MINUTES = 30
+-- How long the first click of a two-step destructive action (reset, remove a pack) stays armed.
+local CONFIRM_MS = 10000
 
 export type Command = { kind: "intent", intent: string, args: { [string]: any } } | { kind: "settings", open: boolean }
 
@@ -184,6 +186,34 @@ local function displayValue(config: T.Config, path: string): any
 	return v
 end
 
+-- Two-step confirmation: the first click arms `target`; a confirm click for the same target
+-- before `until_ms` runs the action.
+export type Confirm = { target: string, until_ms: number }
+
+local function armConfirm(target: string, now_ms: number): Confirm
+	return { target = target, until_ms = now_ms + CONFIRM_MS }
+end
+
+local function isArmed(pending: Confirm?, target: string, now_ms: number): boolean
+	return pending ~= nil and pending.target == target and now_ms < pending.until_ms
+end
+
+-- Settings rows that remove a user pack are `pack.remove.<pack id>`. A prefs action control
+-- reports its row id as the event `value` (its `act` is passed through unsplit).
+local REMOVE_ROW_PREFIX = "pack.remove."
+
+local function removePackRow(id: string): string
+	return REMOVE_ROW_PREFIX .. id
+end
+
+-- The pack id of a remove row, or nil for any other value.
+local function removePackId(row: any): string?
+	if type(row) ~= "string" or string.sub(row, 1, #REMOVE_ROW_PREFIX) ~= REMOVE_ROW_PREFIX then
+		return nil
+	end
+	return string.match(string.sub(row, #REMOVE_ROW_PREFIX + 1), "^([a-z][a-z0-9%-]*)$")
+end
+
 -- Test mode for goldens: block args or TERN_CAT_TEST items "test", "frozen", "seed=<n>".
 -- Returns nil when none of them is present.
 export type TestMode = { seed: number, frozen: boolean }
@@ -218,11 +248,16 @@ end
 
 return {
 	SNOOZE_MINUTES = SNOOZE_MINUTES,
+	CONFIRM_MS = CONFIRM_MS,
 	resolveAction = resolveAction,
 	menuActions = menuActions,
 	keyAction = keyAction,
 	settingsChange = settingsChange,
 	displayValue = displayValue,
 	isPercent = isPercent,
+	armConfirm = armConfirm,
+	isArmed = isArmed,
+	removePackRow = removePackRow,
+	removePackId = removePackId,
 	parseTestMode = parseTestMode,
 }

@@ -650,6 +650,62 @@ local function pollConfig(b: Brain): boolean
 	return true
 end
 
+export type RemoveOutcome = {
+	ok: boolean,
+	error: string?,
+	-- Display name of the removed pack.
+	name: string?,
+	-- The removed pack was the cat's appearance and config.json now selects the default pack.
+	switched: boolean,
+	-- Why the appearance could not be switched back (the default pack is shown regardless).
+	config_error: string?,
+}
+
+-- Deletes a user-installed pack's folder (never a bundled pack, never anything that is not a
+-- direct child of the user packs folder). When it was the cat's appearance, config.json is
+-- switched back to the default pack through the normal settings write.
+local function removePack(b: Brain, id: string): RemoveOutcome
+	availablePacks(b)
+	local pack = b.packs[id]
+	if pack == nil then
+		return { ok = false, error = `pack "{id}" is not installed`, switched = false }
+	end
+	local dir, refused = loader.removableDir(pack, b.deps.paths.user_packs)
+	if dir == nil then
+		log(b, "warn", `not removing pack "{id}": {refused or "refused"}`)
+		return { ok = false, error = refused, switched = false }
+	end
+	local fs = b.deps.fs
+	-- A folder already deleted by hand counts as removed: the listing is only refreshed here.
+	if fs.exists(dir) then
+		fs.remove(dir)
+	end
+	if fs.exists(dir) then
+		log(b, "error", `could not remove pack "{id}"`)
+		return { ok = false, error = "Could not delete the pack folder.", switched = false }
+	end
+	log(b, "info", `removed user pack "{id}"`)
+	-- Validate again from scratch: a same-id pack in another folder that the loader ignored as a
+	-- duplicate is now available.
+	b.packs = {}
+	b.all_packs_loaded = false
+	local prefix = dir .. "/"
+	for path in table.clone(b.asset_cache) do
+		if string.sub(path, 1, #prefix) == prefix then
+			b.asset_cache[path] = nil
+		end
+	end
+	local out: RemoveOutcome = { ok = true, name = pack.manifest.name, switched = false }
+	if b.config.cat.appearance == id then
+		local ok, err = setConfig(b, { ["cat.appearance"] = DEFAULT_PACK })
+		out.switched = ok
+		out.config_error = if ok then nil else err
+	end
+	selectPack(b)
+	notify(b, "packs")
+	return out
+end
+
 -- Intents -----------------------------------------------------------------------------------
 
 local function exportIdentity(b: Brain, profile: T.Profile): string?
@@ -847,6 +903,7 @@ return {
 	setConfig = setConfig,
 	setTestMode = setTestMode,
 	availablePacks = availablePacks,
+	removePack = removePack,
 	assetBytes = assetBytes,
 	listPackDirs = listPackDirs,
 	isNotable = isNotable,

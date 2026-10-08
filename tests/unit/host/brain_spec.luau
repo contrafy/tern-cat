@@ -592,6 +592,137 @@ describe("brain", function()
 		end)
 	end)
 
+	-- Removal deletes a folder recursively, so it must only ever touch a user-installed pack, and
+	-- a cat whose pack disappears must fall back to the default instead of a missing appearance.
+	describe("removing packs", function()
+		local function withCalico(appearance: string?): (Env, brain.Brain)
+			local files: { [string]: string } = {}
+			if appearance then
+				files[DATA .. "/config.json"] = `\{"cat":\{"appearance":"{appearance}"}}`
+			end
+			copyPack(files, "void", "calico", "calico")
+			local e = setup({ files = files })
+			return e, brain.load(e.deps)
+		end
+
+		local function ids(b: brain.Brain): { string }
+			local out = {}
+			for _, pack in brain.availablePacks(b) do
+				table.insert(out, pack.manifest.id)
+			end
+			return out
+		end
+
+		local function packFiles(e: Env, folder: string): number
+			local n = 0
+			local prefix = DATA .. "/packs/" .. folder .. "/"
+			for p in e.m.files do
+				if string.sub(p, 1, #prefix) == prefix then
+					n += 1
+				end
+			end
+			return n
+		end
+
+		it("deletes a user pack's folder and stops offering it", function()
+			local e, b = withCalico(nil)
+			expect(ids(b)).toContain("calico")
+			local out = brain.removePack(b, "calico")
+			expect(out.ok).toBe(true)
+			expect(out.name).toBe("Void")
+			expect(out.switched).toBe(false)
+			expect(e.m.removed).toEqual({ DATA .. "/packs/calico" })
+			expect(packFiles(e, "calico")).toBe(0)
+			expect(ids(b)).notToContain("calico")
+			expect(b.config.cat.appearance).toBe("orange-menace")
+		end)
+
+		it("switches the cat back to the default pack when the selected pack is removed", function()
+			local e, b = withCalico("calico")
+			expect((b.pack :: any).manifest.id).toBe("calico")
+			local out = brain.removePack(b, "calico")
+			expect(out.ok).toBe(true)
+			expect(out.switched).toBe(true)
+			expect(b.config.cat.appearance).toBe("orange-menace")
+			expect((b.pack :: any).manifest.id).toBe("orange-menace")
+			expect(b.pack_note).toBeNil()
+			local saved = serde.decode("json", e.m.files[DATA .. "/config.json"])
+			expect(saved.cat.appearance).toBe("orange-menace")
+		end)
+
+		it("still removes the pack and shows the default when config.json cannot be written", function()
+			local e, b = withCalico("calico")
+			e.m.unreadable[DATA .. "/config.json"] = true
+			local out = brain.removePack(b, "calico")
+			expect(out.ok).toBe(true)
+			expect(out.switched).toBe(false)
+			expect(out.config_error).notToBeNil()
+			expect(packFiles(e, "calico")).toBe(0)
+			expect((b.pack :: any).manifest.id).toBe("orange-menace")
+		end)
+
+		it("never removes a bundled pack", function()
+			local e, b = withCalico(nil)
+			local out = brain.removePack(b, "void")
+			expect(out.ok).toBe(false)
+			expect(out.error).toContain("bundled")
+			expect(#e.m.removed).toBe(0)
+			expect(ids(b)).toContain("void")
+		end)
+
+		it("never removes a folder outside the user packs folder", function()
+			local e, b = withCalico(nil)
+			brain.availablePacks(b)
+			for _, root in { DATA, DATA .. "/packs", DATA .. "/packs/../inbox", "/elsewhere/calico" } do
+				b.packs.calico.root = root
+				local out = brain.removePack(b, "calico")
+				expect(out.ok).toBe(false)
+				expect(out.error).notToBeNil()
+			end
+			expect(#e.m.removed).toBe(0)
+			expect(packFiles(e, "calico")).toBeGreaterThan(0)
+		end)
+
+		it("counts a folder already deleted by hand as removed and refreshes the list", function()
+			local e, b = withCalico("calico")
+			brain.availablePacks(b)
+			for path in table.clone(e.m.files) do
+				if string.sub(path, 1, #DATA + 14) == DATA .. "/packs/calico/" then
+					e.m.files[path] = nil
+				end
+			end
+			local out = brain.removePack(b, "calico")
+			expect(out.ok).toBe(true)
+			expect(out.switched).toBe(true)
+			expect(#e.m.removed).toBe(0)
+			expect(ids(b)).notToContain("calico")
+		end)
+
+		it("reports unknown packs and failed deletes without changing anything", function()
+			local e, b = withCalico("calico")
+			expect(brain.removePack(b, "nope").ok).toBe(false)
+			e.m.failRemoves = true
+			local out = brain.removePack(b, "calico")
+			expect(out.ok).toBe(false)
+			expect(out.error).notToBeNil()
+			expect(b.config.cat.appearance).toBe("calico")
+			expect(ids(b)).toContain("calico")
+		end)
+
+		it("offers a same-id pack from another folder once the first one is removed", function()
+			local files: { [string]: string } = {}
+			copyPack(files, "void", "calico", "calico")
+			copyPack(files, "tuxedo", "calico-copy", "calico")
+			local e = setup({ files = files })
+			local b = brain.load(e.deps)
+			expect(ids(b)).toContain("calico")
+			expect(b.packs.calico.root).toBe(DATA .. "/packs/calico")
+			expect(brain.removePack(b, "calico").ok).toBe(true)
+			expect(ids(b)).toContain("calico")
+			expect(b.packs.calico.root).toBe(DATA .. "/packs/calico-copy")
+		end)
+	end)
+
 	describe("sound", function()
 		it("stays silent by default", function()
 			local e = setup()
