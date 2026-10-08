@@ -73,6 +73,11 @@ Targets Tern 0.6.2.
   `docs/performance.md`.
 - The host logs the sound player's exit status at debug level (`sound: played <id> (<player>)
   status <n>`, no file paths).
+- `scripts/perf-baseline.sh` and `tools/perf_baseline.py`: sandboxed 10-minute idle CPU run
+  (zen, block floated and closed) and incremental memory run (plugin unlinked, overlay only,
+  block floated; RSS and macOS physical footprint, 3 repeats). `docs/performance.md` now reports
+  idle CPU (window plus daemon mean 0.85-0.89% of one core) and the memory increment (median
+  physical footprint +18.5 MiB overlay only, +33.5 MiB with the block), with caveats.
 - Documentation: README, configuration reference (`docs/configuration.md`), performance report
   (`docs/performance.md`), updated architecture.
 - Development tooling: Lune test runner, StyLua, selene, luau-lsp type checking against the
