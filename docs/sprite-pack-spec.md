@@ -162,13 +162,25 @@ available animation in the chain is shown, and every chain ends in `idle`.
 | `flop` | Dramatic flop | `disappointed`, `sit`, `idle` |
 | `stare` | Long stare | `look`, `sit`, `idle` |
 | `hop` | Small hop | `look`, `idle` |
+| `dive` | Sinks into the floor portal (overlay pane switch only) | `hop`, `idle` (the overlay clips the decision sheet instead) |
+| `emerge` | Rises out of the floor portal and lands (overlay pane switch only) | `wake`, `blink`, `idle` (the overlay clips the decision sheet instead) |
 
 `durations_ms` only times the frames. How long the cat stays in an animation is decided by the
 behavior engine (`defaultDurationMs` in `cat/render/animations.luau`), not by the pack. The
 engine treats `idle`, `walk`, `sit` and `sleep` as looping states, so set `"loop": true` on those
 and `false` on one-shot reactions.
 
-Bundled packs must provide all 20 animations (`tools/validate_packs.py` enforces this when run
+`dive` and `emerge` are only played by the overlay's pane-switch transition (see
+[architecture.md](architecture.md#pane-switch-transition)); they are never decisions and cannot
+be performed. Draw them inside the normal frame with its bottom edge as the floor: `dive` sinks
+the cat below that edge and ends on an empty frame, `emerge` starts empty and ends on the pose
+of `idle`'s first frame. Timing guidance (bundled packs match it exactly): `dive` 480 ms in
+frames of equal duration (the overlay plays it with a CSS transition, which steps evenly, so
+unequal durations are averaged), `emerge` 640 ms, its empty first frame lasting about 160 ms
+while the prop opens. A pack without them sinks and rises with a height clip of whatever the
+cat is doing.
+
+Bundled packs must provide all 22 animations (`tools/validate_packs.py` enforces this when run
 without arguments). Community packs only need `idle`.
 
 ## Minimal complete example

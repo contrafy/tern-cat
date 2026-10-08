@@ -67,7 +67,7 @@ Measured: 2-3 slices of 15-17 ms; see [performance.md](performance.md).
 | Renderer | Where | Interactive | Notes |
 |---|---|---|---|
 | Block | host, `tern.block.define("cat")` (kind `tern-cat.cat`) | yes: click (pet), double-click (play), right-click menu, buttons, keys when focused | Opened from the palette ("Open cat" from the window half, or Tern's "New Tern Cat block"). "Open cat" focuses a cat block already in the focused pane's tab; otherwise, with `rendering.block_placement = "float"`, it moves a cat card floating in another tab or parked with `cx.layout:float(pane, owner, "br")`, else opens one with `cx:new_block` beside and floats it, staying a split if floating fails; cat blocks tiled in other tabs are left alone (`cat/window/blocks.luau`, decisions logged at debug). One APNG per animation, every animation's image node kept in the view and toggled by `role` so late-attaching windows never show a missing blob; one-shot animations get a fresh key per play so they restart. Settings page uses the `prefs` node (7 pages). |
-| Overlay | window, `tern.css("overlay", css)` | visual only: CSS `:hover`/`:active` reactions (`behavior.allow_pointer_reactions`); no input reaches the plugin | On by default. Anchored to the focused pane's bottom-right corner via `section.tn-pane.on > div.tn-body > div.tv > div.tv-fx.top::after` (Tern's top effects layer, `pointer-events: none`, so its `:hover` is local to its pseudo-elements); sprite-sheet `@keyframes` with `steps()` timing from the pack's `durations_ms`; pacing is a stepped `translateX`. With reactions on, the cat and an invisible 48 px proximity ring (`::before`) are `pointer-events: auto`: pointer near or on the cat plays `look`, pressing plays `swat` in the ring's content box while the cat hides, held 0.7 s after release by a delayed 0 s transition; both sheets resolve through the pack's fallbacks, still first frame under reduced motion, and the walk animation is repeated by name so pacing continues. The sheet is reinstalled only when the CSS text changes. Hidden (empty sheet) when toggled off, and while the focused pane is a cat block or a cat block floats over it, so it never covers the card's buttons. Still frame when `rendering.reduced_motion = "on"` or Tern's `reduce_motion` is `on`; Tern's own reduced-motion CSS also stops it. Never changes terminal content, input, selection or layout. |
+| Overlay | window, `tern.css("overlay", css)` | visual only: CSS `:hover`/`:active` reactions (`behavior.allow_pointer_reactions`); no input reaches the plugin | On by default. Anchored to one corner of the focused visible pane (`rendering.overlay_position`, default top-right, `rendering.overlay_offset_px` from both edges) via `section.tn-pane.on:not(.off) > div.tn-body > div.tv > div.tv-fx.top::after` (Tern's top effects layer, `pointer-events: none`, so its `:hover` is local to its pseudo-elements; `:not(.off)` because panes of hidden tabs and sessions keep `.on`); sprite-sheet `@keyframes` with `steps()` timing from the pack's `durations_ms`; pacing is a stepped `translateX` along the corner's horizontal edge, into the pane. With reactions on, the cat and an invisible 48 px proximity ring (`::before`, shrunk to the gap on the corner's two edges) are `pointer-events: auto`: pointer near or on the cat plays `look`, pressing plays `swat` in the ring's content box while the cat hides, held 0.7 s after release by a delayed 0 s transition; both sheets resolve through the pack's fallbacks, still first frame under reduced motion, and the walk animation is repeated by name so pacing continues. Pane-switch transition: see below. The sheet is reinstalled only when the CSS text changes. Hidden (empty sheet) when toggled off, and while the focused pane is a cat block or a cat block floats over it, so it never covers the card's buttons. Still frame when `rendering.reduced_motion = "on"` or Tern's `reduce_motion` is `on`; Tern's own reduced-motion CSS also stops it. Never changes terminal content, input, selection or layout. |
 
 The overlay is a decoration, not a compositor: it cannot read or locate terminal text, so the
 "knock a character off `ls` output" gag is a parody inside the block (a fixed fake listing). The
@@ -80,6 +80,48 @@ end the selector"), sibling hover through `+` is not re-evaluated, `~` and `:has
 rejected, and Tern has no nested `pointer-events: none` element that could host the ring and
 the cat separately, so "near" and "on the cat" cannot be told apart. A CSS-only cat also cannot
 tell Lua it was touched, so hover and press never count as pets.
+
+### Pane-switch transition
+
+`rendering.pane_transition` (`portal`, `vent`, `box`; `off`) makes the cat dive into a prop in
+the pane that loses focus and climb out of the same kind of prop in the pane that gains it. It is
+pure CSS in the same `overlay` sheet, so no Lua runs per switch and nothing can lag a frame
+behind (a Lua per-switch sheet is not possible: panes carry no id in the DOM, and a spike showed
+a stale frame in 4 of 20 switches).
+
+- **Enter**: keyframe animations under `.on:not(.off)`, which restart whenever a pane becomes
+  the visible focused pane (focus, new pane, tab or session switch). The cat's animation list
+  ends with `tern-cat-emerge` (last, so it wins for the properties it sets while running;
+  `backwards` fill hides the cat until its first frame). Every rule that sets the cat's animation
+  (the focused rule, `:hover`) repeats that constant name, so a decision change, hover or sheet
+  reinstall never replays it; the decision animation gets no delay.
+- **Exit**: transitions on an every-pane rule (`section.tn-pane > … > div.tv-fx.top::after`)
+  that holds the dive's end state (no box). Only a pane that loses `.on` while still displayed
+  transitions there; panes of hidden tabs and sessions become `display: none` and show nothing,
+  and nothing fires at install or for a new pane. Transitions step evenly, so the pack's `dive`
+  plays with equal frame times; the facing is copied so the cat does not flip.
+- **Props** (`assets/portals/portals.json`, loaded by `cat/window/portals.luau`): the back layer
+  on the grid's effects layer (`div.tv-grid > div.tv-fx::after`, under the cat; its box starts
+  at `--tv-px`/`--tv-py` and ends `--tv-aside` short, compensated with `calc()`), the optional
+  front layer (box flap) on `div.tv-layer::after` (above the cat). Both are `pointer-events:
+  none`. Enter keyframes play under `.on:not(.off)`; the exit is a stepped `background-position`
+  transition plus a delayed `opacity` flip. The prop anchor sits under the cat's feet at the
+  cat's scale, and the cat is lifted off the edges far enough for the prop to fit (Tern clips
+  the view). At top corners the cat's box is anchored by its bottom edge (`calc(100% - …)`) so
+  the clip keeps the floor line fixed.
+- **Fallback**: packs without `dive`/`emerge` sink and rise with a stepped height clip of the
+  current decision sheet.
+- **Press during the emerge**: the emerge keyframes hold `opacity: 1` on the cat and the ring
+  runs a `tern-cat-emerge-ring` that keeps the swat sheet hidden, so the cat keeps emerging
+  instead of popping to a full-height swat frame.
+- **Off**: reduced motion (either setting), `pane_transition: "off"`, a hidden or covered
+  overlay, or props that fail to load (one warning) draw no transition at all.
+
+Caveats: a pacing cat snaps back to its resting spot in the frame its pane loses focus
+(transitions start from the base value, not the animated one), then dives there; a pacing cat
+keeps walking during its emerge. Turning the transition on, or switching to the box style,
+plays the new prop's enter once in the focused pane. Transitions tick at display rate for their
+duration, so a switch costs extra frames (exit 640 ms, enter 800 ms); idle cost is unchanged.
 
 ## Modules
 
@@ -106,9 +148,9 @@ All modules are `--!strict` and return a table of functions. Only the entries an
 
 | Module | Responsibility | Key functions |
 |---|---|---|
-| `cat/render/animations.luau` | The 20 canonical animations and fallback chains ending in `idle` | `resolve(pack_animations, wanted)`, `isCanonical(name)` |
+| `cat/render/animations.luau` | The 22 canonical animations (`dive`/`emerge` for the pane-switch transition only) and fallback chains ending in `idle` | `resolve(pack_animations, wanted)`, `isCanonical(name)`, `isPerformable(name)` |
 | `cat/render/block.luau` | Block view: sprite stack, needs bars, stats, buttons, menus, `prefs` settings page, `ls` parody | `view(model, ui)` |
-| `cat/render/overlay.luau` | Overlay CSS generator (sanitized string output; optional `still`; optional hover/press reaction sheets with the proximity ring) | `css(params)`, `SELECTOR`, `HOST` |
+| `cat/render/overlay.luau` | Overlay CSS generator (sanitized string output; corner placement; optional `still`; optional hover/press reaction sheets with the proximity ring; optional pane-switch transition) | `css(params)`, `SELECTOR`, `HOST` |
 | `cat/sprite/png.luau` | PNG/APNG header parsing without decoding pixels | `inspect(bytes)` |
 | `cat/sprite/manifest.luau` | `pack.json` validation: limits, path segment rules, animation set | `validate(table, fs, root)`, `checkPath` |
 | `cat/sprite/loader.luau` | Discover bundled and user packs, validate, fall back to the default pack; the only folder a pack removal may delete | `loadAll(fs, roots)`, `select`, `removableDir(pack, user_root)` |
@@ -130,9 +172,10 @@ passes it to `sound.detect` and `sound.play`.
 
 | Module | Responsibility | Key functions |
 |---|---|---|
-| `cat/window/controller.luau` | The window loop behind injected ports: one self-rescheduling timer (next decision, kv poll every 2 s, config poll every 3 s), requests to intents, overlay toggle, reset confirmation (second run within 10 s), cover state, Carly snapshot and context. Never writes kv | `new`, `start`, `onWindowEvent`, `request`, `toggleOverlay`, `reloadConfig`, `confirmReset`, `setCovered`, `snapshot`, `context` |
+| `cat/window/controller.luau` | The window loop behind injected ports: one self-rescheduling timer (next decision, kv poll every 2 s, config poll every 3 s), requests to intents, overlay toggle, reset confirmation (second run within 10 s), cover state, pane-transition assets (prop plus the pack's exact `dive`/`emerge`, one warning when unavailable), Carly snapshot and context. Never writes kv | `new`, `start`, `onWindowEvent`, `request`, `toggleOverlay`, `reloadConfig`, `confirmReset`, `setCovered`, `snapshot`, `context` |
 | `cat/window/presenter.luau` | One read-only behavior engine per window; command lines reduced to a category immediately; this window's running commands (focus mode, tracked even while the overlay is hidden; host `react.*` mirrors are skipped while busy); overlay parameters, including the pointer reaction sheets (`HOVER_ANIMATION` look, `PRESS_ANIMATION` swat) when shown and allowed; local override until config agrees | `new`, `view`, `params`, `tick`, `react`, `observe`, `gesture`, `mirror`, `eventFor`, `setConfig`, `setCovered`, `visible` |
 | `cat/window/packs.luau` | Validates only the wanted and default packs (full scan only if both miss), resolves fallbacks, caches each sheet as a data URL; a pack without a built sheet uses its first frame; a cached pack whose `pack.json` is gone (removed) invalidates the cache. The controller reselects on every config poll | `new`, `select`, `asset`, `invalidate` |
+| `cat/window/portals.luau` | Reads and validates `assets/portals/portals.json` once (pack path rules, frame counts and durations, PNG size and format) and turns only the selected style's sheets into cached data URLs | `new`, `prop`, `parse`, `invalidate` |
 | `cat/window/intents.luau` | Builds, validates and writes inbox files | `build`, `fileName`, `write` |
 | `cat/window/mirror.luau` | Decides whether to replay a host reaction | `check`, `key` |
 | `cat/window/blocks.luau` | Brings the cat block to the focused pane: focuses one in this tab, moves a floating or parked one, or opens one, floated or split | `open(ui, placement, settings)` |

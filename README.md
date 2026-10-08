@@ -30,7 +30,8 @@ Requires Tern 0.6.2 or later. Tested on macOS (Apple silicon); Linux runs in CI 
 
 ## Usage
 
-- The overlay cat is on by default in every window.
+- The overlay cat is on by default in every window, in the focused pane's top-right corner (any
+  corner via settings), and dives through a portal when you switch panes.
 - **Open cat** in the palette opens the interactive block as a floating card.
 - Click the sprite to pet, double-click to play, right-click for more.
 - `ctrl+alt+cmd+c` hides or shows the overlay.

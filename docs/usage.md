@@ -4,8 +4,11 @@ Detailed reference. Settings: [configuration.md](configuration.md). Privacy: [se
 
 ## First steps
 
-1. After install, every Tern window shows the overlay cat in the bottom-right corner of the
-   focused pane. You do not have to do anything else.
+1. After install, every Tern window shows the overlay cat in the top-right corner of the focused
+   pane (`rendering.overlay_position` picks another corner). When you switch panes, tabs or
+   sessions, it dives into a portal and climbs out of one in the newly focused pane
+   (`rendering.pane_transition`: `portal`, `vent`, `box` or `off`; nothing with reduced
+   motion). You do not have to do anything else.
 2. Open the interactive block from the command palette:
    - **Open cat** (group Tern Cat) opens it as a floating card in the bottom-right corner of the
      focused pane. If the focused tab already shows a cat block (tiled or floating), it focuses
@@ -61,6 +64,11 @@ Detailed reference. Settings: [configuration.md](configuration.md). Privacy: [se
   pointer (overlay)"; off in the `quiet_office` preset). With reduced motion the cat shows the
   first frame of each reaction instead. Packs without a `look` or `swat` sheet use their fallback
   animation or its first frame.
+- At top corners the cat covers the end of the first visible rows (right prompts, timestamps,
+  status lines of full-screen programs); choose another corner on Settings > Appearance >
+  Overlay corner, or change the gap with `rendering.overlay_offset_px`.
+- A pacing cat jumps back to its resting spot in the frame you switch away from its pane, then
+  dives there.
 
 ### Global hide chord
 
@@ -111,7 +119,7 @@ There are 20 animations. A pack that lacks one falls back along a chain that end
 | Animation | Triggered by |
 |---|---|
 | `idle`, `sit`, `blink`, `groom`, `stretch`, `look` | Ambient choice, weighted by personality, mood and preset. A hungry `look` may come with a meow (`talkativeness`). |
-| `walk` | Ambient pacing (`allow_pacing`; not with reduced motion). The overlay cat paces along the bottom of the pane; pointer reactions keep working while it walks. |
+| `walk` | Ambient pacing (`allow_pacing`; not with reduced motion). The overlay cat paces along the edge of its corner, into the pane and back; pointer reactions keep working while it walks. |
 | `sleep` | Low energy, you being away for 2-10 minutes (after a `groom` or `stretch` to settle), quiet hours, snooze (`allow_idle_sleep`). |
 | `wake` | Leaving sleep: rested, or when idle naps are turned off. |
 | `pet` | Pet. |

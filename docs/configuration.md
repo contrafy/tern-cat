@@ -109,10 +109,13 @@ All numbers from 0 to 1. The settings page shows them as percentages.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `overlay` | boolean | `true` | Show the decorative overlay cat in every window. Toggled by **Hide or show the overlay cat**, the global chord, the block's Overlay button or `h`. |
+| `overlay_position` | `"top-right"`, `"top-left"`, `"bottom-right"`, `"bottom-left"` | `"top-right"` | Corner of the focused pane the overlay cat rests in. It paces along that corner's edge into the pane. Top corners overlap the right (or left) end of the first visible rows, which are usually empty because output is left-aligned; right prompts, timestamps and full-screen programs may draw there, so pick another corner if it covers something you need. Settings page: Appearance > Overlay corner. |
+| `overlay_offset_px` | integer 0-200 | `12` | Gap in CSS px between the overlay cat and the two pane edges at its corner. With a pane transition the cat sits far enough from the edges for its prop to fit (16 px horizontally and, at bottom corners, 24 px at the default scale). |
 | `overlay_scale` | integer 1-8 | `2` | Pixel scale of the overlay sprite. |
 | `block_scale` | integer 1-12 | `4` | Pixel scale of the sprite in the block. |
 | `reduced_motion` | `"follow_tern"`, `"on"`, `"off"` | `"follow_tern"` | `on`: still frames in the overlay and the block. `follow_tern`: the overlay follows Tern's reduced-motion setting; the block keeps animating (the host cannot read that setting). `off`: does not override Tern: when Tern reduces motion, its stylesheet stops every animation, including the cat's. |
 | `block_placement` | `"float"`, `"split"` | `"float"` | How the palette command **Open cat** (and **Cat settings**) brings the cat to the focused pane when its tab does not already show one: a floating card in the bottom-right corner of the focused pane (moving a cat card that floats in another tab or is parked), or a split beside it. If floating fails the block stays a split. Tern's own **New Tern Cat block** ignores this key. |
+| `pane_transition` | `"portal"`, `"vent"`, `"box"`, `"off"` | `"portal"` | When the focused pane changes (focus, new pane, tab or session switch), the overlay cat dives into a swirly portal, floor vent or cardboard box in the pane it leaves (when that pane is still on screen) and climbs out of one in the pane it enters. `off`: it simply appears in the new pane. Reduced motion always turns it off. Settings page: Appearance > Pane switch. |
 
 ### `behavior`
 
@@ -195,7 +198,8 @@ every 2 seconds.
   `behavior.allow_pane_reactions`, `behavior.allow_idle_sleep`, `behavior.allow_pacing`,
   `behavior.allow_pointer_reactions`,
   `behavior.focus_mode`, `sound.enabled`, `sound.volume`, `rendering.overlay`,
-  `rendering.reduced_motion`, `quiet.hours_enabled`, `quiet.start`, `quiet.stop`,
+  `rendering.overlay_position`, `rendering.overlay_offset_px`, `rendering.reduced_motion`,
+  `rendering.pane_transition`, `quiet.hours_enabled`, `quiet.start`, `quiet.stop`,
   `needs.enabled`.
 - Carly is held to less than that, because it calls exports without asking you: it may set
   `sound.enabled` and `behavior.allow_pointer_reactions` only to `false`, and
