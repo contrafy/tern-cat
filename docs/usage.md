@@ -49,6 +49,19 @@ Detailed reference. Settings: [configuration.md](configuration.md). Privacy: [se
   is deleted. If it was the cat's appearance, the cat switches back to Orange Menace in the block
   and, within about 3 seconds, in every window. Bundled packs cannot be removed.
 
+### On the overlay cat
+
+- Move the pointer near the overlay cat (within about 48 px) or onto it: it plays `look`.
+- Press on it or near it: it swats (`swat`) and holds the pose for about 0.7 s after you let go.
+- These reactions are visual only. The click, drag or key still goes to the terminal (focus,
+  text selection and programs that read the mouse work as usual), the pointer keeps the
+  terminal's cursor, and nothing is counted: a hover or press is not a pet. Pet the cat in the
+  block.
+- Turn them off with `behavior.allow_pointer_reactions: false` (settings label "React to the
+  pointer (overlay)"; off in the `quiet_office` preset). With reduced motion the cat shows the
+  first frame of each reaction instead. Packs without a `look` or `swat` sheet use their fallback
+  animation or its first frame.
+
 ### Global hide chord
 
 `ctrl+alt+cmd+c` runs **Hide or show the overlay cat** in any window. It is free in Tern 0.6.2's
@@ -98,7 +111,7 @@ There are 20 animations. A pack that lacks one falls back along a chain that end
 | Animation | Triggered by |
 |---|---|
 | `idle`, `sit`, `blink`, `groom`, `stretch`, `look` | Ambient choice, weighted by personality, mood and preset. A hungry `look` may come with a meow (`talkativeness`). |
-| `walk` | Ambient pacing (`allow_pacing`; not with reduced motion). The overlay cat paces along the bottom of the pane. |
+| `walk` | Ambient pacing (`allow_pacing`; not with reduced motion). The overlay cat paces along the bottom of the pane; pointer reactions keep working while it walks. |
 | `sleep` | Low energy, you being away for 2-10 minutes (after a `groom` or `stretch` to settle), quiet hours, snooze (`allow_idle_sleep`). |
 | `wake` | Leaving sleep: rested, or when idle naps are turned off. |
 | `pet` | Pet. |
@@ -106,6 +119,7 @@ There are 20 animations. A pack that lacks one falls back along a chain that end
 | `eat` | Feed. |
 | `play`, `swat` | Play (`swat` is more likely with high `mischief`; needs `allow_swats`). Ambient swats. |
 | `swat` (after `ls`) | A successful listing command, sometimes. The block shows a fake `$ ls README.md src tests` line being swatted; your real terminal is never touched. |
+| `look`, `swat` (overlay only) | The pointer near or on the overlay cat (`look`), a press there (`swat`), while `allow_pointer_reactions` is on. Drawn by CSS for as long as the pointer stays; not a decision of the behavior engine, so it changes no needs or stats and is not limited by `allow_swats`. |
 | `happy` | A command succeeded (more likely after a long command or in a good mood). |
 | `disappointed` | A command failed. |
 | `flop` | Three failed test runs in a row (`allow_development_reactions`). |
@@ -197,9 +211,12 @@ command runs, and at volume 0; at most one sound every 2 seconds.
 
 ## Known limitations
 
-- The overlay cat is a CSS decoration, not a window. It cannot be clicked, dragged or petted
-  (input passes through it), it sits in the focused pane's bottom-right corner, and it cannot see
-  terminal text.
+- The overlay cat is a CSS decoration, not a window. It reacts to the pointer with CSS only, so
+  it cannot be dragged or petted (input passes through it), it sits in the focused pane's
+  bottom-right corner, and it cannot see terminal text.
+- Near and on the overlay cat look the same: Tern gives the cat and its proximity ring one
+  shared hover state. Hover reactions with the real pointer over a window that is not frontmost
+  are untested.
 - The cat cannot interact with real terminal text (for example knock a letter off real `ls`
   output). Tern has no API for cell geometry; the gag is a parody inside the block. The API that
   would enable it is proposed in [overlay-upstream-rfc.md](overlay-upstream-rfc.md).

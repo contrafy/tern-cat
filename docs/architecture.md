@@ -24,7 +24,7 @@ The design follows from the M0 findings in [sdk-capability-matrix.md](sdk-capabi
  │  behavior engine ─► block renderer               │   │                    │                     │
  │   (interactive home: sprite, buttons, settings)  │   │                    ▼                     │
  │  config.json writer (settings, intents)          │   │  overlay: tern.css sheet "overlay"       │
- │  sound player (tern.process.run, opt-in)         │   │  (pointer-events:none, per window)       │
+ │                                                  │   │  (CSS-only hover/press, per window)      │
  │                                                  │   │  Carly exports + context line            │
  └──────────────────────────────────────────────────┘   └──────────────────────────────────────────┘
 ```
@@ -67,12 +67,19 @@ Measured: 2-3 slices of 15-17 ms; see [performance.md](performance.md).
 | Renderer | Where | Interactive | Notes |
 |---|---|---|---|
 | Block | host, `tern.block.define("cat")` (kind `tern-cat.cat`) | yes: click (pet), double-click (play), right-click menu, buttons, keys when focused | Opened from the palette ("Open cat" from the window half, or Tern's "New Tern Cat block"). "Open cat" focuses a cat block already in the focused pane's tab; otherwise, with `rendering.block_placement = "float"`, it moves a cat card floating in another tab or parked with `cx.layout:float(pane, owner, "br")`, else opens one with `cx:new_block` beside and floats it, staying a split if floating fails; cat blocks tiled in other tabs are left alone (`cat/window/blocks.luau`, decisions logged at debug). One APNG per animation, every animation's image node kept in the view and toggled by `role` so late-attaching windows never show a missing blob; one-shot animations get a fresh key per play so they restart. Settings page uses the `prefs` node (7 pages). |
-| Overlay | window, `tern.css("overlay", css)` | no (`pointer-events: none`) | On by default. Anchored to the focused pane's bottom-right corner via `.tn-pane.on > .tn-body::after`; sprite-sheet `@keyframes` with `steps()` timing from the pack's `durations_ms`; pacing is a stepped `translateX`. The sheet is reinstalled only when the CSS text changes. Hidden (empty sheet) when toggled off, and while the focused pane is a cat block or a cat block floats over it, so it never covers the card's buttons. Still frame when `rendering.reduced_motion = "on"` or Tern's `reduce_motion` is `on`; Tern's own reduced-motion CSS also stops it. Never changes terminal content, input, selection or layout. |
+| Overlay | window, `tern.css("overlay", css)` | visual only: CSS `:hover`/`:active` reactions (`behavior.allow_pointer_reactions`); no input reaches the plugin | On by default. Anchored to the focused pane's bottom-right corner via `section.tn-pane.on > div.tn-body > div.tv > div.tv-fx.top::after` (Tern's top effects layer, `pointer-events: none`, so its `:hover` is local to its pseudo-elements); sprite-sheet `@keyframes` with `steps()` timing from the pack's `durations_ms`; pacing is a stepped `translateX`. With reactions on, the cat and an invisible 48 px proximity ring (`::before`) are `pointer-events: auto`: pointer near or on the cat plays `look`, pressing plays `swat` in the ring's content box while the cat hides, held 0.7 s after release by a delayed 0 s transition; both sheets resolve through the pack's fallbacks, still first frame under reduced motion, and the walk animation is repeated by name so pacing continues. The sheet is reinstalled only when the CSS text changes. Hidden (empty sheet) when toggled off, and while the focused pane is a cat block or a cat block floats over it, so it never covers the card's buttons. Still frame when `rendering.reduced_motion = "on"` or Tern's `reduce_motion` is `on`; Tern's own reduced-motion CSS also stops it. Never changes terminal content, input, selection or layout. |
 
 The overlay is a decoration, not a compositor: it cannot read or locate terminal text, so the
 "knock a character off `ls` output" gag is a parody inside the block (a fixed fake listing). The
 upstream API that would enable the real gag is proposed in
 [overlay-upstream-rfc.md](overlay-upstream-rfc.md).
+
+Pointer reactions have one hover bit: `:hover` exists per element, and the ring and the cat are
+pseudo-elements of the same host. `.tv-fx.top::after:hover` is rejected ("a pseudo-element must
+end the selector"), sibling hover through `+` is not re-evaluated, `~` and `:has()` are
+rejected, and Tern has no nested `pointer-events: none` element that could host the ring and
+the cat separately, so "near" and "on the cat" cannot be told apart. A CSS-only cat also cannot
+tell Lua it was touched, so hover and press never count as pets.
 
 ## Modules
 
@@ -101,7 +108,7 @@ All modules are `--!strict` and return a table of functions. Only the entries an
 |---|---|---|
 | `cat/render/animations.luau` | The 20 canonical animations and fallback chains ending in `idle` | `resolve(pack_animations, wanted)`, `isCanonical(name)` |
 | `cat/render/block.luau` | Block view: sprite stack, needs bars, stats, buttons, menus, `prefs` settings page, `ls` parody | `view(model, ui)` |
-| `cat/render/overlay.luau` | Overlay CSS generator (sanitized string output; optional `still`) | `css(params)` |
+| `cat/render/overlay.luau` | Overlay CSS generator (sanitized string output; optional `still`; optional hover/press reaction sheets with the proximity ring) | `css(params)`, `SELECTOR`, `HOST` |
 | `cat/sprite/png.luau` | PNG/APNG header parsing without decoding pixels | `inspect(bytes)` |
 | `cat/sprite/manifest.luau` | `pack.json` validation: limits, path segment rules, animation set | `validate(table, fs, root)`, `checkPath` |
 | `cat/sprite/loader.luau` | Discover bundled and user packs, validate, fall back to the default pack; the only folder a pack removal may delete | `loadAll(fs, roots)`, `select`, `removableDir(pack, user_root)` |
@@ -124,7 +131,7 @@ passes it to `sound.detect` and `sound.play`.
 | Module | Responsibility | Key functions |
 |---|---|---|
 | `cat/window/controller.luau` | The window loop behind injected ports: one self-rescheduling timer (next decision, kv poll every 2 s, config poll every 3 s), requests to intents, overlay toggle, reset confirmation (second run within 10 s), cover state, Carly snapshot and context. Never writes kv | `new`, `start`, `onWindowEvent`, `request`, `toggleOverlay`, `reloadConfig`, `confirmReset`, `setCovered`, `snapshot`, `context` |
-| `cat/window/presenter.luau` | One read-only behavior engine per window; command lines reduced to a category immediately; this window's running commands (focus mode, tracked even while the overlay is hidden; host `react.*` mirrors are skipped while busy); overlay parameters; local override until config agrees | `new`, `view`, `params`, `tick`, `react`, `observe`, `gesture`, `mirror`, `eventFor`, `setConfig`, `setCovered`, `visible` |
+| `cat/window/presenter.luau` | One read-only behavior engine per window; command lines reduced to a category immediately; this window's running commands (focus mode, tracked even while the overlay is hidden; host `react.*` mirrors are skipped while busy); overlay parameters, including the pointer reaction sheets (`HOVER_ANIMATION` look, `PRESS_ANIMATION` swat) when shown and allowed; local override until config agrees | `new`, `view`, `params`, `tick`, `react`, `observe`, `gesture`, `mirror`, `eventFor`, `setConfig`, `setCovered`, `visible` |
 | `cat/window/packs.luau` | Validates only the wanted and default packs (full scan only if both miss), resolves fallbacks, caches each sheet as a data URL; a pack without a built sheet uses its first frame; a cached pack whose `pack.json` is gone (removed) invalidates the cache. The controller reselects on every config poll | `new`, `select`, `asset`, `invalidate` |
 | `cat/window/intents.luau` | Builds, validates and writes inbox files | `build`, `fileName`, `write` |
 | `cat/window/mirror.luau` | Decides whether to replay a host reaction | `check`, `key` |

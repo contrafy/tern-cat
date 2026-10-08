@@ -55,7 +55,8 @@ Details: [docs/security-privacy.md](docs/security-privacy.md).
 
 ## Status
 
-- The overlay is decorative: it cannot be clicked, dragged or petted.
+- The overlay cat only looks and swats when you hover or press near it; clicks still go to the
+  terminal, and it cannot be dragged or petted.
 - No antics with real terminal text yet; the needed API is proposed in
   [docs/overlay-upstream-rfc.md](docs/overlay-upstream-rfc.md).
 - Autonomous AI behavior is disabled.

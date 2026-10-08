@@ -129,6 +129,7 @@ local EDITABLE: { [string]: boolean } = {
 	["behavior.allow_pane_reactions"] = true,
 	["behavior.allow_idle_sleep"] = true,
 	["behavior.allow_pacing"] = true,
+	["behavior.allow_pointer_reactions"] = true,
 	["behavior.focus_mode"] = true,
 	["behavior.reaction_cooldown_s"] = true,
 	["quiet.hours_enabled"] = true,

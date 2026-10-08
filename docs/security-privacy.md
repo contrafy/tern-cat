@@ -20,7 +20,7 @@ to verify them.
 | Local files | A sprite pack escapes its directory or injects CSS | Path validation before any read; CSS values sanitized |
 | Network | Telemetry or data exfiltration | No network API is used |
 | AI agent (Carly) | The cat triggers a full-power agent turn, or an agent abuses exported functions | Autonomous AI disabled; exports validate arguments and return no private data |
-| Focus and input | The overlay steals clicks, selection or keystrokes | Overlay is CSS with `pointer-events: none` |
+| Focus and input | The overlay steals clicks, selection or keystrokes | Overlay is CSS only; its pointer reactions are `:hover`/`:active` styles that Tern's terminal ignores for input (verified: clicks, drags, typing and mouse reporting still reach the pane) |
 
 Out of scope: a malicious Tern build, other plugins (which have the same unrestricted access), and
 a user who edits the plugin source.
@@ -121,16 +121,33 @@ which `cat/host/brain.luau` passes only to `sound.detect` and `sound.play`.
 ### The overlay is visual only
 
 The on-by-default overlay is a stylesheet installed with `tern.css` from the window half
-(`cat/render/overlay.luau`). It draws a `::after` pseudo-element on the focused pane's body with
+(`cat/render/overlay.luau`). It draws `::after` (the cat) and, with
+`behavior.allow_pointer_reactions` on, `::before` (an invisible proximity ring around the cat) on
+the focused pane's top effects layer (`.tv > .tv-fx.top`, which Tern styles
+`pointer-events: none`). With reactions on, both pseudo-elements are `pointer-events: auto`
+within their own boxes so their host gets `:hover` and `:active`, which swap the cat's sprite
+sheet (look, swat). The cursor is not changed. With reactions off the cat is
 `pointer-events: none`.
 
-M0 verified ([sdk-capability-matrix.md](sdk-capability-matrix.md#2-drawing-over-panes)):
+No pointer data reaches plugin code: `:hover`/`:active` are evaluated by Tern's style engine
+only, the plugin installs a fixed sheet and is never told whether or where the pointer is. A
+hover or press is not a pet and changes no state.
 
-- clicks, focus, selection and typing pass through the cat to the terminal;
-- `cx.session:read` returned identical content with the overlay on and off (a one-off check during
-  the M0 experiment, not something the plugin does).
+Verified in a sandbox window with Tern 0.6.2 and the harness's synthetic pointer (`tern ctl
+move/down/up`), reactions on:
 
-It is frozen by Tern's reduced-motion setting and can be hidden or snoozed.
+- a click on the cat or ring leaves the pane focused with the terminal input focused; a click
+  next to it in the other split focuses that pane, as without the overlay;
+- a drag that starts on the cat, starts in the ring, or crosses the cat selects terminal text;
+- with xterm mouse reporting on (`printf '\e[?1000h'; cat -v`), a click on the cat reaches the
+  program as press and release at the cell under the cat, and typed text still reaches it.
+
+M0 also verified ([sdk-capability-matrix.md](sdk-capability-matrix.md#2-drawing-over-panes)) that
+`cx.session:read` returned identical content with the overlay on and off (a one-off check during
+the M0 experiment, not something the plugin does).
+
+It is frozen by Tern's reduced-motion setting and can be hidden or snoozed. Not tested: hover with
+the real pointer over a window that is not frontmost.
 
 ### Pack validation
 
@@ -144,9 +161,10 @@ Sprite and sound packs are data, never code ([sprite-pack-spec.md](sprite-pack-s
 - Sizes are bounded before reading: 1 MiB per file, 512 files, 16 MiB per pack, 64 KiB manifest.
 - Images are inspected by header only (`cat/sprite/png.luau`); pixels are never decoded by the
   plugin.
-- The overlay CSS generator sanitizes every interpolated value (`cat/render/overlay.luau`): the
-  sheet URL must be a validated relative path or a base64-only `data:image/png` URL, keyframe
-  names are reduced to `[a-z0-9-]`, and every number is clamped. A pack cannot inject CSS.
+- The overlay CSS generator sanitizes every interpolated value (`cat/render/overlay.luau`): each
+  sheet URL (the current animation's and the hover/press reaction sheets) must be a validated
+  relative path or a base64-only `data:image/png` URL, keyframe names are reduced to `[a-z0-9-]`,
+  and every number is clamped. A pack cannot inject CSS.
 - A user pack cannot replace a bundled pack (duplicate ids are ignored).
 - Removing a pack (Settings > Appearance, two clicks) is the only delete of user-installed files.
   It refuses bundled packs and any folder that is not a direct child of `<data>/packs/`
@@ -200,7 +218,8 @@ Also review:
 - `cat/core/commands.luau`: the intent allowlist.
 - `cat/integrations/carly.luau`: what each export returns.
 - `cat/integrations/sound.luau`: the player argv.
-- `cat/render/overlay.luau`: `pointer-events: none` and value sanitizing.
+- `cat/render/overlay.luau`: pointer state limited to the cat and ring boxes, no `cursor`, and
+  value sanitizing (reaction sheets are checked like the main sheet).
 
 A change that weakens any guarantee in this document is a review blocker
 ([CONTRIBUTING.md](../CONTRIBUTING.md#safety-invariants)).

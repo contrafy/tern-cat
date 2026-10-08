@@ -101,6 +101,23 @@ the block closed, the first five samples (75 s) were 1.03-1.48% and the rest 0.5
 block floated the samples over 1% came in the second half of the run (minutes 6-10), when the cat
 presumably changed animation (the animation sequence was not logged).
 
+### Pointer reactions (short runs)
+
+One sandbox window, `orange_menace`, a split with filled scrollback, pointer driven with
+`tern ctl move/down/up`; window process CPU from `ps` time deltas, percent of one core.
+
+| State | Window CPU |
+|---|---|
+| Reactions off, pointer away (30 s, two runs) | 2.13%, 1.53% |
+| Reactions on, pointer away (30 s, two runs) | 1.50%, 0.87% |
+| Reactions on, pointer resting on the cat (20 s) | 0.20-0.85% |
+| Reactions on, pointer cycling cat / ring / away every 0.5 s (20 s) | 1.20% |
+| Reactions on, pointer moving elsewhere every 0.5 s (20 s) | 3.40% |
+
+The spread comes from the ambient animation in progress, not from the reactions: on and off
+overlap, and a resting hover is cheap because the one-shot `look` ends on its last frame. Overlay
+setup at load went from 3.5-4.3 ms to 7.5-7.6 ms (two more sheets turned into data URLs once).
+
 ### Memory
 
 Incremental memory baseline (method above). MiB per repeat, after a 2-minute settle:

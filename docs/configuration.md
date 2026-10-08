@@ -68,7 +68,7 @@ weights ([architecture.md](architecture.md#behavior-engine)).
 | Preset | Changes from the defaults |
 |---|---|
 | `orange_menace` (default) | None. |
-| `quiet_office` | `personality`: mischief 0.3, energy 0.4, talkativeness 0.05. `behavior`: `allow_visual_obscuring`, `allow_swats` and `allow_pacing` off, `focus_mode` on, `reaction_sample_rate` 0.1, `reaction_cooldown_s` 180. No overlay over terminal panes; fewer swats and hops; the cat keeps still while commands run. |
+| `quiet_office` | `personality`: mischief 0.3, energy 0.4, talkativeness 0.05. `behavior`: `allow_visual_obscuring`, `allow_swats`, `allow_pacing` and `allow_pointer_reactions` off, `focus_mode` on, `reaction_sample_rate` 0.1, `reaction_cooldown_s` 180. No overlay over terminal panes; fewer swats and hops; no pointer reactions; the cat keeps still while commands run. |
 | `chaos` | `personality`: curiosity 1, mischief 1, energy 0.95, talkativeness 0.4. Every `allow_*` toggle on, `reaction_sample_rate` 0.8, `reaction_cooldown_s` 10. About three times as many swats and hops, twice as much walking. |
 | `zen` | `personality`: curiosity 0.4, mischief 0.1, energy 0.15, talkativeness 0.05. `allow_visual_obscuring`, `allow_swats` and `allow_pacing` off, `allow_idle_sleep` on, `reaction_sample_rate` 0.05, `reaction_cooldown_s` 600. No overlay over terminal panes; mostly sitting and sleeping. |
 
@@ -126,6 +126,7 @@ All numbers from 0 to 1. The settings page shows them as percentages.
 | `allow_pane_reactions` | boolean | `true` | `look`/`hop` when a pane opens or closes. |
 | `allow_idle_sleep` | boolean | `true` | Naps when tired or when you are away. |
 | `allow_pacing` | boolean | `true` | `walk` (the overlay cat paces along the pane's bottom edge). |
+| `allow_pointer_reactions` | boolean | `true` (`false` in `quiet_office`) | The overlay cat looks at the pointer when it is near and swats when you press on it; visual only: clicks, selection and typing still go to the terminal, and it does not count as a pet. Settings label "React to the pointer (overlay)". |
 | `focus_mode` | boolean | `false` (`true` in `quiet_office`) | Keep still while a command runs (see below). |
 | `reaction_sample_rate` | number 0-1 | `0.35` | Chance that a finished command gets a reaction. |
 | `reaction_cooldown_s` | integer 0-3600 | `45` | Minimum seconds between reactions of the same kind. |
@@ -192,12 +193,14 @@ every 2 seconds.
   only these keys: `behavior.activity`, `behavior.allow_visual_obscuring`, `behavior.allow_swats`,
   `behavior.allow_command_reactions`, `behavior.allow_development_reactions`,
   `behavior.allow_pane_reactions`, `behavior.allow_idle_sleep`, `behavior.allow_pacing`,
+  `behavior.allow_pointer_reactions`,
   `behavior.focus_mode`, `sound.enabled`, `sound.volume`, `rendering.overlay`,
   `rendering.reduced_motion`, `quiet.hours_enabled`, `quiet.start`, `quiet.stop`,
   `needs.enabled`.
 - Carly is held to less than that, because it calls exports without asking you: it may set
-  `sound.enabled` only to `false`, and `quiet.hours_enabled` and `behavior.focus_mode` only to
-  `true`, and may not change `sound.volume`, `quiet.start` or `quiet.stop`. Turning sound on,
+  `sound.enabled` and `behavior.allow_pointer_reactions` only to `false`, and
+  `quiet.hours_enabled` and `behavior.focus_mode` only to `true`, and may not change
+  `sound.volume`, `quiet.start` or `quiet.stop`. Turning sound or pointer reactions on,
   loosening quiet hours or turning focus mode off takes the block's settings page or an edit to
   `config.json`.
 

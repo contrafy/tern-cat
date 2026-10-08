@@ -18,6 +18,8 @@ export type View = {
 	animation: T.Animation,
 	still: boolean,
 	pace: boolean,
+	-- CSS-only pointer reactions (look while near, swat when pressed).
+	reactions: boolean,
 	facing: Facing,
 	seq: number,
 }
@@ -29,6 +31,16 @@ export type Asset = {
 	durations_ms: { number },
 	loop: boolean,
 }
+
+-- Sheets for the pointer reactions, already resolved through the pack's fallbacks.
+export type ReactionAssets = {
+	hover: Asset?,
+	press: Asset?,
+}
+
+-- Animations the overlay plays while the pointer is near the cat and while it is pressed.
+local HOVER_ANIMATION: T.Animation = "look"
+local PRESS_ANIMATION: T.Animation = "swat"
 
 export type Presenter = {
 	clock: T.Clock,
@@ -254,18 +266,27 @@ local function view(p: Presenter): View
 	local current = p.engine.current
 	local animation: T.Animation = if current then current.animation else "idle"
 	local isStill = still(p)
+	-- The overlay is drawn over terminal panes, so it only shows while covering text is allowed.
+	local hidden = not visible(p) or p.covered or not p.config.behavior.allow_visual_obscuring
 	return {
-		-- The overlay is drawn over terminal panes, so it only shows while covering text is allowed.
-		hidden = not visible(p) or p.covered or not p.config.behavior.allow_visual_obscuring,
+		hidden = hidden,
 		animation = animation,
 		still = isStill,
 		pace = animation == "walk" and p.config.behavior.allow_pacing and not isStill,
+		reactions = not hidden and p.config.behavior.allow_pointer_reactions,
 		facing = p.facing,
 		seq = p.seq,
 	}
 end
 
-local function params(p: Presenter, v: View, asset: Asset?): overlay.Params
+local function reaction(a: Asset?): overlay.Reaction?
+	if a == nil then
+		return nil
+	end
+	return { sheet_url = a.sheet_url, durations_ms = a.durations_ms, loop = a.loop }
+end
+
+local function params(p: Presenter, v: View, asset: Asset?, reactions: ReactionAssets?): overlay.Params
 	if asset == nil or v.hidden then
 		return { hidden = true } :: any
 	end
@@ -282,10 +303,15 @@ local function params(p: Presenter, v: View, asset: Asset?): overlay.Params
 		still = v.still,
 		hidden = false,
 		anim_key = key,
+		reactions = if v.reactions and reactions
+			then { hover = reaction(reactions.hover), press = reaction(reactions.press) }
+			else nil,
 	}
 end
 
 return {
+	HOVER_ANIMATION = HOVER_ANIMATION,
+	PRESS_ANIMATION = PRESS_ANIMATION,
 	MIN_DELAY_MS = MIN_DELAY_MS,
 	MAX_DELAY_MS = MAX_DELAY_MS,
 	new = new,

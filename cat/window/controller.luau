@@ -174,10 +174,18 @@ local function render(c: Controller)
 	local p = c.presenter
 	local v = presenterMod.view(p)
 	local asset: packsMod.Asset? = nil
+	local reactions: presenterMod.ReactionAssets? = nil
 	if not v.hidden and c.pack then
-		asset = packsMod.asset(c.packs, c.pack :: T.LoadedPack, v.animation)
+		local pack = c.pack :: T.LoadedPack
+		asset = packsMod.asset(c.packs, pack, v.animation)
+		if v.reactions then
+			reactions = {
+				hover = packsMod.asset(c.packs, pack, presenterMod.HOVER_ANIMATION),
+				press = packsMod.asset(c.packs, pack, presenterMod.PRESS_ANIMATION),
+			}
+		end
 	end
-	local css = overlay.css(presenterMod.params(p, v, asset))
+	local css = overlay.css(presenterMod.params(p, v, asset, reactions))
 	if css ~= c.css_last then
 		c.ports.css(SHEET, css)
 		c.css_last = css

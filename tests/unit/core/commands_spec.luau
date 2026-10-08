@@ -205,6 +205,8 @@ describe("commands", function()
 			rejects(factories.intent("set_config", { key = "quiet.hours_enabled", value = false }, carly))
 			-- Focus mode keeps the cat still during commands; only the user may turn it back off.
 			rejects(factories.intent("set_config", { key = "behavior.focus_mode", value = false }, carly))
+			-- Pointer reactions are visual only, but turning them on is still the user's call.
+			rejects(factories.intent("set_config", { key = "behavior.allow_pointer_reactions", value = true }, carly))
 			rejects(factories.intent("set_config", { key = "quiet.start", value = "23:00" }, carly))
 			rejects(factories.intent("set_config", { key = "quiet.stop", value = "06:00" }, carly))
 			rejects(
@@ -228,6 +230,7 @@ describe("commands", function()
 			expect(
 				accepts("set_config", { key = "behavior.focus_mode", value = true }, carly).args.values["behavior.focus_mode"]
 			).toBe(true)
+			accepts("set_config", { key = "behavior.allow_pointer_reactions", value = false }, carly)
 		end)
 
 		it("keeps sound and quiet settings available to the user's own surfaces", function()
@@ -235,6 +238,7 @@ describe("commands", function()
 				accepts("set_config", { key = "sound.enabled", value = true }, { source = source })
 				accepts("set_config", { key = "quiet.start", value = "23:00" }, { source = source })
 				accepts("set_config", { key = "behavior.focus_mode", value = false }, { source = source })
+				accepts("set_config", { key = "behavior.allow_pointer_reactions", value = true }, { source = source })
 			end
 		end)
 	end)

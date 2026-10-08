@@ -71,7 +71,7 @@ Both ran against an isolated config, daemon and log directory (see [Dev isolatio
 | Scope | A `tern.css` sheet exists only in the calling window's VM. Manifest `styles` apply in every window. The docs say both are machine-wide, but the experiment shows `tern.css` is per-window | VERIFIED (docs differ) |
 | Reload | A sheet installed from a command handler is dropped on reload. A sheet installed at entry load survives. `tern.css(name, "")` leaves an empty sheet in place | VERIFIED |
 | Follow focus with zero Lua | `section.tn-pane.on > .tn-body::after { position:absolute; right:12px; bottom:12px }` follows the focused pane across `split` and `focus` | VERIFIED |
-| Interactivity | Not possible: pass-through requires `pointer-events:none`, and the window half has no DOM or class API | VERIFIED |
+| Interactivity | No input reaches the window half (no DOM or class API). CSS-only: a `pointer-events:auto` pseudo-element on `.tv > .tv-fx.top` (itself `pointer-events:none`) gives that host a cat-local `:hover`/`:active` while clicks, drags, typing and mouse reporting still reach the terminal (later spike; used by the overlay's pointer reactions) | VERIFIED |
 | Floated block (PiP) | `cx:new_block(kind, args, "beside")` then `cx.layout:float(pane, owner, "br")` gives a 465x278 CSS px card (59x14 cells) over the owner. The owner keeps 160x45 cells and keeps keyboard focus. A single click does not steal focus | VERIFIED |
 | Float limits | The plugin can set only the corner. `layout:resize` on a float returns `false`; only the user can resize it. `how="pip"` raises. The host `resize` hook did not fire for a float, and `cx.cols`/`rows` stayed at 80x24 | VERIFIED |
 
