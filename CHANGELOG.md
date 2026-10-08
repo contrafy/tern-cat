@@ -34,6 +34,31 @@ Targets Tern 0.6.2.
   `uv run tools/validate_packs.py` (Pillow cross-check, sprite and sound packs).
 - Asset tooling: `tools/build_packs.py`, `tools/build_sounds.py`, `tools/make_fixtures.py`, and
   `tools/pack_build.py` for building the derived APNG and sprite sheet files of any pack.
+- Host half (`host.luau`, `cat/host/*`): the daemon-side brain is the single writer of the cat's
+  state (`tern.kv`), applies intents from the file inbox, counts commands once from host hooks
+  (category only), recovers from a corrupt `kv.json` or `config.json` without crashing, and
+  serves the interactive "Tern Cat" block: APNG sprite per animation, needs bars and stats,
+  buttons, right-click menu, focused-block keys (`p o f space s h z`, Escape), a 7-page settings
+  page that writes `config.json`, and the block-only `ls` swat parody. Opt-in sound from the host
+  half (`afplay` on macOS; `pw-play`/`paplay`/`aplay` on Linux).
+- Window half (`window.luau`, `cat/window/*`): per-window overlay cat drawn with `tern.css`, on
+  by default, anchored to the focused pane and hidden while a cat block is focused or floats over
+  it; palette commands in the Tern Cat group (open, pet, poke, feed, play, toggle-overlay,
+  snooze, wake, reload-config, settings, export-identity, reset-identity, clear-ai-state); the
+  global `ctrl+alt+cmd+c` hide chord; "Open cat" floats the block in the bottom-right corner
+  (`rendering.block_placement`); host reactions mirrored across windows; module loading in
+  timer slices to stay within the 50 ms window budget.
+- Carly integration: 12 validated exports (`status`, `pet`, `poke`, `feed`, `play`, `perform`,
+  `set_personality`, `configure`, `snooze`, `wake`, `explain`, `ai_status`) and a context line of
+  at most 160 characters with no command text or paths.
+- `rendering.block_placement` config key (`float` or `split`).
+- Safety guard `tests/unit/safety_spec.luau`: fails the test run if shipped sources call APIs
+  that type into panes, read terminal output, use the network or clipboard, change Tern settings
+  or keybinds, start Carly turns, or spawn processes outside the host sound player.
+- `scripts/visual.sh` (headless block goldens, light and dark) and `scripts/smoke-window.sh`
+  (sandboxed two-window smoke test).
+- Documentation: README, configuration reference (`docs/configuration.md`), performance report
+  (`docs/performance.md`), updated architecture.
 - Development tooling: Lune test runner, StyLua, selene, luau-lsp type checking against the
   Tern SDK types, `scripts/check.sh`, sandboxed Tern environment (`scripts/sandbox-env.sh`,
   `scripts/dev-link.sh`) and CI on macOS and Linux.
