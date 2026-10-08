@@ -14,13 +14,15 @@ Writes, for every pack in tools/art/palettes.py:
   assets/packs/<id>/LICENSE.txt              attribution notice
 and docs/images/packs-preview.png (contact sheet on light and dark backgrounds).
 
-Output is deterministic: no PNG metadata, fixed compression, stable ordering.
+Output is deterministic: no PNG metadata, fixed compression, stable ordering. Compressed
+bytes still depend on the platform's zlib, so an existing image is only rewritten when its
+decoded content changes (packlib.same_image); files no longer produced are deleted.
 """
 
 from __future__ import annotations
 
+import io
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -33,7 +35,7 @@ from art.animations import Anim, all_animations  # noqa: E402
 from art.cat import SIZE, render  # noqa: E402
 from art.palettes import CAT_INDICES, PACKS, rgba  # noqa: E402
 from art.raster import Canvas  # noqa: E402
-from packlib import encode_apng, encode_png, encode_sheet  # noqa: E402
+from packlib import encode_apng, encode_png, encode_sheet, same_image  # noqa: E402
 
 AUTHOR = "Ahmad Raaiyan"
 LICENSE = "CC-BY-4.0"
@@ -63,17 +65,29 @@ def to_image(canvas: Canvas, pack_id: str) -> Image.Image:
     return im
 
 
-def save_png(im: Image.Image, path: Path) -> None:
+def write_image(path: Path, data: bytes, keep: set[Path]) -> None:
+    """Writes `data` unless `path` already decodes to the same image.
+
+    Compressed bytes depend on the platform's zlib, so rebuilding on another OS must not
+    rewrite committed images whose content is unchanged.
+    """
+    keep.add(path)
+    if path.is_file() and same_image(path.read_bytes(), data):
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(encode_png(im))
-
-
-def save_apng(frames: list[Image.Image], durations: list[int], loop: bool, path: Path) -> None:
-    try:
-        data = encode_apng(frames, durations, loop)
-    except ValueError as e:
-        raise SystemExit(f"{path}: {e}") from None
     path.write_bytes(data)
+
+
+def prune(root: Path, keep: set[Path]) -> None:
+    """Deletes files under `root` that this build did not produce, then empty directories."""
+    if not root.is_dir():
+        return
+    for p in sorted(root.rglob("*"), reverse=True):
+        if p.is_file() or p.is_symlink():
+            if p not in keep:
+                p.unlink()
+        elif p.is_dir() and not any(p.iterdir()):
+            p.rmdir()
 
 
 def hitbox(canvases: list[Canvas]) -> list[int]:
@@ -100,9 +114,7 @@ def check_frames(anim: Anim, canvases: list[Canvas]) -> None:
 
 def build_pack(pack_id: str, anims: list[Anim], rendered: dict[str, list[Canvas]]) -> dict[str, list[Image.Image]]:
     out = PACKS_DIR / pack_id
-    for sub in ("frames", "build"):
-        if (out / sub).exists():
-            shutil.rmtree(out / sub)
+    keep: set[Path] = set()
     images: dict[str, list[Image.Image]] = {}
     manifest_anims: dict[str, dict] = {}
     for anim in anims:
@@ -113,13 +125,16 @@ def build_pack(pack_id: str, anims: list[Anim], rendered: dict[str, list[Canvas]
         rel_frames = []
         for i, im in enumerate(frames, start=1):
             rel = f"frames/{anim.name}/{i:02d}.png"
-            save_png(im, out / rel)
+            write_image(out / rel, encode_png(im), keep)
             rel_frames.append(rel)
         apng_rel = f"build/{anim.name}.apng"
-        (out / "build").mkdir(parents=True, exist_ok=True)
-        save_apng(frames, durations, anim.loop, out / apng_rel)
+        try:
+            apng = encode_apng(frames, durations, anim.loop)
+        except ValueError as e:
+            raise SystemExit(f"{out / apng_rel}: {e}") from None
+        write_image(out / apng_rel, apng, keep)
         sheet_rel = f"build/{anim.name}.sheet.png"
-        (out / sheet_rel).write_bytes(encode_sheet(frames, SIZE, SIZE))
+        write_image(out / sheet_rel, encode_sheet(frames, SIZE, SIZE), keep)
         manifest_anims[anim.name] = {
             "frames": rel_frames,
             "durations_ms": durations,
@@ -129,6 +144,8 @@ def build_pack(pack_id: str, anims: list[Anim], rendered: dict[str, list[Canvas]
             "apng": apng_rel,
             "sheet": sheet_rel,
         }
+    for sub in ("frames", "build"):
+        prune(out / sub, keep)
     info = PACKS[pack_id]
     manifest = {
         "schema_version": 1,
@@ -178,7 +195,9 @@ def build_preview(all_images: dict[str, dict[str, list[Image.Image]]]) -> None:
             frame = all_images[pack_id][name][idx].resize((tile, tile), Image.NEAREST)
             sheet.alpha_composite(frame, (x, y))
     PREVIEW.parent.mkdir(parents=True, exist_ok=True)
-    sheet.convert("RGB").save(PREVIEW, format="PNG", optimize=True)
+    buf = io.BytesIO()
+    sheet.convert("RGB").save(buf, format="PNG", optimize=True)
+    write_image(PREVIEW, buf.getvalue(), set())
 
 
 def main() -> None:
