@@ -145,11 +145,19 @@ local function blockUi(cx: WindowCx): blocks.Ui
 		focused = function(): number?
 			return cx.session:focused()
 		end,
-		catBlocks = function(): { number }
+		tabOf = function(pane: number): number?
+			return cx.session:tab_of(pane)
+		end,
+		catBlocks = function(): { blocks.CatBlock }
 			local out = {}
 			for _, info in cx.session:panes() do
 				if info.block == BLOCK_KIND then
-					table.insert(out, info.pane)
+					table.insert(out, {
+						pane = info.pane,
+						tab = info.tab,
+						floating = info.floating == true,
+						parked = info.parked == true,
+					})
 				end
 			end
 			return out
@@ -160,11 +168,17 @@ local function blockUi(cx: WindowCx): blocks.Ui
 		float = function(pane: number, owner: number): (boolean, string?)
 			return cx.layout:float(pane, owner, "br")
 		end,
+		unpark = function(pane: number): (boolean, string?)
+			return cx.layout:unpark(pane)
+		end,
 		focus = function(pane: number)
 			cx.layout:focus(pane)
 		end,
 		send = function(pane: number, payload: { [string]: any })
 			cx.session:event(pane, payload)
+		end,
+		debug = function(message: string)
+			tern.log.debug(`tern-cat: {message}`)
 		end,
 	}
 end
@@ -214,9 +228,11 @@ end
 local function openBlock(cx: WindowCx, settings: boolean)
 	local opened = blocks.open(blockUi(cx), ctl.config.rendering.block_placement, settings)
 	if opened.error then
+		tern.log.warn(`tern-cat: {opened.error}`)
 		toast(cx, "error", TITLE, opened.error)
 	elseif opened.note then
-		tern.log.info(`tern-cat: {opened.note}`)
+		tern.log.warn(`tern-cat: {opened.note}`)
+		toast(cx, "info", TITLE, `Opened as a split: {opened.note}`)
 	end
 	updateCover(cx)
 end

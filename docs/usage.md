@@ -8,10 +8,14 @@ Detailed reference. Settings: [configuration.md](configuration.md). Privacy: [se
    focused pane. You do not have to do anything else.
 2. Open the interactive block from the command palette:
    - **Open cat** (group Tern Cat) opens it as a floating card in the bottom-right corner of the
-     focused pane, or focuses the existing one. With `rendering.block_placement: "split"` it
-     opens as a split beside the focused pane instead. If floating fails it stays a split.
-   - **New Tern Cat block** (Tern's own block catalog entry) opens it like any other block, in a
-     new tab or split.
+     focused pane. If the focused tab already shows a cat block (tiled or floating), it focuses
+     that one instead. A cat card floating in another tab, or a parked cat, moves over the focused
+     pane; a cat block tiled into another tab is left there and a new card opens. With
+     `rendering.block_placement: "split"` it opens as a split beside the focused pane instead (a
+     parked cat is dealt back beside it). If floating fails the block stays a split, and a toast
+     says why.
+   - **New Tern Cat block** (Tern's own block catalog entry, not a tern-cat command) opens it like
+     any other block, in a new tab or split; it never floats.
 3. While the block is focused, or floats over the focused pane, the overlay cat hides so it does
    not cover the card.
 
@@ -70,7 +74,7 @@ All are in the group **Tern Cat**; their action names are `plugin.tern-cat.<id>`
 
 | Title | Id | What it does |
 |---|---|---|
-| Open cat | `open` | Open (or focus) the block, floated or split per `rendering.block_placement`. |
+| Open cat | `open` | Bring the cat to the focused pane, floated or split per `rendering.block_placement`; focus it if this tab already shows one. |
 | Pet the cat | `pet` | Pet. |
 | Poke the cat | `poke` | Poke. |
 | Feed the cat | `feed` | Feed. |
