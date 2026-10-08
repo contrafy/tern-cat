@@ -27,7 +27,11 @@ local MAX_TICK_MS = 5000
 local CATCHUP_EVERY_S = 60
 local MAX_NOTES = 5
 local MAX_ASSET_BYTES = 1024 * 1024
-local PACK_NAME_PATTERN = "^[a-z][a-z0-9-]*$"
+-- Coalesced saves (command statistics, ticks) are written at most this often.
+local PERSIST_GAP_MS = 1500
+-- How often an unreadable kv.json is read again.
+local KV_RETRY_MS = 5000
+local KV_UNREADABLE_NOTE = "Saved state could not be read; showing a temporary cat and not saving until it can be read"
 
 export type Clock = T.Clock & { wall_precise: () -> number }
 
@@ -54,6 +58,14 @@ export type Brain = {
 	example_text: string?,
 	env: T.StoreEnvelope,
 	written_rev: number,
+	-- Engine ms of the last kv write attempt (coalesced saves wait PERSIST_GAP_MS after it).
+	last_persist_ms: number,
+	-- kv.json exists but could not be read: env is a temporary cat that is never written.
+	kv_read_failed: boolean,
+	kv_retry_ms: number,
+	-- config.json exists but could not be read: it is never written.
+	config_unreadable: boolean,
+	config_write_logged: boolean,
 	engine: T.EngineState,
 	-- Bumped whenever the engine adopts a decision (renderers restart one-shot animations on it).
 	decision_seq: number,
@@ -88,6 +100,14 @@ local function addNote(b: Brain, note: string)
 		return
 	end
 	b.notes = util.ringPush(b.notes, note, MAX_NOTES)
+end
+
+local function removeNote(b: Brain, note: string)
+	local i = table.find(b.notes, note)
+	if i then
+		b.notes = table.clone(b.notes)
+		table.remove(b.notes, i)
+	end
 end
 
 local function notify(b: Brain, why: string)
@@ -130,7 +150,7 @@ local function ctx(b: Brain): T.DecideContext
 end
 
 -- tern.kv refuses to read or write over an unparsable kv.json. Moves such a file aside so the
--- store starts empty again. Returns true when a file was moved.
+-- store starts empty again. Returns true only when a backup was written and the file removed.
 local function recoverKvFile(b: Brain): boolean
 	local d = b.deps
 	local text = d.fs.read(d.paths.kv_file)
@@ -142,7 +162,11 @@ local function recoverKvFile(b: Brain): boolean
 		return false
 	end
 	local backup = `{d.paths.kv_file}.corrupt-{d.clock.wall_s()}`
-	d.fs.write(backup, text)
+	local okBackup, backupErr = d.fs.write(backup, text)
+	if not okBackup then
+		log(b, "error", `kv.json is unreadable and could not be backed up ({backupErr or "unknown error"}); leaving it`)
+		return false
+	end
 	if not d.fs.remove(d.paths.kv_file) then
 		return false
 	end
@@ -150,10 +174,17 @@ local function recoverKvFile(b: Brain): boolean
 	return true
 end
 
-local function persist(b: Brain): boolean
-	if b.env.rev == b.written_rev then
+-- Writes the envelope when it changed. `coalesce` skips the write when the last attempt was
+-- less than PERSIST_GAP_MS ago (a later tick or inbox poll writes it).
+local function persist(b: Brain, coalesce: boolean?): boolean
+	if b.env.rev == b.written_rev or b.kv_read_failed then
 		return false
 	end
+	local now = b.deps.clock.now_ms()
+	if coalesce and now - b.last_persist_ms < PERSIST_GAP_MS then
+		return false
+	end
+	b.last_persist_ms = now
 	local ok, err = b.deps.kv.set(kvMod.STATE_KEY, b.env)
 	if not ok and recoverKvFile(b) then
 		addNote(b, "Saved state file was corrupt; a backup was kept next to it")
@@ -169,6 +200,64 @@ local function persist(b: Brain): boolean
 	return ok
 end
 
+-- Reads the saved envelope into b.env. When kv.json exists but cannot be read (and is not a
+-- corrupt file that was moved aside), keeps a temporary in-memory cat that persist() never
+-- writes, so a transient read error cannot overwrite the user's saved cat.
+local function readState(b: Brain)
+	local d = b.deps
+	local wall = d.clock.wall_s()
+	local newCatId = function()
+		return model.newCatId(b.ids)
+	end
+	local raw, kvErr = d.kv.get(kvMod.STATE_KEY)
+	local moved = false
+	if kvErr then
+		moved = recoverKvFile(b)
+		if not moved then
+			if not b.kv_read_failed then
+				log(b, "warn", `kv read failed: {kvErr}; not saving until it can be read`)
+				addNote(b, KV_UNREADABLE_NOTE)
+			end
+			b.kv_read_failed = true
+			if b.env == nil then
+				b.env = store.catchUp((store.decode(nil, wall, newCatId)), wall, b.config)
+			end
+			return
+		end
+		raw = nil
+	end
+	if b.kv_read_failed then
+		b.kv_read_failed = false
+		removeNote(b, KV_UNREADABLE_NOTE)
+	end
+	local env, recovered, note = store.decode(raw, wall, newCatId)
+	if moved then
+		recovered = true
+		log(b, "warn", `kv read failed: {kvErr}`)
+		addNote(b, "Saved state was unreadable; started a fresh cat (backup kept next to kv.json)")
+	elseif recovered then
+		addNote(b, `Saved state was unreadable ({note or "unknown"}); started a fresh cat`)
+	elseif note then
+		log(b, "info", `state repaired: {note}`)
+	end
+	b.written_rev = if raw ~= nil and not recovered then env.rev else -1
+	b.env = store.catchUp(env, wall, b.config)
+end
+
+-- Retries an unreadable kv.json every KV_RETRY_MS. Returns true when the saved cat was adopted.
+local function retryState(b: Brain): boolean
+	if not b.kv_read_failed then
+		return false
+	end
+	local now = b.deps.clock.now_ms()
+	if now - b.kv_retry_ms < KV_RETRY_MS then
+		return false
+	end
+	b.kv_retry_ms = now
+	readState(b)
+	return not b.kv_read_failed
+end
+
 -- Packs -------------------------------------------------------------------------------------
 
 local function packRoots(b: Brain): { loader.Root }
@@ -178,13 +267,15 @@ local function packRoots(b: Brain): { loader.Root }
 	}
 end
 
+-- Every pack folder name under the bundled and user roots, by the loader's own folder rule
+-- (so the host finds the same packs as the window, whatever the folder is called).
 local function listPackDirs(b: Brain): { string }
 	local seen: { [string]: boolean } = {}
 	local out: { string } = {}
 	for _, root in packRoots(b) do
 		local names: { string } = b.deps.fs.list(root.dir) or {}
 		for _, name in names do
-			if not seen[name] and #name <= 32 and string.match(name, PACK_NAME_PATTERN) then
+			if not seen[name] and loader.isPackDirName(name) then
 				seen[name] = true
 				table.insert(out, name)
 			end
@@ -245,7 +336,9 @@ local function selectPack(b: Brain)
 	local wanted = b.config.cat.appearance
 	validatePacks(b, { wanted, DEFAULT_PACK })
 	local pack, note = loader.select(b.packs, wanted, DEFAULT_PACK)
-	if pack == nil and not b.all_packs_loaded then
+	-- Not found by folder name (a note means the default was substituted): scan every folder,
+	-- since a pack's folder name need not equal its id.
+	if (pack == nil or note ~= nil) and not b.all_packs_loaded then
 		validatePacks(b, listPackDirs(b))
 		b.all_packs_loaded = true
 		pack, note = loader.select(b.packs, wanted, DEFAULT_PACK)
@@ -367,8 +460,10 @@ local function adopt(b: Brain, d: T.BehaviorDecision)
 	playFor(b, d)
 end
 
-local function finish(b: Brain, why: string, changed: boolean)
-	persist(b)
+-- Saves and notifies. `coalesce` defers the save to a later tick or inbox poll when one was
+-- written less than PERSIST_GAP_MS ago (bursts of host events).
+local function finish(b: Brain, why: string, changed: boolean, coalesce: boolean?)
+	persist(b, coalesce)
 	if changed then
 		notify(b, why)
 	end
@@ -400,16 +495,17 @@ local function tick(b: Brain): number
 	local c = b.deps.clock
 	local wall = c.wall_s()
 	local rev = b.env.rev
+	local adopted = retryState(b)
 	if wall - b.last_catchup_s >= CATCHUP_EVERY_S then
 		b.last_catchup_s = wall
-		b.env = store.catchUp(b.env, wall, b.config)
+		b.env = store.catchUp(b.env, wall, b.config, b.engine.posture == "asleep")
 	end
 	local s, d = behavior.tick(b.engine, ctx(b))
 	b.engine = s
 	if d then
 		adopt(b, d)
 	end
-	finish(b, "tick", d ~= nil or b.env.rev ~= rev)
+	finish(b, "tick", adopted or d ~= nil or b.env.rev ~= rev, true)
 	return nextDelay(b)
 end
 
@@ -425,7 +521,7 @@ local function onCommandStarted(b: Brain, args: CommandArgs)
 		category = args.category,
 	})
 	local d = react(b, ev)
-	finish(b, "command", d ~= nil)
+	finish(b, "command", d ~= nil, true)
 end
 
 local function onCommandFinished(b: Brain, args: CommandArgs)
@@ -442,11 +538,13 @@ local function onCommandFinished(b: Brain, args: CommandArgs)
 	if d then
 		ev.attributes.reacted = true
 	end
+	local mood = b.env.profile.mood
 	b.env = store.applyEvent(b.env, ev, b.config)
 	if d then
 		adopt(b, d)
 	end
-	finish(b, "command", true)
+	-- Statistics alone are not visible: re-render only for a reaction or a mood change.
+	finish(b, "command", d ~= nil or b.env.profile.mood ~= mood, true)
 end
 
 local function onPaneEvent(b: Brain, pane: number?, kind: string)
@@ -454,15 +552,27 @@ local function onPaneEvent(b: Brain, pane: number?, kind: string)
 		then events.cwdChanged({ id = newId(b, "cwd"), time = b.deps.clock.wall_s(), pane = pane })
 		else events.paneEvent({ id = newId(b, "pane"), time = b.deps.clock.wall_s(), pane = pane, kind = kind })
 	local d = react(b, ev)
-	finish(b, "pane", d ~= nil)
+	finish(b, "pane", d ~= nil, true)
 end
 
 -- Config ------------------------------------------------------------------------------------
 
+-- An unreadable config.json (it exists, but is a symlink, oversize or failed to read) keeps the
+-- current config when there is one, and blocks writes until it can be read again.
 local function applyLoaded(b: Brain, loaded: configFile.Loaded)
 	local previous = b.config
-	b.config = loaded.config
+	local unreadable = loaded.unreadable == true
+	if not unreadable or previous == nil then
+		b.config = loaded.config
+	end
 	b.config_text = loaded.text
+	if unreadable then
+		b.config_unreadable = true
+	elseif b.config_unreadable then
+		b.config_unreadable = false
+		b.config_write_logged = false
+		removeNote(b, configFile.UNREADABLE_ERROR)
+	end
 	if loaded.error then
 		addNote(b, loaded.error)
 		log(b, "warn", loaded.error)
@@ -479,10 +589,19 @@ local function applyLoaded(b: Brain, loaded: configFile.Loaded)
 end
 
 -- Writes `changes` ({[dotted path] = value}, nil value = remove the key) into the user's
--- config.json, preserving every other key the user wrote.
+-- config.json, preserving every other key the user wrote. Refuses to write over a config.json
+-- that exists but cannot be read.
 local function setConfig(b: Brain, changes: { [string]: any }): (boolean, string?)
 	local d = b.deps
 	local current = configFile.read(d.fs, d.json, d.paths.config)
+	if current.unreadable then
+		addNote(b, configFile.UNREADABLE_ERROR)
+		if not b.config_write_logged then
+			b.config_write_logged = true
+			log(b, "error", "not writing settings: config.json exists but cannot be read; fix or remove it")
+		end
+		return false, configFile.UNREADABLE_ERROR
+	end
 	if current.error and current.text then
 		local backup = `{d.paths.config}.broken-{d.clock.wall_s()}`
 		d.fs.write(backup, current.text :: string)
@@ -504,17 +623,18 @@ local function setConfig(b: Brain, changes: { [string]: any }): (boolean, string
 	return true, nil
 end
 
--- Re-reads config.json when its content changed on disk. Returns true when it changed.
+-- Re-reads config.json when its content (or readability) changed on disk. Returns true when
+-- it changed.
 local function pollConfig(b: Brain): boolean
 	local d = b.deps
 	if not d.fs.exists(d.paths.config) then
 		configFile.ensure(d.fs, d.paths.config, b.example_text)
 	end
-	local text = d.fs.read(d.paths.config, configFile.MAX_BYTES)
-	if text == b.config_text then
+	local loaded = configFile.read(d.fs, d.json, d.paths.config)
+	if loaded.text == b.config_text and (loaded.unreadable == true) == b.config_unreadable then
 		return false
 	end
-	applyLoaded(b, configFile.parse(text, d.json))
+	applyLoaded(b, loaded)
 	notify(b, "config")
 	return true
 end
@@ -571,9 +691,15 @@ local function applyIntent(b: Brain, raw: any): IntentOutcome
 			outcome.ok = ok
 			outcome.error = err
 		elseif kind == "snooze" or kind == "unsnooze" then
-			b.engine = table.clone(b.engine)
-			b.engine.until_ms = c.now_ms()
-			local s, d = behavior.tick(b.engine, ctx(b))
+			local s, d
+			if kind == "unsnooze" and b.engine.posture == "asleep" then
+				-- An explicit wake, like the window's optimistic `wake`, not a natural-wake roll.
+				s, d = behavior.wake(b.engine, ctx(b), "wake.unsnooze", "Woke up from a snooze.")
+			else
+				b.engine = table.clone(b.engine)
+				b.engine.until_ms = c.now_ms()
+				s, d = behavior.tick(b.engine, ctx(b))
+			end
 			b.engine = s
 			if d then
 				adopt(b, d)
@@ -602,6 +728,8 @@ local function localIntent(b: Brain, kind: string, args: { [string]: any }?, sou
 	})
 end
 
+-- Drains the inbox; also writes coalesced saves and retries an unreadable kv.json (it runs
+-- every 500 ms, unlike the engine tick).
 local function pollInbox(b: Brain): number
 	local d = b.deps
 	local result = inbox.poll(b.inbox, d.fs, d.json, d.paths.inbox, d.clock.now_ms())
@@ -614,6 +742,11 @@ local function pollInbox(b: Brain): number
 	for _, gone in result.discarded do
 		log(b, "warn", `inbox: discarded {gone.name} ({gone.reason})`)
 	end
+	for _, kept in result.ignored do
+		log(b, "warn", `inbox: ignoring {kept.name} ({kept.reason})`)
+	end
+	local adopted = retryState(b)
+	finish(b, "state", adopted, true)
 	return #result.items
 end
 
@@ -638,6 +771,11 @@ local function load(deps: Deps): Brain
 		example_text = deps.fs.read(deps.paths.example_config, configFile.MAX_BYTES),
 		env = nil :: any,
 		written_rev = -1,
+		last_persist_ms = -math.huge,
+		kv_read_failed = false,
+		kv_retry_ms = started,
+		config_unreadable = false,
+		config_write_logged = false,
 		engine = behavior.newState(started),
 		decision_seq = 0,
 		rng = rngMod.new(deps.seed),
@@ -672,30 +810,7 @@ local function load(deps: Deps): Brain
 	end
 	applyLoaded(b, configFile.read(deps.fs, deps.json, deps.paths.config))
 
-	local wall = deps.clock.wall_s()
-	local raw, kvErr = deps.kv.get(kvMod.STATE_KEY)
-	local env, recovered, note = store.decode(raw, wall, function()
-		return model.newCatId(b.ids)
-	end)
-	if kvErr then
-		recovered = true
-		log(b, "warn", `kv read failed: {kvErr}`)
-		local moved = recoverKvFile(b)
-		addNote(
-			b,
-			if moved
-				then "Saved state was unreadable; started a fresh cat (backup kept next to kv.json)"
-				else "Saved state could not be read; started a fresh cat"
-		)
-	elseif recovered then
-		addNote(b, `Saved state was unreadable ({note or "unknown"}); started a fresh cat`)
-	elseif note then
-		log(b, "info", `state repaired: {note}`)
-	end
-	if raw ~= nil and not recovered and kvErr == nil then
-		b.written_rev = env.rev
-	end
-	b.env = store.catchUp(env, wall, b.config)
+	readState(b)
 	persist(b)
 	b.load_ms = deps.clock.now_ms() - started
 	return b

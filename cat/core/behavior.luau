@@ -509,9 +509,21 @@ local function react(state: T.EngineState, event: T.CatEvent, ctx: Ctx): (T.Engi
 	return apply(s, d, ctx)
 end
 
+-- Explicit wake requested by the user (for example ending a snooze): plays `wake` now when the
+-- cat is asleep instead of waiting for a natural wake roll. Awake cats are left unchanged.
+local function wake(state: T.EngineState, ctx: Ctx, id: string, reason: string): (T.EngineState, Decision?)
+	if state.posture ~= "asleep" then
+		return state, nil
+	end
+	local s = table.clone(state)
+	s.last_activity_ms = math.max(state.last_activity_ms, ctx.now_ms)
+	return apply(s, decide(id, "wake", reason, ctx), ctx)
+end
+
 return {
 	MAX_FAIL_STREAK = MAX_FAIL_STREAK,
 	newState = newState,
 	tick = tick,
 	react = react,
+	wake = wake,
 }

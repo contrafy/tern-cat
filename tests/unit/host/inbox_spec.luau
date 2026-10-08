@@ -68,22 +68,49 @@ describe("inbox", function()
 		expect(#r.discarded).toBe(1)
 	end)
 
-	it("discards files with foreign names after the grace period", function()
-		local m = support.memFs({ [DIR .. "/notes.txt"] = GOOD, [DIR .. "/.1-00000001.json.tmp"] = GOOD })
+	it("never deletes entries with foreign names: they may be the user's or another tool's files", function()
+		local m = support.memFs({
+			[DIR .. "/notes.txt"] = GOOD,
+			[DIR .. "/.1-00000001.json.tmp"] = GOOD,
+			[DIR .. "/backup/keep.json"] = GOOD,
+		})
 		local state = inbox.newState()
 		local r1 = inbox.poll(state, m.fs, support.json(), DIR, 0)
 		expect(#r1.items).toBe(0)
-		local r2 = inbox.poll(state, m.fs, support.json(), DIR, inbox.GRACE_MS)
-		expect(#r2.items).toBe(0)
-		expect(#r2.discarded).toBe(2)
+		expect(#r1.ignored).toBe(3)
+		local r2 = inbox.poll(state, m.fs, support.json(), DIR, inbox.GRACE_MS * 2)
+		expect(#r2.discarded).toBe(0)
+		expect(#r2.ignored).toBe(0)
+		expect(m.files[DIR .. "/notes.txt"]).toBe(GOOD)
+		expect(m.files[DIR .. "/.1-00000001.json.tmp"]).toBe(GOOD)
+		expect(m.files[DIR .. "/backup/keep.json"]).toBe(GOOD)
 	end)
 
-	it("discards oversize files (tern.fs refuses to read them) after the grace period", function()
-		local big = '{"pad":"' .. string.rep("x", inbox.MAX_BYTES) .. '"}'
+	it("never deletes an intent-named directory, which tern.fs.remove would wipe recursively", function()
+		local m = support.memFs({ [DIR .. "/1-00000001.json/inner.txt"] = "user data" })
+		local state = inbox.newState()
+		inbox.poll(state, m.fs, support.json(), DIR, 0)
+		local r = inbox.poll(state, m.fs, support.json(), DIR, inbox.GRACE_MS)
+		expect(#r.discarded).toBe(0)
+		expect(#r.ignored).toBe(1)
+		expect(m.files[DIR .. "/1-00000001.json/inner.txt"]).toBe("user data")
+		expect(#inbox.poll(state, m.fs, support.json(), DIR, inbox.GRACE_MS * 3).ignored).toBe(0)
+	end)
+
+	it("leaves intent files it cannot read in place (oversize files tern.fs refuses)", function()
+		local big = '{"pad":"' .. string.rep("x", inbox.MAX_BYTES * 2) .. '"}'
 		local m = support.memFs({ [DIR .. "/1-00000001.json"] = big })
 		local state = inbox.newState()
 		expect(#inbox.poll(state, m.fs, support.json(), DIR, 0).items).toBe(0)
 		local r = inbox.poll(state, m.fs, support.json(), DIR, inbox.GRACE_MS)
+		expect(#r.discarded).toBe(0)
+		expect(m.files[DIR .. "/1-00000001.json"]).toBe(big)
+	end)
+
+	it("discards a readable intent file just over the size limit", function()
+		local big = '{"pad":"' .. string.rep("x", inbox.MAX_BYTES - 9) .. '"}'
+		local m = support.memFs({ [DIR .. "/1-00000001.json"] = big })
+		local r = inbox.poll(inbox.newState(), m.fs, support.json(), DIR, 0)
 		expect(#r.discarded).toBe(1)
 		expect(m.files[DIR .. "/1-00000001.json"]).toBeNil()
 	end)

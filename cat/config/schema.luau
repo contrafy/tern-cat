@@ -19,6 +19,8 @@ local SOUND_IDS = { "meow", "purr", "surprise", "happy", "swat" }
 
 local PACK_ID_PATTERN = "^[a-z][a-z0-9-]*$"
 local PACK_ID_MAX = 32
+-- cat.name length in UTF-8 characters (rename intents use the same check).
+local NAME_MAX = 32
 
 type FieldKind = "boolean" | "number" | "enum" | "name" | "pack_id" | "hm" | "flags"
 
@@ -49,7 +51,7 @@ local SECTIONS: { SectionSpec } = {
 	{
 		key = "cat",
 		fields = {
-			{ key = "name", kind = "name", min = 1, max = 64 },
+			{ key = "name", kind = "name", min = 1, max = NAME_MAX },
 			{ key = "appearance", kind = "pack_id" },
 		},
 	},
@@ -77,7 +79,6 @@ local SECTIONS: { SectionSpec } = {
 			bool("overlay"),
 			num("overlay_scale", 1, 8, true),
 			num("block_scale", 1, 12, true),
-			num("animation_fps", 1, 30, true),
 			enum("reduced_motion", REDUCED_MOTION),
 			enum("block_placement", BLOCK_PLACEMENTS),
 		},
@@ -87,7 +88,6 @@ local SECTIONS: { SectionSpec } = {
 		fields = {
 			enum("activity", ACTIVITIES),
 			bool("allow_visual_obscuring"),
-			num("obscure_max_ms", 0, 3000, true),
 			bool("allow_swats"),
 			bool("allow_command_reactions"),
 			bool("allow_development_reactions"),
@@ -165,14 +165,12 @@ local function defaults(): T.Config
 			overlay = true,
 			overlay_scale = 2,
 			block_scale = 4,
-			animation_fps = 10,
 			reduced_motion = "follow_tern",
 			block_placement = "float",
 		},
 		behavior = {
 			activity = "orange_menace",
 			allow_visual_obscuring = true,
-			obscure_max_ms = 1500,
 			allow_swats = true,
 			allow_command_reactions = true,
 			allow_development_reactions = true,
@@ -217,7 +215,6 @@ end
 local PRESETS: { [string]: { [string]: any } } = {
 	quiet_office = {
 		personality = { mischief = 0.3, energy = 0.4, talkativeness = 0.05 },
-		rendering = { animation_fps = 8 },
 		behavior = {
 			allow_visual_obscuring = false,
 			allow_swats = false,
@@ -297,12 +294,15 @@ local function checkSpec(field: FieldSpec, value: any): (any, string?)
 		end
 		return value, nil
 	elseif kind == "name" then
-		if type(value) ~= "string" then
-			return nil, "expected a string"
+		-- Shared with rename intents (commands.cleanName): UTF-8 characters, controls removed.
+		if type(value) ~= "string" or utf8.len(value) == nil then
+			return nil, "expected text"
 		end
 		local cleaned = util.stripControl(value)
+		cleaned = string.gsub(cleaned, "\194[\128-\159]", "")
 		cleaned = string.match(cleaned, "^%s*(.-)%s*$") or ""
-		if #cleaned < (field.min :: number) or #cleaned > (field.max :: number) then
+		local len = utf8.len(cleaned) or 0
+		if len < (field.min :: number) or len > (field.max :: number) then
 			return nil, `expected {field.min}..{field.max} characters`
 		end
 		if cleaned ~= value then
@@ -515,6 +515,7 @@ end
 
 return {
 	CURRENT_VERSION = CURRENT_VERSION,
+	NAME_MAX = NAME_MAX,
 	ACTIVITIES = ACTIVITIES,
 	SOUND_IDS = SOUND_IDS,
 	defaults = defaults,

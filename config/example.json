@@ -20,14 +20,12 @@
     "overlay": true,
     "overlay_scale": 2,
     "block_scale": 4,
-    "animation_fps": 10,
     "reduced_motion": "follow_tern",
     "block_placement": "float"
   },
   "behavior": {
     "activity": "orange_menace",
     "allow_visual_obscuring": true,
-    "obscure_max_ms": 1500,
     "allow_swats": true,
     "allow_command_reactions": true,
     "allow_development_reactions": true,
