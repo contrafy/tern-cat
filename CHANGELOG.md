@@ -29,6 +29,8 @@ All notable changes to tern-cat are documented here. The format follows
   vulnerability reporting, support guide, question issue template and Dependabot for GitHub
   Actions. README and contributing guide rewritten; README screenshots and a pane-switch GIF
   retaken.
+- `scripts/perf-baseline.sh --transition`: idle and per-switch A/B of `rendering.pane_transition`;
+  results in `docs/performance.md` (no idle cost, about 21-29 extra frames per switch).
 
 ### Changed
 
