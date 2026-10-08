@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Fetch lune, stylua, selene
+        run: bash scripts/fetch-tools.sh
+      - name: Fetch luau-lsp
+        run: bash scripts/fetch-luau-lsp.sh
+      - name: Fetch Tern types
+        run: bash scripts/fetch-types.sh
+      - name: Check
+        env:
+          CI: "1"
+        run: bash scripts/check.sh

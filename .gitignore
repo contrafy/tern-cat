@@ -1,0 +1,7 @@
+.tools/
+types/tern.d.luau
+.sandbox/
+target/
+__pycache__/
+.DS_Store
+*.tmp
