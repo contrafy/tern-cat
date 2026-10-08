@@ -8,6 +8,18 @@ naps when you are away, reacts to commands finishing and remembers its stats. Pu
 |---|---|
 | ![Tern Cat block floated in the bottom-right corner of a pane](docs/images/floated-card.png) | ![The overlay cat in the corner of an empty pane](docs/images/overlay-cat.png) |
 
+## A word about orange cats
+
+Orange cats are not pets. They are a single shared brain cell on a rotating schedule, wrapped in
+fur and malice. Every orange cat in history has committed at least one act of domestic terrorism:
+the 3 a.m. hallway sprint, the glass of water executed in cold blood while maintaining eye contact,
+the hairball deployed precisely where your bare foot will land. They do not negotiate. They do
+not repent. They knock your coffee off the desk, look at you, and knock the spoon off after it.
+
+This one lives in your terminal now. It will sit on your work, judge your failed test runs,
+stare at you when you type `sudo`, and swat at (a copy of) your `ls` output like it owes it money. You will
+feed it anyway. That is how they win.
+
 ## Install
 
 ```sh
