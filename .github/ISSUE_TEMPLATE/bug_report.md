@@ -30,5 +30,8 @@ labels: bug
 
 ## Safety
 
+<!-- A vulnerability (anything in SECURITY.md's scope that someone could exploit) must not be
+     reported here: use https://github.com/contrafy/tern-cat/security/advisories/new instead. -->
+
 - [ ] This involves terminal input, terminal output, focus or selection being affected by the cat
   (if checked, this is treated as a safety issue; see docs/security-privacy.md)
