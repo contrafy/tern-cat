@@ -7,7 +7,10 @@ All notable changes to tern-cat are documented here. The format follows
 
 ## [Unreleased]
 
-Targets Tern 0.6.2.
+## [0.1.0] - 2026-10-08
+
+First public beta. Tested against Tern 0.6.2 (macOS, Apple silicon); unit tests, type checks and
+pack validation also run on Linux x86_64 in CI.
 
 ### Added
 
@@ -118,4 +121,5 @@ Targets Tern 0.6.2.
   the focused pane, and otherwise a new card floats there. The decision is logged at debug level;
   when floating fails, the warning is logged and toasted.
 
-[Unreleased]: https://github.com/contrafy/tern-cat/commits/master
+[Unreleased]: https://github.com/contrafy/tern-cat/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/contrafy/tern-cat/releases/tag/v0.1.0
