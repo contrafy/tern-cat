@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "default",
+  "name": "Default Cat Sounds",
+  "author": "Ahmad Raaiyan",
+  "license": "CC-BY-4.0",
+  "sounds": {
+    "meow": "meow.wav",
+    "purr": "purr.wav",
+    "surprise": "surprise.wav",
+    "happy": "happy.wav",
+    "swat": "swat.wav"
+  }
+}

@@ -16,6 +16,8 @@ export type Params = {
 	pace: boolean,
 	hidden: boolean,
 	anim_key: string,
+	-- Reduced motion: show frame 0 without frame or pacing animation.
+	still: boolean?,
 	z: number?,
 	offset_px: { right: number, bottom: number }?,
 }
@@ -145,9 +147,10 @@ local function css(params: Params): string
 	local boxW = frameW * scale
 	local boxH = frameH * scale
 
+	local still = params.still == true
 	local animations: { string } = {}
 	local blocks: { string } = {}
-	if #durations > 1 then
+	if #durations > 1 and not still then
 		local total = 0
 		for _, d in durations do
 			total += d
@@ -156,7 +159,7 @@ local function css(params: Params): string
 		table.insert(animations, `{frameName} {total}ms step-end {iteration}`)
 		table.insert(blocks, frameKeyframes(frameName, durations, boxW))
 	end
-	if params.pace == true then
+	if params.pace == true and not still then
 		local steps = math.floor(PACE_PX / PACE_STEP_PX)
 		local legMs = PACE_PX / PACE_SPEED_PX_S * 1000
 		local totalMs = math.floor(legMs / 0.48 + 0.5)

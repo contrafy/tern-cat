@@ -21,7 +21,8 @@
     "overlay_scale": 2,
     "block_scale": 4,
     "animation_fps": 10,
-    "reduced_motion": "follow_tern"
+    "reduced_motion": "follow_tern",
+    "block_placement": "float"
   },
   "behavior": {
     "activity": "orange_menace",

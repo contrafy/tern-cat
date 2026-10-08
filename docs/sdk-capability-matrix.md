@@ -151,8 +151,8 @@ VERIFIED.
 
 - The types contain no `audio`, `sound`, `play` or `beep` (VERIFIED).
 - `cx:toast` is silent.
-- Companion approach: from the window half, run `tern.process.run({"afplay", path}, {timeout_ms}, cb)` on macOS, or `paplay`/`pw-play`/`aplay` on Linux.
-- OverlaySpike confirmed the call returns in about 1 ms with the callback after about 1.45 s (played at volume 0). A missing binary raises synchronously (VERIFIED).
+- Companion approach: run `tern.process.run({"afplay", "-v", volume, path}, {timeout_ms}, cb)` on macOS, or `pw-play`/`paplay`/`aplay` on Linux. `tern.process.run` is available to both halves; tern-cat runs it only from the host half (`host.luau` → `cat/integrations/sound.luau`), so sound plays once per user rather than once per window.
+- OverlaySpike confirmed the call from the window half returns in about 1 ms with the callback after about 1.45 s (played at volume 0). A missing binary raises synchronously (VERIFIED).
 - Sound is muted by default; this is self-imposed, because Tern has no permission prompt.
 
 ## 6. Shared per-user cat model

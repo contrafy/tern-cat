@@ -1,0 +1,31 @@
+# Headless golden of the Tern Cat block. `remote loopback` starts an in-process daemon that loads
+# the host halves from $TERN_CONFIG_DIR/plugins. Run through scripts/visual.sh, which wipes the
+# plugin's data dir and sets TERN_CAT_TEST=frozen,seed=7 so the host engine never ticks.
+size 900 560
+ready
+remote loopback lo
+ready
+palette "New Tern Cat"
+key Enter
+plugins expect "pets"
+wait 500
+freeze-anims
+motion-at 400
+shot block-idle
+thaw
+click ".sf-image[data-role='tern-cat.sprite']"
+plugins expect "pets 1"
+wait 200
+freeze-anims
+motion-at 400
+shot block-petted
+thaw
+click "button[data-act='settings']"
+plugins expect "saved to config.json"
+wait 300
+freeze-anims
+motion-at 400
+shot block-settings
+thaw
+click "button[data-act='close-settings']"
+plugins expect "pets 1"
