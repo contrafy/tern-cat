@@ -1,0 +1,14 @@
+schema = 1
+id = "tern-cat"
+name = "Tern Cat"
+version = "0.1.0"
+description = "A customizable animated orange nuisance that lives in a block and wanders over your panes."
+icon = "footprints"
+host = "host.luau"
+window = "window.luau"
+styles = ["tern-cat.css"]
+
+[[blocks]]
+id = "cat"
+title = "Tern Cat"
+icon = "footprints"
