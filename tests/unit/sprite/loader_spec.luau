@@ -220,3 +220,64 @@ describe("sprite/loader paths", function()
 		expect(loader.assetPath(pack(), "/etc/x.png")).toBeNil()
 	end)
 end)
+
+-- Removing a pack deletes a directory recursively, so the folder must be provably one of the
+-- user's own installed packs: a direct child of the user packs root, never a bundled pack.
+describe("sprite/loader.removableDir", function()
+	local USER_ROOT = "/data/packs"
+
+	local function userPack(root: string): T.LoadedPack
+		return {
+			manifest = { id = "calico" } :: any,
+			root = root,
+			source = "user",
+			warnings = {},
+		}
+	end
+
+	it("returns the folder of a user pack directly inside the user packs root", function()
+		expect(loader.removableDir(userPack("/data/packs/calico"), USER_ROOT)).toBe("/data/packs/calico")
+		expect(loader.removableDir(userPack("/data/packs/Calico.v2"), "/data/packs/")).toBe("/data/packs/Calico.v2")
+		expect(loader.removableDir(userPack("/data//packs/calico/"), USER_ROOT)).toBe("/data/packs/calico")
+	end)
+
+	it("refuses bundled packs even when their folder is inside the user root", function()
+		local pack = userPack("/data/packs/calico")
+		pack.source = "bundled"
+		local dir, err = loader.removableDir(pack, USER_ROOT)
+		expect(dir).toBeNil()
+		expect(err).toContain("bundled")
+	end)
+
+	it("refuses folders outside or not directly inside the user packs root", function()
+		for _, root in
+			{
+				"/data/packs",
+				"/data/packs/",
+				"/data",
+				"/data/other/calico",
+				"/data/packs-old/calico",
+				"/data/packs/a/calico",
+				"/data/packs/../config.json",
+				"/data/packs/./calico",
+				"/data/packs/..",
+				"/data/packs/.hidden",
+				"/data/packs/cal:ico",
+				"/data/packs/cal\\ico",
+				"/etc/calico",
+				"calico",
+				"",
+			}
+		do
+			local dir, err = loader.removableDir(userPack(root), USER_ROOT)
+			expect(dir).toBeNil()
+			expect(err).notToBeNil()
+		end
+	end)
+
+	it("refuses everything when the user packs root itself is not a plain path", function()
+		for _, root in { "", "/", "/data/../packs", "/data/./packs" } do
+			expect(loader.removableDir(userPack("/data/packs/calico"), root)).toBeNil()
+		end
+	end)
+end)
