@@ -157,8 +157,8 @@ During quiet hours the cat only sleeps, blinks or grooms, and no sound plays whe
 
 ### `ai`
 
-Autonomous AI is disabled in this version regardless of these keys (see the README's
-[AI status](../README.md#ai-status)). The keys are validated so a future version can use them.
+Autonomous AI is disabled in this version regardless of these keys (see
+[AI status](usage.md#ai-status)). The keys are validated so a future version can use them.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|

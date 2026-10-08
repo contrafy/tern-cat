@@ -25,6 +25,10 @@ All notable changes to tern-cat are documented here. The format follows
   `rendering.overlay_offset_px` (0-200, default 12) place the overlay cat; settings rows
   "Overlay corner" and "Overlay gap"; Carly may set both. Pacing walks into the pane along the
   corner's edge and the cat starts out facing into the pane.
+- Community files: Code of Conduct (Contributor Covenant 2.1), security policy with private
+  vulnerability reporting, support guide, question issue template and Dependabot for GitHub
+  Actions. README and contributing guide rewritten; README screenshots and a pane-switch GIF
+  retaken.
 
 ### Changed
 

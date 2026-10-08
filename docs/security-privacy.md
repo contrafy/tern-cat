@@ -133,6 +133,11 @@ No pointer data reaches plugin code: `:hover`/`:active` are evaluated by Tern's 
 only, the plugin installs a fixed sheet and is never told whether or where the pointer is. A
 hover or press is not a pet and changes no state.
 
+The pane-switch props (portal, vent, box; `rendering.pane_transition`) are further
+pseudo-elements in the same sheet, on the grid's effects layer (behind the cat) and the view's
+`tv-layer` (in front of it), and are always `pointer-events: none`. The transition is pure CSS:
+no Lua runs when focus moves.
+
 Verified in a sandbox window with Tern 0.6.2 and the harness's synthetic pointer (`tern ctl
 move/down/up`), reactions on:
 
@@ -226,5 +231,5 @@ A change that weakens any guarantee in this document is a review blocker
 
 ## Reporting a vulnerability
 
-Open a GitHub issue without exploit details and ask for a private contact, or use GitHub's
-private vulnerability reporting on the repository if it is enabled.
+Do not open a public issue. Report vulnerabilities privately through GitHub's private
+vulnerability reporting; [SECURITY.md](../SECURITY.md) has the link and the scope.
