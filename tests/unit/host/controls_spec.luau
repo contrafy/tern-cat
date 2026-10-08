@@ -96,6 +96,7 @@ describe("controls", function()
 			expect((controls.settingsChange("rendering.block_placement", "split") :: any)["rendering.block_placement"]).toBe(
 				"split"
 			)
+			expect((controls.settingsChange("behavior.focus_mode", true) :: any)["behavior.focus_mode"]).toBe(true)
 		end)
 
 		it("turns the sound event chips into flags", function()

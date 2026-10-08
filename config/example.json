@@ -32,6 +32,7 @@
     "allow_pane_reactions": true,
     "allow_idle_sleep": true,
     "allow_pacing": true,
+    "focus_mode": false,
     "reaction_sample_rate": 0.35,
     "reaction_cooldown_s": 45
   },

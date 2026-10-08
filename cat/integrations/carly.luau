@@ -66,7 +66,7 @@ local EXPORTS: { ExportDef } = {
 	{
 		name = "configure",
 		sig = `function(key: string, value: any, cx, call): {RESULT}`,
-		doc = "Change one safe setting. Allowed keys: behavior.activity (quiet_office, orange_menace, chaos, zen), behavior.allow_visual_obscuring, behavior.allow_swats, behavior.allow_command_reactions, behavior.allow_development_reactions, behavior.allow_pane_reactions, behavior.allow_idle_sleep, behavior.allow_pacing, rendering.overlay, rendering.reduced_motion (follow_tern, on, off), needs.enabled, sound.enabled (false only: you can mute the cat, never unmute it), quiet.hours_enabled (true only). Sound volume and the quiet-hours times can only be changed by the user. Requests are rate limited.",
+		doc = "Change one safe setting. Allowed keys: behavior.activity (quiet_office, orange_menace, chaos, zen), behavior.allow_visual_obscuring, behavior.allow_swats, behavior.allow_command_reactions, behavior.allow_development_reactions, behavior.allow_pane_reactions, behavior.allow_idle_sleep, behavior.allow_pacing, behavior.focus_mode (true only: the cat keeps still while commands run), rendering.overlay, rendering.reduced_motion (follow_tern, on, off), needs.enabled, sound.enabled (false only: you can mute the cat, never unmute it), quiet.hours_enabled (true only). Sound volume and the quiet-hours times can only be changed by the user. Requests are rate limited.",
 	},
 	{
 		name = "snooze",
