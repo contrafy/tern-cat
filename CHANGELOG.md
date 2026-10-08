@@ -67,6 +67,12 @@ Targets Tern 0.6.2.
   or keybinds, start Carly turns, or spawn processes outside the host sound player.
 - `scripts/visual.sh` (headless block goldens, light and dark) and `scripts/smoke-window.sh`
   (sandboxed two-window smoke test).
+- `scripts/soak.sh` with `tools/soak.py`: sandboxed two-window soak test with a configurable
+  duration that samples CPU and RSS and checks single counting, journal/`seen` bounds and inbox
+  draining. A 30-minute `chaos` run and a near-silent real sound check are in
+  `docs/performance.md`.
+- The host logs the sound player's exit status at debug level (`sound: played <id> (<player>)
+  status <n>`, no file paths).
 - Documentation: README, configuration reference (`docs/configuration.md`), performance report
   (`docs/performance.md`), updated architecture.
 - Development tooling: Lune test runner, StyLua, selene, luau-lsp type checking against the

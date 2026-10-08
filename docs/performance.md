@@ -87,6 +87,53 @@ These shaped the design and are not measurements of the shipped plugin:
 Hence the shipped design: one APNG per animation in the block (Tern-clocked, free when hidden),
 `steps()` sprite-sheet animation in the overlay, and host timers that back off to 0.5-5 s.
 
+## Soak test
+
+Run on 2026-10-08 with `scripts/soak.sh` (how to run it: [develop-with-omp-tern.md](develop-with-omp-tern.md)),
+same machine and Tern version as above.
+
+**Method.** 30 minutes, `chaos` preset (the most activity), two control windows on one sandbox
+daemon, the cat block open (floated) in window A. Every 20 s the driver alternated between typing
+`true`, `false` or `ls` + Enter in window A's shell and running **Pet the cat** in window B
+(45 commands, 44 pets). Every 30 s it took a CPU-time delta (percent of one core) and RSS of each
+process: 59 samples. The windows were visible but not focused or controlled for occlusion, as in
+the runs above.
+
+| Process | CPU p50 | CPU p95 | CPU max | RSS first / last / max | RSS slope, whole run | RSS slope, second half |
+|---|---|---|---|---|---|---|
+| Window A (block open) | 1.16% | 1.62% | 1.80% | 152 / 69 / 152 MiB | -1.98 MiB/min | -0.14 MiB/min |
+| Window B | 1.10% | 2.06% | 2.12% | 153 / 70 / 153 MiB | -2.04 MiB/min | +0.30 MiB/min |
+| Daemon (host half) | 0.22% | 0.29% | 0.32% | 28 / 25 / 28 MiB | -0.07 MiB/min | +0.09 MiB/min |
+
+Both windows' RSS fell from about 150 MiB to 63-70 MiB in the first 12 minutes (macOS reclaiming
+start-up memory) and then moved between 63 and 74 MiB with no trend; the second-half slopes are
+within that noise (+0.30 MiB/min would be 4.5 MiB over the half, less than the sample spread).
+
+State and logs:
+
+| Check | Result |
+|---|---|
+| Commands counted once | 45 typed, 45 `cmd-` ids in `seen` (two windows open) |
+| Pets counted once | 44 run, `stats.pets` 44 |
+| Journal at most 50 | Reached 50 at about 12 minutes and stayed there |
+| `seen` at most 256 | 89 at the end (grows one id per command or pet until the cap) |
+| Inbox drained | 0 files in every sample and at the end |
+| `kv.json` size | 11.5 KiB at the end; growth after minute 12 is the `seen` ring only |
+| Logs | No errors, warnings, "took over", budget or disabled-hook messages, and no plugin reloads. Window load: 2 slices, slowest 15.1-16.8 ms |
+
+**Verdict against the PRD targets.** Animated CPU at most 3%: pass (window p95 at most 2.1%,
+daemon p95 0.29%, with the block and overlay animating under `chaos`). Idle CPU at most 1%: not
+tested by this run (the cat is rarely idle under `chaos`); see the table above. Memory at most
+100 MiB incremental and no leaks: pass for growth (no upward RSS trend in any process over 30
+minutes, every process below its starting size); the window's increment over a plugin-free
+baseline is still not isolated.
+
+### Sound smoke
+
+One pet in a fresh sandbox with `sound.enabled = true` and `sound.volume = 0.01`: `ps` showed the
+host running `/usr/bin/afplay -v 0.01 <package>/assets/sounds/default/purr.wav`, and the host
+logged `sound: played purr (afplay) status 0` at debug level. The real player path works on macOS.
+
 ## Against the PRD targets
 
 | Target | Result | Verdict |
@@ -94,13 +141,13 @@ Hence the shipped design: one APNG per animation in the block (Tern-clocked, fre
 | p95 event-to-visible at most 150 ms | Max 29.2 ms over 12 clicks (p95 not computable from 12 samples; every sample is far under the bound) | Pass |
 | Idle CPU at most 1% | Daemon 0.11-0.13%; window 0.82-0.87% with the overlay animating, 0.17-0.20% with it hidden | Pass (window close to the bound when the overlay animates) |
 | Animated CPU at most 3% | Daemon 0.22% plus window 1.29% with block and overlay animating | Pass |
-| Memory at most 100 MiB incremental | Daemon process 23-28 MiB in total; the window increment was not isolated | Unknown for the window; daemon pass |
+| Memory at most 100 MiB incremental | Daemon process 23-28 MiB in total; the window increment was not isolated; no RSS growth in any process over a 30-minute soak | Unknown for the window's increment; daemon pass; no leak seen |
 
 ## Not measured
 
 - Battery and energy impact.
 - Behavior when the window is fully occluded or minimized (the window state was not controlled).
-- Multi-hour runs and memory growth over time (no leak test).
+- Multi-hour runs (the soak test ran 30 minutes).
 - Incremental memory of the window process with and without the plugin.
 - Pacing (`walk`) CPU on its own; it is included in the `chaos` figure.
 - Linux, Intel Macs, other Tern versions, high-refresh or multi-monitor setups.
