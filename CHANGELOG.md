@@ -52,6 +52,12 @@ Targets Tern 0.6.2.
   `set_personality`, `configure`, `snooze`, `wake`, `explain`, `ai_status`) and a context line of
   at most 160 characters with no command text or paths.
 - `rendering.block_placement` config key (`float` or `split`).
+- Focus mode (`behavior.focus_mode`, off by default, on in the `quiet_office` preset, switch on
+  the Quiet hours & sound settings page): while any command runs the cat only idles, sits,
+  blinks, grooms or sleeps, makes no command or pane reactions and plays no sound; your own
+  gestures still play. Ranks below quiet hours and above reduced motion. Running commands are
+  tracked per pane (host: every local pane; window: its own panes) until they finish, their pane
+  closes, or 6 hours pass. Carly may turn it on but not off.
 - Safety guard `tests/unit/safety_spec.luau`: fails the test run if shipped sources call APIs
   that type into panes, read terminal output, use the network or clipboard, change Tern settings
   or keybinds, start Carly turns, or spawn processes outside the host sound player.

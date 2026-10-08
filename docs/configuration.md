@@ -59,16 +59,16 @@ From lowest to highest:
 So a preset only changes the keys you did not set yourself. For example, with
 `"activity": "zen"` and `"allow_pacing": true`, the cat paces even though `zen` turns pacing off.
 
-At run time, some state ranks above config: snooze, then quiet hours, then reduced motion, then
-the `allow_*` toggles, then preset and personality weights
-([architecture.md](architecture.md#behavior-engine)).
+At run time, some state ranks above config: snooze, then quiet hours, then focus mode (while a
+command runs), then reduced motion, then the `allow_*` toggles, then preset and personality
+weights ([architecture.md](architecture.md#behavior-engine)).
 
 ## Presets (`behavior.activity`)
 
 | Preset | Changes from the defaults |
 |---|---|
 | `orange_menace` (default) | None. |
-| `quiet_office` | `personality`: mischief 0.3, energy 0.4, talkativeness 0.05. `behavior`: `allow_visual_obscuring`, `allow_swats` and `allow_pacing` off, `reaction_sample_rate` 0.1, `reaction_cooldown_s` 180. No overlay over terminal panes; fewer swats and hops. |
+| `quiet_office` | `personality`: mischief 0.3, energy 0.4, talkativeness 0.05. `behavior`: `allow_visual_obscuring`, `allow_swats` and `allow_pacing` off, `focus_mode` on, `reaction_sample_rate` 0.1, `reaction_cooldown_s` 180. No overlay over terminal panes; fewer swats and hops; the cat keeps still while commands run. |
 | `chaos` | `personality`: curiosity 1, mischief 1, energy 0.95, talkativeness 0.4. Every `allow_*` toggle on, `reaction_sample_rate` 0.8, `reaction_cooldown_s` 10. About three times as many swats and hops, twice as much walking. |
 | `zen` | `personality`: curiosity 0.4, mischief 0.1, energy 0.15, talkativeness 0.05. `allow_visual_obscuring`, `allow_swats` and `allow_pacing` off, `allow_idle_sleep` on, `reaction_sample_rate` 0.05, `reaction_cooldown_s` 600. No overlay over terminal panes; mostly sitting and sleeping. |
 
@@ -126,8 +126,19 @@ All numbers from 0 to 1. The settings page shows them as percentages.
 | `allow_pane_reactions` | boolean | `true` | `look`/`hop` when a pane opens or closes. |
 | `allow_idle_sleep` | boolean | `true` | Naps when tired or when you are away. |
 | `allow_pacing` | boolean | `true` | `walk` (the overlay cat paces along the pane's bottom edge). |
+| `focus_mode` | boolean | `false` (`true` in `quiet_office`) | Keep still while a command runs (see below). |
 | `reaction_sample_rate` | number 0-1 | `0.35` | Chance that a finished command gets a reaction. |
 | `reaction_cooldown_s` | integer 0-3600 | `45` | Minimum seconds between reactions of the same kind. |
+
+With `focus_mode` on, while any command runs the cat only idles, sits, blinks, grooms or sleeps:
+no pacing, hops, swats, stares or command and pane reactions, and no sound. A moving animation
+already playing stops when the command starts. Your own pets, pokes, treats, play and `perform`
+requests (block, keys, palette, Carly) still play, silently. When the last command finishes,
+normal behavior resumes and that command's reaction is eligible as usual (sampling and cooldowns
+unchanged). The host half counts commands in every local pane; each window counts its own panes
+(including remote ones). A command counts until it finishes or its pane closes, and at most
+6 hours, so a missed finish event cannot keep the cat still for good. The settings page has the
+switch under Quiet hours & sound.
 
 ### `quiet`
 
@@ -164,7 +175,8 @@ Autonomous AI is disabled in this version regardless of these keys (see the READ
 | `events` | object of booleans: `meow`, `purr`, `surprise`, `happy`, `swat` | all `true` | Per-sound switches. |
 | `respect_quiet_hours` | boolean | `true` | Silent during quiet hours. |
 
-Sounds also stay silent while snoozed and play at most once every 2 seconds.
+Sounds also stay silent while snoozed, in focus mode while a command runs, and play at most once
+every 2 seconds.
 
 ### `controls`
 
@@ -179,12 +191,14 @@ Sounds also stay silent while snoozed and play at most once every 2 seconds.
   only these keys: `behavior.activity`, `behavior.allow_visual_obscuring`, `behavior.allow_swats`,
   `behavior.allow_command_reactions`, `behavior.allow_development_reactions`,
   `behavior.allow_pane_reactions`, `behavior.allow_idle_sleep`, `behavior.allow_pacing`,
-  `sound.enabled`, `sound.volume`, `rendering.overlay`, `rendering.reduced_motion`,
-  `quiet.hours_enabled`, `quiet.start`, `quiet.stop`, `needs.enabled`.
+  `behavior.focus_mode`, `sound.enabled`, `sound.volume`, `rendering.overlay`,
+  `rendering.reduced_motion`, `quiet.hours_enabled`, `quiet.start`, `quiet.stop`,
+  `needs.enabled`.
 - Carly is held to less than that, because it calls exports without asking you: it may set
-  `sound.enabled` only to `false` and `quiet.hours_enabled` only to `true`, and may not change
-  `sound.volume`, `quiet.start` or `quiet.stop`. Turning sound on or loosening quiet hours takes
-  the block's settings page or an edit to `config.json`.
+  `sound.enabled` only to `false`, and `quiet.hours_enabled` and `behavior.focus_mode` only to
+  `true`, and may not change `sound.volume`, `quiet.start` or `quiet.stop`. Turning sound on,
+  loosening quiet hours or turning focus mode off takes the block's settings page or an edit to
+  `config.json`.
 
 Only the host half writes the file. AI settings, appearance and sharing are never changeable
 through Carly.
