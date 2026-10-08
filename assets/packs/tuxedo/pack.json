@@ -1,0 +1,586 @@
+{
+  "schema_version": 1,
+  "id": "tuxedo",
+  "name": "Tuxedo",
+  "author": "Ahmad Raaiyan",
+  "license": "CC-BY-4.0",
+  "description": "Black and white, with a white chest, muzzle and socks. Dressed for every occasion.",
+  "canvas": {
+    "width": 32,
+    "height": 32
+  },
+  "animations": {
+    "idle": {
+      "frames": [
+        "frames/idle/01.png",
+        "frames/idle/02.png",
+        "frames/idle/03.png",
+        "frames/idle/04.png",
+        "frames/idle/05.png"
+      ],
+      "durations_ms": [
+        420,
+        420,
+        300,
+        160,
+        260
+      ],
+      "loop": true,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        7,
+        31,
+        25
+      ],
+      "apng": "build/idle.apng",
+      "sheet": "build/idle.sheet.png"
+    },
+    "walk": {
+      "frames": [
+        "frames/walk/01.png",
+        "frames/walk/02.png",
+        "frames/walk/03.png",
+        "frames/walk/04.png"
+      ],
+      "durations_ms": [
+        130,
+        130,
+        130,
+        130
+      ],
+      "loop": true,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        7,
+        31,
+        25
+      ],
+      "apng": "build/walk.apng",
+      "sheet": "build/walk.sheet.png"
+    },
+    "sit": {
+      "frames": [
+        "frames/sit/01.png",
+        "frames/sit/02.png",
+        "frames/sit/03.png",
+        "frames/sit/04.png"
+      ],
+      "durations_ms": [
+        520,
+        520,
+        180,
+        320
+      ],
+      "loop": true,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        4,
+        28,
+        28
+      ],
+      "apng": "build/sit.apng",
+      "sheet": "build/sit.sheet.png"
+    },
+    "sleep": {
+      "frames": [
+        "frames/sleep/01.png",
+        "frames/sleep/02.png",
+        "frames/sleep/03.png",
+        "frames/sleep/04.png"
+      ],
+      "durations_ms": [
+        520,
+        520,
+        520,
+        520
+      ],
+      "loop": true,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        3,
+        14,
+        28,
+        18
+      ],
+      "apng": "build/sleep.apng",
+      "sheet": "build/sleep.sheet.png"
+    },
+    "wake": {
+      "frames": [
+        "frames/wake/01.png",
+        "frames/wake/02.png",
+        "frames/wake/03.png",
+        "frames/wake/04.png",
+        "frames/wake/05.png",
+        "frames/wake/06.png"
+      ],
+      "durations_ms": [
+        300,
+        260,
+        420,
+        300,
+        220,
+        360
+      ],
+      "loop": false,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        1,
+        4,
+        30,
+        28
+      ],
+      "apng": "build/wake.apng",
+      "sheet": "build/wake.sheet.png"
+    },
+    "stretch": {
+      "frames": [
+        "frames/stretch/01.png",
+        "frames/stretch/02.png",
+        "frames/stretch/03.png",
+        "frames/stretch/04.png",
+        "frames/stretch/05.png",
+        "frames/stretch/06.png"
+      ],
+      "durations_ms": [
+        200,
+        260,
+        520,
+        420,
+        260,
+        300
+      ],
+      "loop": false,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        6,
+        32,
+        26
+      ],
+      "apng": "build/stretch.apng",
+      "sheet": "build/stretch.sheet.png"
+    },
+    "groom": {
+      "frames": [
+        "frames/groom/01.png",
+        "frames/groom/02.png",
+        "frames/groom/03.png",
+        "frames/groom/04.png",
+        "frames/groom/05.png",
+        "frames/groom/06.png"
+      ],
+      "durations_ms": [
+        260,
+        200,
+        200,
+        200,
+        280,
+        220
+      ],
+      "loop": true,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        1,
+        4,
+        27,
+        28
+      ],
+      "apng": "build/groom.apng",
+      "sheet": "build/groom.sheet.png"
+    },
+    "blink": {
+      "frames": [
+        "frames/blink/01.png",
+        "frames/blink/02.png",
+        "frames/blink/03.png",
+        "frames/blink/04.png",
+        "frames/blink/05.png"
+      ],
+      "durations_ms": [
+        300,
+        60,
+        120,
+        60,
+        260
+      ],
+      "loop": false,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        7,
+        31,
+        25
+      ],
+      "apng": "build/blink.apng",
+      "sheet": "build/blink.sheet.png"
+    },
+    "look": {
+      "frames": [
+        "frames/look/01.png",
+        "frames/look/02.png",
+        "frames/look/03.png",
+        "frames/look/04.png"
+      ],
+      "durations_ms": [
+        140,
+        260,
+        300,
+        400
+      ],
+      "loop": false,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        5,
+        31,
+        27
+      ],
+      "apng": "build/look.apng",
+      "sheet": "build/look.sheet.png"
+    },
+    "pet": {
+      "frames": [
+        "frames/pet/01.png",
+        "frames/pet/02.png",
+        "frames/pet/03.png",
+        "frames/pet/04.png"
+      ],
+      "durations_ms": [
+        300,
+        300,
+        300,
+        300
+      ],
+      "loop": true,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        1,
+        4,
+        27,
+        28
+      ],
+      "apng": "build/pet.apng",
+      "sheet": "build/pet.sheet.png"
+    },
+    "poke": {
+      "frames": [
+        "frames/poke/01.png",
+        "frames/poke/02.png",
+        "frames/poke/03.png",
+        "frames/poke/04.png"
+      ],
+      "durations_ms": [
+        130,
+        200,
+        320,
+        360
+      ],
+      "loop": false,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        3,
+        31,
+        29
+      ],
+      "apng": "build/poke.apng",
+      "sheet": "build/poke.sheet.png"
+    },
+    "eat": {
+      "frames": [
+        "frames/eat/01.png",
+        "frames/eat/02.png",
+        "frames/eat/03.png",
+        "frames/eat/04.png"
+      ],
+      "durations_ms": [
+        200,
+        200,
+        200,
+        240
+      ],
+      "loop": true,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        7,
+        32,
+        25
+      ],
+      "apng": "build/eat.apng",
+      "sheet": "build/eat.sheet.png"
+    },
+    "play": {
+      "frames": [
+        "frames/play/01.png",
+        "frames/play/02.png",
+        "frames/play/03.png",
+        "frames/play/04.png",
+        "frames/play/05.png",
+        "frames/play/06.png"
+      ],
+      "durations_ms": [
+        220,
+        140,
+        140,
+        120,
+        160,
+        220
+      ],
+      "loop": true,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        1,
+        32,
+        31
+      ],
+      "apng": "build/play.apng",
+      "sheet": "build/play.sheet.png"
+    },
+    "happy": {
+      "frames": [
+        "frames/happy/01.png",
+        "frames/happy/02.png",
+        "frames/happy/03.png",
+        "frames/happy/04.png"
+      ],
+      "durations_ms": [
+        180,
+        160,
+        180,
+        160
+      ],
+      "loop": true,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        2,
+        31,
+        30
+      ],
+      "apng": "build/happy.apng",
+      "sheet": "build/happy.sheet.png"
+    },
+    "disappointed": {
+      "frames": [
+        "frames/disappointed/01.png",
+        "frames/disappointed/02.png",
+        "frames/disappointed/03.png",
+        "frames/disappointed/04.png",
+        "frames/disappointed/05.png"
+      ],
+      "durations_ms": [
+        200,
+        320,
+        420,
+        400,
+        600
+      ],
+      "loop": false,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        7,
+        31,
+        25
+      ],
+      "apng": "build/disappointed.apng",
+      "sheet": "build/disappointed.sheet.png"
+    },
+    "swat": {
+      "frames": [
+        "frames/swat/01.png",
+        "frames/swat/02.png",
+        "frames/swat/03.png",
+        "frames/swat/04.png",
+        "frames/swat/05.png",
+        "frames/swat/06.png"
+      ],
+      "durations_ms": [
+        360,
+        220,
+        110,
+        160,
+        220,
+        400
+      ],
+      "loop": false,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        5,
+        31,
+        27
+      ],
+      "apng": "build/swat.apng",
+      "sheet": "build/swat.sheet.png"
+    },
+    "startled": {
+      "frames": [
+        "frames/startled/01.png",
+        "frames/startled/02.png",
+        "frames/startled/03.png",
+        "frames/startled/04.png"
+      ],
+      "durations_ms": [
+        130,
+        220,
+        240,
+        360
+      ],
+      "loop": false,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        1,
+        1,
+        31,
+        31
+      ],
+      "apng": "build/startled.apng",
+      "sheet": "build/startled.sheet.png"
+    },
+    "flop": {
+      "frames": [
+        "frames/flop/01.png",
+        "frames/flop/02.png",
+        "frames/flop/03.png",
+        "frames/flop/04.png",
+        "frames/flop/05.png"
+      ],
+      "durations_ms": [
+        260,
+        140,
+        380,
+        380,
+        600
+      ],
+      "loop": false,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        4,
+        32,
+        28
+      ],
+      "apng": "build/flop.apng",
+      "sheet": "build/flop.sheet.png"
+    },
+    "stare": {
+      "frames": [
+        "frames/stare/01.png",
+        "frames/stare/02.png",
+        "frames/stare/03.png",
+        "frames/stare/04.png"
+      ],
+      "durations_ms": [
+        900,
+        160,
+        700,
+        180
+      ],
+      "loop": true,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        4,
+        28,
+        28
+      ],
+      "apng": "build/stare.apng",
+      "sheet": "build/stare.sheet.png"
+    },
+    "hop": {
+      "frames": [
+        "frames/hop/01.png",
+        "frames/hop/02.png",
+        "frames/hop/03.png",
+        "frames/hop/04.png",
+        "frames/hop/05.png",
+        "frames/hop/06.png"
+      ],
+      "durations_ms": [
+        120,
+        90,
+        140,
+        90,
+        120,
+        220
+      ],
+      "loop": false,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        0,
+        31,
+        32
+      ],
+      "apng": "build/hop.apng",
+      "sheet": "build/hop.sheet.png"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+Void sprite pack for tern-cat
+Copyright (c) Ahmad Raaiyan
+
+Licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0).
+https://creativecommons.org/licenses/by/4.0/
+
+Attribution: "Void sprites by Ahmad Raaiyan (tern-cat), CC BY 4.0".
+Generated from tools/art by tools/build_packs.py; see assets/CREDITS.md.
