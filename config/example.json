@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "cat": {
+    "name": "Orange Menace",
+    "appearance": "orange-menace"
+  },
+  "personality": {
+    "curiosity": 0.9,
+    "affection": 0.65,
+    "mischief": 0.85,
+    "energy": 0.75,
+    "talkativeness": 0.15
+  },
+  "needs": {
+    "enabled": true,
+    "offline_progress": true,
+    "offline_hours_cap": 12
+  },
+  "rendering": {
+    "overlay": true,
+    "overlay_scale": 2,
+    "block_scale": 4,
+    "animation_fps": 10,
+    "reduced_motion": "follow_tern"
+  },
+  "behavior": {
+    "activity": "orange_menace",
+    "allow_visual_obscuring": true,
+    "obscure_max_ms": 1500,
+    "allow_swats": true,
+    "allow_command_reactions": true,
+    "allow_development_reactions": true,
+    "allow_pane_reactions": true,
+    "allow_idle_sleep": true,
+    "allow_pacing": true,
+    "reaction_sample_rate": 0.35,
+    "reaction_cooldown_s": 45
+  },
+  "quiet": {
+    "hours_enabled": false,
+    "start": "22:00",
+    "stop": "08:00"
+  },
+  "ai": {
+    "enabled": false,
+    "provider": "none",
+    "max_turns_per_hour": 2,
+    "max_turns_per_day": 10,
+    "cooldown_s": 300,
+    "share_command_output": false
+  },
+  "sound": {
+    "enabled": false,
+    "volume": 0.25,
+    "pack": "default",
+    "events": {
+      "meow": true,
+      "purr": true,
+      "surprise": true,
+      "happy": true,
+      "swat": true
+    },
+    "respect_quiet_hours": true
+  },
+  "controls": {
+    "keyboard_enabled": true
+  }
+}
