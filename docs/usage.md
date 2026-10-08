@@ -121,7 +121,9 @@ and sleeping). Explicit keys in your config beat the preset.
 
 The window half registers these Carly exports (Carly calls them as
 `plugins['tern-cat'].<name>(...)`). Every argument is validated, every call is wrapped in
-`pcall`, and actions return `{ok = true}` or `{ok = false, error = "..."}`.
+`pcall`, and actions return `{ok = true}` or `{ok = false, error = "..."}`. Requests are rate
+limited (a burst of 3, then 10 per minute), and Carly can only mute sound or turn quiet hours on,
+never the reverse.
 
 | Export | Signature |
 |---|---|
