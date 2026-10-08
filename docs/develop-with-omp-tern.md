@@ -255,11 +255,34 @@ byte-identical files. Commit the script change and its output together.
 
 ```sh
 uv run tools/build_packs.py         # bundled sprite packs from tools/art/ + docs/images/packs-preview.png
+uv run tools/build_portals.py       # pane-switch props in assets/portals/ + docs/images/portals-preview.png
 uv run tools/build_sounds.py        # assets/sounds/default
 uv run tools/make_fixtures.py       # tests/fixtures/packs (tiny good/bad packs for the specs)
 uv run tools/pack_build.py DIR      # derived apng/sheet for one hand-drawn pack (see sprite-pack-spec.md)
 uv run tools/validate_packs.py      # validate every bundled sprite and sound pack
 ```
+
+## README screenshots (needs Tern and a desktop)
+
+`docs/images/overlay-cat.png`, `floated-card.png` and `pane-switch.gif` come from a sandbox
+window, cropped to the panes so the window chrome (account avatar, tabs) is not in them:
+
+- Link a snapshot copy of the package, as `scripts/smoke-window.sh` does, and start the window in
+  a neutral directory such as `/tmp/catnip` (the floated card's title shows the directory relative
+  to the temp folder).
+- Panes run the window's `SHELL` with your dotfiles. Start the window with `SHELL=/bin/bash`,
+  then make the prompt plain in every pane before anything is shot:
+  `tern ctl --control "$SB/win.sock" run "\"export PS1='\$ ' BASH_SILENCE_DEPRECATION_WARNING=1; clear\""`.
+- The window shows your real Tern account. If it shows the closed-beta gate instead (for example
+  with a changed `HOME`), `tern ctl ... account signed-in` puts a stand-in account there; crop the
+  chrome either way.
+- `run`, `split right`, `focus left|right` and `plugins run plugin.tern-cat.open` drive the
+  window; `plugins run plugin.tern-cat.wake` wakes a napping cat before a shot.
+- For the pane-switch GIF: `freeze-anims`, `focus left`, then `motion-at <ms>` and `shot` every
+  40 ms from 0 to 840 (the dive and the emerge both start at the switch), and again for
+  `focus right`. Assemble the frames with Pillow on one shared palette.
+
+View every frame before committing it.
 
 ## Cleaning up
 

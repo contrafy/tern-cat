@@ -44,9 +44,11 @@ Work through this on a clean checkout of the release commit.
 7. **Install test** (needs Tern). In a fresh sandbox (`SB=/tmp/tern-cat-release source
    scripts/sandbox-env.sh`), after pushing the tag:
    `tern plugin install github.com/contrafy/tern-cat`, then `tern plugin list`.
-8. **Screenshots.** Retake any screenshot whose content changed. Shots must not show personal
-   paths, user names, hostnames, prompts or account details: use the sandbox, a neutral working
-   directory and a plain prompt, and redact anything left.
+8. **Screenshots.** Retake any screenshot whose content changed
+   ([recipe](develop-with-omp-tern.md#readme-screenshots-needs-tern-and-a-desktop)). Shots must
+   not show personal paths, user names, hostnames, avatars, prompts or account details: use the
+   sandbox, a neutral working directory and a plain prompt, crop the window chrome, and redact
+   anything left.
 9. **Tag.** `git tag -a vX.Y.Z -m "tern-cat X.Y.Z"` and `git push origin vX.Y.Z`.
 10. **GitHub release.** Create a release from the tag titled `vX.Y.Z`, paste the changelog
     section, attach updated screenshots, and include the install command:

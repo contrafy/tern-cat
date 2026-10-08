@@ -49,8 +49,8 @@ Detailed reference. Settings: [configuration.md](configuration.md). Privacy: [se
 - The settings page edits `config.json` directly; each row has a Reset.
 - Settings > Appearance lists **Remove <pack>** for each sprite pack you installed under
   `<tern.plugin.data>/packs/`. Click Remove..., then Confirm within 10 seconds: the pack's folder
-  is deleted. If it was the cat's appearance, the cat switches back to Orange Menace in the block
-  and, within about 3 seconds, in every window. Bundled packs cannot be removed.
+  is deleted. If it was the cat's appearance, the cat switches back to the default Orange Menace
+  pack in the block and, within about 3 seconds, in every window. Bundled packs cannot be removed.
 
 ### On the overlay cat
 
@@ -150,7 +150,7 @@ The mood (calm, playful, sleepy, annoyed, curious, happy) comes from the needs (
 affection, boredom), which never reduce stats and are simulated, capped, for time Tern was
 closed.
 
-Presets (`behavior.activity`): `orange_menace` (default), `quiet_office` (fewer swats, no pacing,
+Presets (`behavior.activity`): `menace` (default), `quiet_office` (fewer swats, no pacing,
 rare reactions, focus mode), `chaos` (frequent reactions, more swats, hops and walks), `zen`
 (mostly sitting and sleeping). Explicit keys in your config beat the preset.
 
@@ -180,7 +180,7 @@ focus mode on, never the reverse.
 Exact signatures and docs are in `cat/integrations/carly.luau`.
 
 The context provider adds one line of at most 160 characters to Carly's context, for example
-`Tern Cat "Orange Menace": calm; hunger 0.2 energy 0.8; 1 pets`. It contains the cat's name (control
+`Tern Cat "Menace": calm; hunger 0.2 energy 0.8; 1 pets`. It contains the cat's name (control
 characters and quotes stripped), mood, needs and counts. It never contains command text, paths,
 journal text or reasons. tern-cat never starts Carly turns (`ask_carly`, `carly.schedule`).
 
@@ -220,8 +220,8 @@ command runs, and at volume 0; at most one sound every 2 seconds.
 ## Known limitations
 
 - The overlay cat is a CSS decoration, not a window. It reacts to the pointer with CSS only, so
-  it cannot be dragged or petted (input passes through it), it sits in the focused pane's
-  bottom-right corner, and it cannot see terminal text.
+  it cannot be dragged or petted (input passes through it), it sits in a corner of the focused
+  pane, and it cannot see terminal text.
 - Near and on the overlay cat look the same: Tern gives the cat and its proximity ring one
   shared hover state. Hover reactions with the real pointer over a window that is not frontmost
   are untested.
