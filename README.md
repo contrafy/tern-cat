@@ -30,8 +30,9 @@ tern plugin install github.com/contrafy/tern-cat --force   # update
 tern plugin remove tern-cat                                # uninstall
 ```
 
-Requires Tern 0.6.2 or later. Removing the plugin keeps the cat's data folder (state, config,
-user packs); [docs/usage.md](docs/usage.md#uninstall) says where it is if you want it gone too.
+Requires Tern 0.6.2 or later; tested with Tern 0.8.3. Removing the plugin keeps the cat's data
+folder (state, config, user packs); [docs/usage.md](docs/usage.md#uninstall) says where it is if
+you want it gone too.
 
 ## Usage
 
@@ -46,9 +47,11 @@ user packs); [docs/usage.md](docs/usage.md#uninstall) says where it is if you wa
 
   ![The overlay cat diving into a portal in one split pane and climbing out of one in the other](docs/images/pane-switch.gif)
 
-- **Block.** **Open cat** in the palette floats the interactive block over the focused pane.
-  Click the sprite to pet, double-click to play, right-click for food, toys and more; its
-  settings page edits `<tern.plugin.data>/config.json` with a Reset on every row.
+- **Block.** **Open cat** in the palette floats the interactive block over the focused pane and
+  focuses it. Click the sprite to pet, double-click to play, right-click for food, toys and more;
+  its settings page edits `<tern.plugin.data>/config.json` with a Reset on every row. Once you
+  click back into the pane, Tern 0.8 rests the card as a small tilted "glance" card; double-click
+  it (or run **Open cat** again) to use it.
 
   ![The cat block floated over a pane, with needs bars, stats and buttons](docs/images/floated-card.png)
 
@@ -91,8 +94,9 @@ Public beta (0.x). Known limits:
   [docs/overlay-upstream-rfc.md](docs/overlay-upstream-rfc.md).
 - Overlay reactions are visual only and need the pointer over or near the cat; the overlay cat
   cannot be dragged or petted.
-- Autonomous AI behavior is disabled: Tern 0.6.2 offers no constrained model route.
-- Tested on macOS (Apple silicon) with Tern 0.6.2 only; Linux runs unit tests in CI.
+- Autonomous AI behavior is disabled: Tern (through 0.8.3) offers no constrained model route.
+- Tested on macOS (Apple silicon) with Tern 0.8.3 (0.2.0 with Tern 0.6.2); Linux runs unit tests
+  in CI.
 
 ## Docs
 

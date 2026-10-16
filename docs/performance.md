@@ -2,8 +2,9 @@
 
 Measured numbers for tern-cat, how they were taken, and how they compare with the PRD targets.
 All figures come from sandboxed runs (`scripts/sandbox-env.sh`) on one machine: an Apple
-M-series Mac (M5) on macOS 27, Tern 0.6.2 (`4b3ed42`). They are single-machine samples, not a
-benchmark suite.
+M-series Mac (M5) on macOS 27, Tern 0.6.2 (`4b3ed42`), except the
+[Tern 0.8.3 spot check](#tern-083-spot-check). They are single-machine samples, not a benchmark
+suite.
 
 ## Method
 
@@ -100,6 +101,28 @@ process figures and include Tern's own idle work; no CPU run without the plugin 
 the block closed, the first five samples (75 s) were 1.03-1.48% and the rest 0.52-1.07%; with the
 block floated the samples over 1% came in the second half of the run (minutes 6-10), when the cat
 presumably changed animation (the animation sequence was not logged).
+
+### Tern 0.8.3 spot check
+
+Short runs on Tern 0.8.3 (`e2b8656`), same machine, percent of one core per 10 s sample, 12
+samples (2 minutes) per state, after a 20 s settle. Block states come from
+`scripts/perf-baseline.sh --idle-minutes 2 --interval 10 --skip-mem` (zen, overlay on; the
+floated card is now focused, see [usage](usage.md)); the unlinked and linked overlay-only pair
+came from a one-off psutil script run back to back in the same sandbox and config.
+
+| State | Window mean (median) | Daemon mean |
+|---|---|---|
+| Plugin unlinked | 2.00% (2.11%) | 0.06% |
+| Linked, zen, overlay only (no block) | 1.34% (0.86%) | 0.13% |
+| Linked, zen, block floated (overlay stepped aside) | 1.71% (2.25%) | 0.16% |
+| Linked, zen, block closed (overlay drawn) | 2.01% (2.50%) | 0.13% |
+
+The window figures are not comparable with the 0.6.2 table above: Tern 0.8.3's own idle cost in
+these sandbox windows is about 2% with no plugin linked, and `ctl stats` lists Tern's
+closed-beta account gate (`div#gate.tn-gate … .live`) as animating in every sandbox window. The
+plugin's window cost is within that noise. The daemon (host half) adds about 0.07-0.10%, as on
+0.6.2. Window load stayed at 2-3 load slices with the slowest 15-18 ms, overlay setup 4-5 ms (one
+26.6 ms outlier, logged as a warning), all under the 50 ms window budget.
 
 ### Pointer reactions (short runs)
 

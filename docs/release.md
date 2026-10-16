@@ -12,7 +12,9 @@
   `sounds.json`). Changing a format bumps its schema version and adds a migration; a release
   never silently drops user state.
 - Tern has no plugin API version. Each release notes the Tern version it was tested against
-  (currently 0.6.2) in the changelog entry.
+  (currently 0.8.3) in the changelog entry. Bump the pinned `tern-sdk` commit in
+  `scripts/fetch-types.sh` (CI's types) to one whose `plugins/tern.d.luau` matches that version's
+  `tern plugin types`.
 
 ## Checklist
 

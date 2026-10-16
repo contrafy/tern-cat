@@ -26,9 +26,9 @@ bash scripts/fetch-types.sh
 ```
 
 Writes `types/tern.d.luau` (gitignored) with `tern plugin types` when the `tern` CLI is present,
-else downloads it from `stencil-hq/tern-sdk` (`TERN_SDK_REF`, default `main`). The type checker
-and editor tooling read it. M0 targeted Tern 0.6.2; Tern has no plugin API version, so regenerate
-after upgrading Tern.
+else downloads it from `stencil-hq/tern-sdk` (`TERN_SDK_REF`, default a pinned commit whose types
+match Tern 0.8.3, the tested version). The type checker and editor tooling read it. Tern has no
+plugin API version, so regenerate after upgrading Tern.
 
 ## Checks
 

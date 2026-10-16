@@ -213,7 +213,7 @@ describe("integrations.ai", function()
 			local p = ai.carlyScheduleProvider()
 			expect(p.id).toBe("carly_schedule")
 			expect(p.available).toBe(false)
-			expect(p.unavailable_reason).toContain("0.6.2")
+			expect(p.unavailable_reason).toContain("0.8.3")
 			expect(p.unavailable_reason).toContain("tool access")
 			local gotErr: string? = nil
 			p:request({ summary = "x", mood = "calm", allowed_animations = {} }, function(_, err)
