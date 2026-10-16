@@ -250,6 +250,19 @@ describe("config schema", function()
 			expect(schema.checkField("rendering.pane_transition", true)).toBeNil()
 		end)
 
+		it("steps the overlay aside for full-screen programs by default", function()
+			expect(schema.defaults().rendering.fullscreen_behavior).toBe("hide")
+			for _, mode in { "hide", "shrink", "stay" } do
+				expect(schema.resolve({ rendering = { fullscreen_behavior = mode } }).rendering.fullscreen_behavior).toBe(
+					mode
+				)
+			end
+			local cfg, warnings = schema.resolve({ rendering = { fullscreen_behavior = "vanish" } })
+			expect(cfg.rendering.fullscreen_behavior).toBe("hide")
+			expect(hasWarning(warnings, "rendering.fullscreen_behavior")).toBe(true)
+			expect(schema.checkField("rendering.fullscreen_behavior", "shrink")).toBe("shrink")
+		end)
+
 		it("rejects malformed quiet hours", function()
 			local cfg, warnings = schema.resolve({ quiet = { hours_enabled = true, start = "25:00", stop = "7am" } })
 			expect(cfg.quiet.hours_enabled).toBe(true)

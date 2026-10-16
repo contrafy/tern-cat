@@ -145,6 +145,68 @@ describe("core.events", function()
 		end)
 	end)
 
+	describe("fullscreen", function()
+		it("recognizes terminal editors, pagers, monitors and multiplexers", function()
+			for _, line in
+				{
+					"vim x",
+					"nvim .",
+					"vi",
+					"nano f",
+					"emacs -nw notes.org",
+					"hx .",
+					"less log.txt",
+					"more x",
+					"man ls",
+					"htop",
+					"top -o cpu",
+					"btop",
+					"tmux new -s work",
+				}
+			do
+				if not events.fullscreen(line) then
+					error(`fullscreen({string.format("%q", line)}) = false`)
+				end
+			end
+		end)
+
+		it("looks through env assignments, wrappers, sudo, path prefixes and pipes", function()
+			for _, line in
+				{
+					"sudo vim /etc/hosts",
+					"EDITOR=x nvim",
+					"time less x",
+					"/usr/bin/less -R x",
+					"doas -u me htop",
+					"git log | less",
+					"cat x|less -S",
+				}
+			do
+				if not events.fullscreen(line) then
+					error(`fullscreen({string.format("%q", line)}) = false`)
+				end
+			end
+		end)
+
+		it("leaves GUI editors, ssh and ordinary commands alone", function()
+			for _, line in { "code .", "subl x", "zed .", "ssh host", "ls", "git log", "ls || less", "", "sudo" } do
+				if events.fullscreen(line) then
+					error(`fullscreen({string.format("%q", line)}) = true`)
+				end
+			end
+			expect(events.fullscreen(nil :: any)).toBe(false)
+		end)
+
+		it("matches a pane's program name the same way", function()
+			expect(events.fullscreenProgram("vim")).toBe(true)
+			expect(events.fullscreenProgram("/usr/bin/less")).toBe(true)
+			expect(events.fullscreenProgram("HTOP")).toBe(true)
+			expect(events.fullscreenProgram("zsh")).toBe(false)
+			expect(events.fullscreenProgram("ssh")).toBe(false)
+			expect(events.fullscreenProgram(nil)).toBe(false)
+		end)
+	end)
+
 	describe("newId", function()
 		it("generates deterministic, prefixed ids from the injected rng", function()
 			local a = events.newId(rng.new(1), "ev")

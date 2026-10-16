@@ -61,6 +61,8 @@ export type Params = {
 	-- Resting corner (default top-right) and its gap from both edges in CSS px (default 12).
 	position: Corner?,
 	offset_px: number?,
+	-- Opacity of the cat, its swat pose and its props (0.1-1, default 1: no declaration).
+	opacity: number?,
 	-- Pointer reactions: `hover` plays while the pointer is on the cat or its proximity ring,
 	-- `press` while the button is down there (held briefly after release). Nil: no reactions,
 	-- the cat takes no pointer state at all.
@@ -335,6 +337,8 @@ type Geometry = {
 	h: number,
 	v: number,
 	scale: number,
+	-- Formatted opacity of the cat and its props.
+	opacity: string,
 }
 
 -- Position declarations for a prop host. `inset` adds the host's offset from the cat's host as a
@@ -402,7 +406,7 @@ local function propRules(
 	append(rules, {
 		"\tbackground-size: 0px 0px;",
 		"\tbackground-position: 0px 0px;",
-		"\topacity: 1;",
+		`\topacity: {g.opacity};`,
 		"\ttransition: none;",
 	})
 	if enter then
@@ -432,6 +436,9 @@ local function css(params: Params): string
 	local side = CORNERS[if type(params.position) == "string" then params.position else DEFAULT_CORNER]
 		or CORNERS[DEFAULT_CORNER]
 	local gap = clampInt(params.offset_px, 0, 4096, DEFAULT_OFFSET)
+	local alpha = math.floor(clampNumber(params.opacity, 0.1, 1, 1) * 100 + 0.5) / 100
+	local opacity = num(alpha)
+	local translucent = alpha < 1
 	local durations = safeDurations(params.durations_ms)
 
 	local key = safeKey(params.anim_key)
@@ -523,6 +530,9 @@ local function css(params: Params): string
 			`\tbackground-size: {px(boxW * frames)} {px(boxH)};`,
 			`\tbackground-position: {px(last)} 0px;`,
 		})
+		if translucent then
+			table.insert(rule, `\topacity: {opacity};`)
+		end
 		if params.facing == "left" then
 			table.insert(rule, "\ttransform: scaleX(-1);")
 		end
@@ -537,19 +547,19 @@ local function css(params: Params): string
 					EMERGE,
 					rise.durations,
 					boxW,
-					`opacity: 1; background-image: url("{rise.url}"); background-size: {px(boxW * #rise.durations)} {px(
-						boxH
-					)}; `
+					`opacity: {opacity}; background-image: url("{rise.url}"); background-size: {px(
+						boxW * #rise.durations
+					)} {px(boxH)}; `
 				)
 			)
 		else
 			local steps = clipSteps(frameH)
-			local lines = { `@keyframes {EMERGE} \{`, "\t0% { opacity: 1; height: 0px; }" }
+			local lines = { `@keyframes {EMERGE} \{`, `\t0% \{ opacity: {opacity}; height: 0px; }` }
 			for i = 1, steps do
 				local pct = RISE_START_PCT + (i - 1) * RISE_PCT / steps
 				table.insert(lines, `\t{num(pct)}% \{ height: {px(boxH * i / steps)}; }`)
 			end
-			append(lines, { `\t100% \{ opacity: 1; height: {px(boxH)}; }`, "}" })
+			append(lines, { `\t100% \{ opacity: {opacity}; height: {px(boxH)}; }`, "}" })
 			table.insert(blocks, table.concat(lines, "\n"))
 		end
 		if press then
@@ -584,6 +594,9 @@ local function css(params: Params): string
 		`\tbackground-size: {px(boxW * #durations)} {px(boxH)};`,
 		"\tbackground-position: 0px 0px;",
 	})
+	if translucent then
+		table.insert(rule, `\topacity: {opacity};`)
+	end
 	if params.facing == "left" then
 		table.insert(rule, "\ttransform: scaleX(-1);")
 	end
@@ -627,6 +640,9 @@ local function css(params: Params): string
 			`\tz-index: {num(z)};`,
 			`\ttransform-origin: {px(pad.left + boxW / 2)} {px(pad.top + boxH / 2)};`,
 		})
+		if translucent then
+			table.insert(rule, `\topacity: {opacity};`)
+		end
 		if params.facing == "left" then
 			table.insert(rule, "\ttransform: scaleX(-1);")
 		end
@@ -709,7 +725,8 @@ local function css(params: Params): string
 	local settled: { string } = {}
 	if prop then
 		local p = prop :: PropSpec
-		local g: Geometry = { side = side, boxW = boxW, boxH = boxH, h = gapH, v = gapV, scale = scale }
+		local g: Geometry =
+			{ side = side, boxW = boxW, boxH = boxH, h = gapH, v = gapV, scale = scale, opacity = opacity }
 		append(rule, propRules(g, p, BACK, BACK_ON, p.exit_back, p.enter_back, PROP_BACK, true, blocks))
 		table.insert(settled, EVERY)
 		table.insert(settled, BACK)

@@ -122,6 +122,7 @@ local EDITABLE: { [string]: boolean } = {
 	["rendering.overlay_offset_px"] = true,
 	["rendering.block_placement"] = true,
 	["rendering.pane_transition"] = true,
+	["rendering.fullscreen_behavior"] = true,
 	["rendering.reduced_motion"] = true,
 	["rendering.block_scale"] = true,
 	["controls.keyboard_enabled"] = true,

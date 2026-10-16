@@ -11,6 +11,16 @@ Tested against Tern 0.8.3 (macOS, Apple silicon). Tern 0.6.2 or later is still r
 the plugin APIs tern-cat uses changed, and the overlay's Tern DOM and CSS hooks still match (see
 the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matrix.md#tern-083-delta)).
 
+### Added
+
+- The overlay cat steps aside while the focused pane runs a full-screen program (terminal
+  editors, pagers, `man`, `top`/`htop`/`btop`, `tmux`; not `ssh`), whose title and status bars
+  sit under the default top-right corner. New `rendering.fullscreen_behavior`: `hide` (default),
+  `shrink` (half scale, half opacity) or `stay`; settings row "Full-screen programs"; Carly may
+  set it. Tern exposes no alternate-screen state, so the window half recognizes the program from
+  the command line (reduced to a boolean, never kept) and, for a program already running when the
+  window loads, from the focused pane's program name.
+
 ### Fixed
 
 - **Open cat** focuses the card it floats. Tern 0.8 rests an unfocused floating card as a small

@@ -251,6 +251,8 @@ describe("commands", function()
 			accepts("set_config", { key = "rendering.overlay_offset_px", value = 0 }, carly)
 			rejects(factories.intent("set_config", { key = "rendering.overlay_position", value = "middle" }, carly))
 			rejects(factories.intent("set_config", { key = "rendering.pane_transition", value = "warp" }, carly))
+			accepts("set_config", { key = "rendering.fullscreen_behavior", value = "shrink" }, carly)
+			rejects(factories.intent("set_config", { key = "rendering.fullscreen_behavior", value = "vanish" }, carly))
 		end)
 
 		it("keeps sound and quiet settings available to the user's own surfaces", function()

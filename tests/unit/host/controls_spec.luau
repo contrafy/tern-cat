@@ -101,6 +101,9 @@ describe("controls", function()
 			)
 			expect((controls.settingsChange("rendering.pane_transition", "warp"))).toBeNil()
 			expect(
+				(controls.settingsChange("rendering.fullscreen_behavior", "shrink") :: any)["rendering.fullscreen_behavior"]
+			).toBe("shrink")
+			expect(
 				(controls.settingsChange("rendering.overlay_position", "bottom-left") :: any)["rendering.overlay_position"]
 			).toBe("bottom-left")
 			expect((controls.settingsChange("rendering.overlay_offset_px", 300) :: any)["rendering.overlay_offset_px"]).toBe(

@@ -48,7 +48,11 @@ command output lines). Host hooks deliver metadata only: `CommandFinishedEvent` 
 `build`, `vcs`, `list`, `sudo`, `editor`, `network`, `package`, `other`. Only the category
 continues. The line is not stored, logged, put in an event, or returned. Focus mode
 (`cat/core/running.luau`) additionally keeps, in memory only, the pane id and start time of
-each running command.
+each running command. The window half also passes the line to `fullscreen(line)` (same file),
+which returns only whether it starts a full-screen program such as vim or less; the overlay
+keeps, in memory only, the ids of panes running one. For the focused pane it also reads
+`PaneInfo.program` (the running command's program name, for example `less`) and `at_prompt`, and
+keeps only the derived booleans.
 
 Every event's attributes then pass through `sanitizeAttributes` (same file), which keeps only
 allowlisted keys per event type and only values of the declared kind: booleans, finite numbers,
@@ -222,7 +226,7 @@ grep -rnE --include='*.luau' --exclude-dir=tests --exclude-dir=types --exclude-d
 
 Also review:
 
-- `cat/core/events.luau`: `classify` and `sanitizeAttributes`.
+- `cat/core/events.luau`: `classify`, `fullscreen` and `sanitizeAttributes`.
 - `cat/core/commands.luau`: the intent allowlist.
 - `cat/integrations/carly.luau`: what each export returns.
 - `cat/integrations/sound.luau`: the player argv.

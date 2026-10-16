@@ -66,9 +66,14 @@ Detailed reference. Settings: [configuration.md](configuration.md). Privacy: [se
   pointer (overlay)"; off in the `quiet_office` preset). With reduced motion the cat shows the
   first frame of each reaction instead. Packs without a `look` or `swat` sheet use their fallback
   animation or its first frame.
-- At top corners the cat covers the end of the first visible rows (right prompts, timestamps,
-  status lines of full-screen programs); choose another corner on Settings > Appearance >
-  Overlay corner, or change the gap with `rendering.overlay_offset_px`.
+- At top corners the cat covers the end of the first visible rows (right prompts, timestamps);
+  choose another corner on Settings > Appearance > Overlay corner, or change the gap with
+  `rendering.overlay_offset_px`.
+- While the focused pane runs a full-screen program (vim, less, man, htop, tmux and similar),
+  whose title and status bars sit under the cat, it steps aside until the program exits or you
+  focus another pane. Settings > Appearance > Full-screen programs (`rendering.fullscreen_behavior`):
+  Step aside (`hide`), Shrink and fade (`shrink`) or Stay (`stay`). Aliases (`v` for `vim`) and
+  pagers that other programs open (`git log`) are not recognized.
 - A pacing cat jumps back to its resting spot in the frame you switch away from its pane, then
   dives there.
 
