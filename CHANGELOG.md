@@ -17,6 +17,10 @@ the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matr
   tilted "glance" card that ignores clicks, so the sprite and buttons did nothing until the card
   was double-clicked. The card now takes the keyboard focus; click the pane to give it back (the
   card then rests as a glance card again until double-clicked or brought back with **Open cat**).
+- **Linux sound** finds `paplay` or `aplay` on systems whose `/bin/sh` is dash (Debian, Ubuntu) or
+  busybox (Alpine). The probe ran `command -v pw-play paplay aplay`, but those shells look only at
+  the first name, so sound stayed silent unless `pw-play` was installed. It is still one fixed
+  argv with no interpolation, now one `command -v` per player.
 
 ### Changed
 

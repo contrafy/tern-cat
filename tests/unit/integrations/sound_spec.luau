@@ -222,8 +222,64 @@ describe("sound", function()
 			end, function(player: any)
 				got = player
 			end)
-			expect(seen).toEqual({ "sh", "-c", "command -v pw-play paplay aplay" })
+			expect(seen).toEqual({
+				"sh",
+				"-c",
+				'for p in pw-play paplay aplay; do command -v "$p"; done; exit 0',
+			})
 			expect(got.kind).toBe("aplay")
+		end)
+
+		it("probes each player with its own `command -v` (dash and busybox ignore extra operands)", function()
+			-- `command -v pw-play paplay aplay` works in bash but dash (Debian, Ubuntu /bin/sh) and
+			-- busybox ash (Alpine) look only at the first name, so a machine with just paplay or aplay
+			-- found nothing. The probe must give `command -v` exactly one operand per call.
+			local script: string? = nil
+			sound.detect("linux", function()
+				return false
+			end, function(argv: { string }, _opts: any, cb: (any) -> ())
+				script = argv[3]
+				cb({ status = 0, stdout = "", stderr = "", timed_out = false })
+			end, function() end)
+			local text = script :: string
+			local calls = 0
+			for operands in string.gmatch(text, "command %-v([^;|&]*)") do
+				calls += 1
+				local count = 0
+				for _ in string.gmatch(operands, "%S+") do
+					count += 1
+				end
+				expect(count).toBe(1)
+			end
+			expect(calls).toBe(1)
+			expect(string.find(text, "for p in pw-play paplay aplay;", 1, true) ~= nil).toBe(true)
+		end)
+
+		it("picks the preferred player from several probe output lines", function()
+			local got: any = "pending"
+			sound.detect("linux", function()
+				return false
+			end, function(_argv: { string }, _opts: any, cb: (any) -> ())
+				cb({ status = 0, stdout = "/usr/bin/paplay\n/usr/bin/aplay\n", stderr = "", timed_out = false })
+			end, function(player: any)
+				got = player
+			end)
+			expect(got.kind).toBe("paplay")
+			expect(got.bin).toBe("/usr/bin/paplay")
+
+			sound.detect("linux", function()
+				return false
+			end, function(_argv: { string }, _opts: any, cb: (any) -> ())
+				cb({
+					status = 0,
+					stdout = "/usr/bin/aplay\n/usr/bin/paplay\n/usr/bin/pw-play\n",
+					stderr = "",
+					timed_out = false,
+				})
+			end, function(player: any)
+				got = player
+			end)
+			expect(got.kind).toBe("pw-play")
 		end)
 
 		it("falls back to silence when probing raises", function()

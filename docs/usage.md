@@ -201,8 +201,9 @@ Off by default (`sound.enabled: false`). Tern has no audio API, so when you turn
 host half runs a local player with a fixed argument list:
 
 - macOS: `/usr/bin/afplay -v <volume> <file>`.
-- Linux: the first of `pw-play --volume`, `paplay --volume=`, `aplay -q` found by a one-time
-  `sh -c "command -v pw-play paplay aplay"` probe. No player found means silence.
+- Linux: the first of `pw-play --volume`, `paplay --volume=`, `aplay -q` found by a one-time probe
+  (`sh -c 'for p in pw-play paplay aplay; do command -v "$p"; done; exit 0'`; it works on bash,
+  dash and busybox sh). No player found means silence.
 
 Five sounds (meow, purr, surprise, happy, swat), each switchable in `sound.events`. Silent while
 snoozed, during quiet hours (unless `sound.respect_quiet_hours` is off), in focus mode while a
@@ -243,7 +244,10 @@ command runs, and at volume 0; at most one sound every 2 seconds.
   the overlay ([sprite-pack-spec.md](sprite-pack-spec.md)).
 - `ai.share_command_output` is accepted but has no effect in this version.
 - Recovery notes (for example after a corrupt save file) are shown until the next plugin reload.
-- Tested on macOS (Apple silicon) with Tern 0.8.3 (0.2.0 with Tern 0.6.2).
+- Tested on macOS (Apple silicon) with Tern 0.8.3 (0.2.0 with Tern 0.6.2). Linux: unit tests in CI
+  only. A real Linux Tern run is blocked on closed-beta access: Linux builds exist behind
+  build.stencil.so sign-in. The Linux sound probe was checked in Docker (Ubuntu dash, Alpine
+  busybox), not inside Tern.
 
 ## Uninstall
 

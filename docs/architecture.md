@@ -245,7 +245,7 @@ Further guarantees, enforced by design and unit tests rather than the scan:
 
 - Command lines are reduced to a `CommandCategory` inside the hook handler and discarded.
 - The sound player runs with a fixed argv and pack-validated file paths; on Linux one fixed
-  `sh -c "command -v pw-play paplay aplay"` probe finds the player.
+  `sh -c 'for p in pw-play paplay aplay; do command -v "$p"; done; exit 0'` probe finds the player.
 - Carly exports validate every argument and never return command text or paths.
 
 See [security-privacy.md](security-privacy.md) for the threat model.

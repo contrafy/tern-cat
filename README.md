@@ -96,7 +96,8 @@ Public beta (0.x). Known limits:
   cannot be dragged or petted.
 - Autonomous AI behavior is disabled: Tern (through 0.8.3) offers no constrained model route.
 - Tested on macOS (Apple silicon) with Tern 0.8.3 (0.2.0 with Tern 0.6.2); Linux runs unit tests
-  in CI.
+  in CI. A real Linux Tern run is blocked on closed-beta access (Linux builds exist behind
+  build.stencil.so sign-in).
 
 ## Docs
 
