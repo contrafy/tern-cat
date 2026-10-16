@@ -38,6 +38,11 @@ the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matr
   0.8.3, instead of the moving `main` branch (`TERN_SDK_REF` still overrides it).
 - The disabled Carly provider's reason now says Tern (through 0.8.3) offers no constrained or
   hidden completion route.
+- Pane-switch exits (the cat's dive and the props closing) play as keyframe animations at the
+  pack's own frame times instead of stepped transitions, which Tern redraws at display rate:
+  about 44% fewer extra frames per switch from the transition in a same-window A/B. Rapid pane
+  switching still exceeds the 3% animation target, as Tern's own focus change does with the
+  transition off (see [docs/performance.md](docs/performance.md#exits-as-keyframes)).
 
 ## [0.2.0] - 2026-10-08
 

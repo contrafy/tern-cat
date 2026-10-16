@@ -95,33 +95,42 @@ a stale frame in 4 of 20 switches).
   `backwards` fill hides the cat until its first frame). Every rule that sets the cat's animation
   (the focused rule, `:hover`) repeats that constant name, so a decision change, hover or sheet
   reinstall never replays it; the decision animation gets no delay.
-- **Exit**: transitions on an every-pane rule (`section.tn-pane > … > div.tv-fx.top::after`)
-  that holds the dive's end state (no box). Only a pane that loses `.on` while still displayed
-  transitions there; panes of hidden tabs and sessions become `display: none` and show nothing,
-  and nothing fires at install or for a new pane. Transitions step evenly, so the pack's `dive`
-  plays with equal frame times; the facing is copied so the cat does not flip.
+- **Exit**: an every-pane rule (`section.tn-pane > … > div.tv-fx.top::after`) holds the dive's
+  end state (no box) and plays the dive as a keyframe animation with a constant name
+  (`tern-cat-dive`, the pack's own frame times). A zero-duration transition delayed by the
+  dive's length is the visibility gate: only a pane that loses `.on` while still displayed
+  transitions from the focused rule's full height, so it stays shown until the dive ends. Every
+  other pane also starts the animation (at install, for a new pane, on tab switches) but has no
+  prior style to transition from, so the gate is already shut and nothing is drawn. Panes of
+  hidden tabs and sessions become `display: none`. The facing is copied so the cat does not
+  flip.
 - **Props** (`assets/portals/portals.json`, loaded by `cat/window/portals.luau`): the back layer
   on the grid's effects layer (`div.tv-grid > div.tv-fx::after`, under the cat; its box starts
   at `--tv-px`/`--tv-py` and ends `--tv-aside` short, compensated with `calc()`), the optional
   front layer (box flap) on `div.tv-layer::after` (above the cat). Both are `pointer-events:
-  none`. Enter keyframes play under `.on:not(.off)`; the exit is a stepped `background-position`
-  transition plus a delayed `opacity` flip. The prop anchor sits under the cat's feet at the
+  none`. Enter keyframes play under `.on:not(.off)`; the exit is a keyframe animation on the
+  every-pane rule (`tern-cat-prop-back-exit`, `tern-cat-prop-front-exit`) gated by a delayed
+  zero-duration `opacity` flip. The prop anchor sits under the cat's feet at the
   cat's scale, and the cat is lifted off the edges far enough for the prop to fit (Tern clips
   the view). At top corners the cat's box is anchored by its bottom edge (`calc(100% - …)`) so
   the clip keeps the floor line fixed.
 - **Fallback**: packs without `dive`/`emerge` sink and rise with a stepped height clip of the
-  current decision sheet.
+  current decision sheet (`tern-cat-dive` animates the height). Its gate is `visibility`, not
+  `height` or `opacity`: the focused rule's `opacity` press-hold transition would otherwise
+  delay the cat's reappearance and hide the emerge.
 - **Press during the emerge**: the emerge keyframes hold `opacity: 1` on the cat and the ring
   runs a `tern-cat-emerge-ring` that keeps the swat sheet hidden, so the cat keeps emerging
   instead of popping to a full-height swat frame.
 - **Off**: reduced motion (either setting), `pane_transition: "off"`, a hidden or covered
   overlay, or props that fail to load (one warning) draw no transition at all.
 
-Caveats: a pacing cat snaps back to its resting spot in the frame its pane loses focus
-(transitions start from the base value, not the animated one), then dives there; a pacing cat
-keeps walking during its emerge. Turning the transition on, or switching to the box style,
-plays the new prop's enter once in the focused pane. Transitions tick at display rate for their
-duration, so a switch costs extra frames (exit 640 ms, enter 800 ms); idle cost is unchanged.
+Caveats: a pacing cat snaps back to its resting spot in the frame its pane loses focus (the
+every-pane rule does not pace), then dives there; a pacing cat keeps walking during its emerge.
+Turning the transition on, or switching to the box style, plays the new prop's enter once in
+the focused pane. A switch costs extra frames while the exit and enter keyframes run (exit
+640 ms, enter 800 ms); idle cost is unchanged. Stepped `background-position` transitions are
+avoided: Tern redraws them at display rate for their whole duration, while `step-end`
+keyframes draw only when a frame changes (docs/performance.md, "Exits as keyframes").
 
 ### Full-screen programs
 

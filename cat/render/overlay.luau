@@ -85,7 +85,8 @@ local RING = HOST .. "::before"
 local HOVER = HOST .. ":hover::after"
 local PRESS = HOST .. ":active::after"
 local PRESS_RING = HOST .. ":active::before"
--- The cat on every pane: the dive's end state, reached by transitions on the pane that loses focus.
+-- The cat on every pane: the dive's end state. The pane that loses focus plays the dive as a
+-- keyframe animation while a delayed zero-duration transition keeps it visible until the end.
 local EVERY = PANE .. TV .. " > div.tv-fx.top::after"
 -- Back prop: the grid's effects layer (under the cat; the grid box starts at the terminal's
 -- padding, `--tv-px`/`--tv-py`, and ends `--tv-aside` short of the right edge).
@@ -100,6 +101,10 @@ local EMERGE = "tern-cat-emerge"
 local EMERGE_RING = "tern-cat-emerge-ring"
 local PROP_BACK = "tern-cat-prop-back"
 local PROP_FRONT = "tern-cat-prop-front"
+-- Exits run on the every-pane rules, so they also start (unseen) at install and on tab switches.
+local DIVE = "tern-cat-dive"
+local PROP_BACK_EXIT = "tern-cat-prop-back-exit"
+local PROP_FRONT_EXIT = "tern-cat-prop-front-exit"
 
 local HIDDEN_SHEET = "/* tern-cat overlay hidden */\n"
 local DATA_PREFIX = "data:image/png;base64,"
@@ -318,16 +323,17 @@ local function clipSteps(frameH: number): number
 	return 1
 end
 
--- Exit transition for one strip: steps evenly through its frames (transitions cannot honour
--- per-frame durations) and holds the last frame until `hold` ms, then `property` flips.
-local function exitTransition(sheet: Sheet, holdMs: number, flip: string): string
-	local n = #sheet.durations
-	local frame = totalMs(sheet.durations) / n
-	local flipPart = `{flip} 0s step-end {ms(holdMs)}`
-	if n <= 1 then
-		return flipPart
+-- Exit for one strip on an every-pane rule: a keyframe animation through its frames (honouring
+-- per-frame durations) while `gate` flips once it ends, through a delayed zero-duration transition.
+-- Stepped `background-position` transitions would cost a redraw per display frame instead.
+local function exitAnimation(sheet: Sheet, name: string, stepPx: number, gate: string, blocks: { string }): { string }
+	local total = totalMs(sheet.durations)
+	local lines = { `\ttransition: {gate} 0s step-end {ms(total)};` }
+	if #sheet.durations > 1 then
+		table.insert(lines, `\tanimation: {name} {ms(total)} step-end 1 forwards;`)
+		table.insert(blocks, stripKeyframes(name, sheet.durations, stepPx, nil))
 	end
-	return `background-position {ms(frame * (n - 1))} steps({n - 1}, end), {flipPart}`
+	return lines
 end
 
 type Geometry = {
@@ -351,6 +357,7 @@ local function propRules(
 	exit: Sheet?,
 	enter: Sheet?,
 	name: string,
+	exitName: string,
 	grid: boolean,
 	blocks: { string }
 ): { string }
@@ -371,7 +378,6 @@ local function propRules(
 			vValue = `calc({px(vEdge)} - var(--tv-py, 0px))`
 		end
 	end
-	local exitTotal = if exit then totalMs(exit.durations) else 0
 	local enterTotal = if enter then totalMs(enter.durations) else 0
 	local rules = {
 		`{every} \{`,
@@ -393,8 +399,8 @@ local function propRules(
 			`\tbackground-size: {px(pw * #exit.durations)} {px(ph)};`,
 			`\tbackground-position: {px(-(#exit.durations - 1) * pw)} 0px;`,
 			"\topacity: 0;",
-			`\ttransition: {exitTransition(exit, exitTotal, "opacity")};`,
 		})
+		append(rules, exitAnimation(exit, exitName, pw, "opacity", blocks))
 	else
 		table.insert(rules, "\topacity: 0;")
 	end
@@ -415,6 +421,9 @@ local function propRules(
 			blocks,
 			stripKeyframes(name, enter.durations, pw, `background-size: {px(pw * #enter.durations)} {px(ph)}; `)
 		)
+	else
+		-- Stops the exit (animations restart only when their name changes).
+		table.insert(rules, "\tanimation: none;")
 	end
 	table.insert(rules, "}")
 	return rules
@@ -504,15 +513,15 @@ local function css(params: Params): string
 		emerge = `{EMERGE} {ms(emergeMs)} step-end 1 backwards`
 		table.insert(animations, emerge :: string)
 
-		-- Every pane holds the dive's end state (no box). The pane that just lost focus
-		-- transitions there from the focused pane's values; nothing fires at install or for a new
-		-- pane, which starts in this state.
+		-- Every pane holds the dive's end state (no box). The pane that just lost focus plays the
+		-- dive as an animation and a delayed zero-duration transition (the gate) keeps it shown
+		-- until the dive ends. Other panes start the animation too (at install, on tab switches)
+		-- but the gate is already shut there. Without a dive sheet the cat sinks through a height
+		-- clip and the gate is `visibility`: `opacity` would clash with the press-hold transition
+		-- of the focused rule, which then hides the emerging cat.
 		local sheet = if dive then dive.url else url
 		local frames = if dive then #dive.durations else #durations
 		local last = if dive then -(#dive.durations - 1) * boxW else 0
-		local diveTransition = if dive
-			then exitTransition(dive, diveMs, "height")
-			else `height {ms(diveMs)} steps({clipSteps(frameH)}, end)`
 		append(rule, {
 			`{EVERY} \{`,
 			'\tcontent: "";',
@@ -522,7 +531,7 @@ local function css(params: Params): string
 			`\twidth: {px(boxW)};`,
 			"\theight: 0px;",
 			"\tpointer-events: none;",
-			"\tvisibility: visible;",
+			`\tvisibility: {if dive then "visible" else "hidden"};`,
 			`\tz-index: {num(z)};`,
 			"\timage-rendering: pixelated;",
 			`\tbackground-image: url("{sheet}");`,
@@ -536,7 +545,22 @@ local function css(params: Params): string
 		if params.facing == "left" then
 			table.insert(rule, "\ttransform: scaleX(-1);")
 		end
-		append(rule, { `\ttransition: {diveTransition};`, "}" })
+		if dive then
+			append(rule, exitAnimation(dive, DIVE, boxW, "height", blocks))
+		else
+			local steps = clipSteps(frameH)
+			local lines = { `@keyframes {DIVE} \{`, `\t0% \{ height: {px(boxH)}; }` }
+			for i = 1, steps do
+				table.insert(lines, `\t{num(i / steps * 100)}% \{ height: {px(boxH * (steps - i) / steps)}; }`)
+			end
+			table.insert(lines, "}")
+			table.insert(blocks, table.concat(lines, "\n"))
+			append(rule, {
+				`\ttransition: visibility 0s step-end {ms(diveMs)};`,
+				`\tanimation: {DIVE} {ms(diveMs)} step-end 1 forwards;`,
+			})
+		end
+		table.insert(rule, "}")
 
 		-- The emerge also holds the cat visible (`opacity`) so a press during it does not swap
 		-- in the full-height swat frame; the ring's emerge hides that frame meanwhile.
@@ -727,14 +751,28 @@ local function css(params: Params): string
 		local p = prop :: PropSpec
 		local g: Geometry =
 			{ side = side, boxW = boxW, boxH = boxH, h = gapH, v = gapV, scale = scale, opacity = opacity }
-		append(rule, propRules(g, p, BACK, BACK_ON, p.exit_back, p.enter_back, PROP_BACK, true, blocks))
+		append(rule, propRules(g, p, BACK, BACK_ON, p.exit_back, p.enter_back, PROP_BACK, PROP_BACK_EXIT, true, blocks))
 		table.insert(settled, EVERY)
 		table.insert(settled, BACK)
-		table.insert(reduced, BACK_ON)
+		append(reduced, { EVERY, BACK, BACK_ON })
 		if p.enter_front or p.exit_front then
-			append(rule, propRules(g, p, FRONT, FRONT_ON, p.exit_front, p.enter_front, PROP_FRONT, false, blocks))
+			append(
+				rule,
+				propRules(
+					g,
+					p,
+					FRONT,
+					FRONT_ON,
+					p.exit_front,
+					p.enter_front,
+					PROP_FRONT,
+					PROP_FRONT_EXIT,
+					false,
+					blocks
+				)
+			)
 			table.insert(settled, FRONT)
-			table.insert(reduced, FRONT_ON)
+			append(reduced, { FRONT, FRONT_ON })
 		end
 	end
 
