@@ -215,18 +215,19 @@ local function frameKeyframes(name: string, durations: { number }, stepPx: numbe
 end
 
 -- `dir` is -1 from a right corner (the first leg walks left) and 1 from a left corner. The sprite
--- faces right unmirrored, so a leftward leg is mirrored.
-local function paceKeyframes(name: string, steps: number, dir: number): string
+-- faces right unmirrored, so a leftward leg is mirrored unless `mirror` is false (the ring, whose
+-- swat must read unmirrored, walks along without turning).
+local function paceKeyframes(name: string, steps: number, dir: number, mirror: boolean): string
 	local far = px(dir * PACE_PX)
-	local out = if dir < 0 then "-1" else "1"
-	local back = if dir < 0 then "1" else "-1"
+	local out = if not mirror then "" elseif dir < 0 then " scaleX(-1)" else " scaleX(1)"
+	local back = if not mirror then "" elseif dir < 0 then " scaleX(1)" else " scaleX(-1)"
 	return table.concat({
 		`@keyframes {name} \{`,
-		`\t0% \{ transform: translateX(0px) scaleX({out}); animation-timing-function: steps({steps}, end); }`,
-		`\t48% \{ transform: translateX({far}) scaleX({out}); animation-timing-function: step-end; }`,
-		`\t50% \{ transform: translateX({far}) scaleX({back}); animation-timing-function: steps({steps}, end); }`,
-		`\t98% \{ transform: translateX(0px) scaleX({back}); animation-timing-function: step-end; }`,
-		`\t100% \{ transform: translateX(0px) scaleX({back}); }`,
+		`\t0% \{ transform: translateX(0px){out}; animation-timing-function: steps({steps}, end); }`,
+		`\t48% \{ transform: translateX({far}){out}; animation-timing-function: step-end; }`,
+		`\t50% \{ transform: translateX({far}){back}; animation-timing-function: steps({steps}, end); }`,
+		`\t98% \{ transform: translateX(0px){back}; animation-timing-function: step-end; }`,
+		`\t100% \{ transform: translateX(0px){back}; }`,
 		"}",
 	}, "\n")
 end
@@ -485,20 +486,29 @@ local function css(params: Params): string
 		table.insert(animations, `{frameName} {totalMs(durations)}ms step-end {iteration}`)
 		table.insert(blocks, frameKeyframes(frameName, durations, boxW))
 	end
-	-- Reaction rules repeat the pacing animation by name so a hover or press keeps the walk going.
-	local pace: string? = nil
-	if params.pace == true and not still then
-		local steps = math.floor(PACE_PX / PACE_STEP_PX)
-		local legMs = PACE_PX / PACE_SPEED_PX_S * 1000
-		pace = `{paceName} {math.floor(legMs / 0.48 + 0.5)}ms step-end infinite`
-		table.insert(animations, pace :: string)
-		table.insert(blocks, paceKeyframes(paceName, steps, if side.h == "right" then -1 else 1))
-	end
-
 	local reactions = if type(params.reactions) == "table" then params.reactions else {} :: any
 	local hover = safeReaction(reactions.hover)
 	local press = safeReaction(reactions.press)
 	local reactive = hover ~= nil or press ~= nil
+
+	-- Reaction rules repeat the pacing animation by name so a hover or press keeps the walk going.
+	-- The ring walks with the cat but never mirrors: the swat drawn in it faces right, so its
+	-- knocked-off letter reads correctly whichever way the cat walks.
+	local pace: string? = nil
+	local ringPace: string? = nil
+	if params.pace == true and not still then
+		local steps = math.floor(PACE_PX / PACE_STEP_PX)
+		local legMs = PACE_PX / PACE_SPEED_PX_S * 1000
+		local dir = if side.h == "right" then -1 else 1
+		local period = math.floor(legMs / 0.48 + 0.5)
+		pace = `{paceName} {period}ms step-end infinite`
+		table.insert(animations, pace :: string)
+		table.insert(blocks, paceKeyframes(paceName, steps, dir, true))
+		if reactive then
+			ringPace = `{paceName}-ring {period}ms step-end infinite`
+			table.insert(blocks, paceKeyframes(`{paceName}-ring`, steps, dir, false))
+		end
+	end
 
 	-- The emerge goes last: while it runs it wins over the decision for the properties it sets.
 	local emerge: string? = nil
@@ -667,12 +677,11 @@ local function css(params: Params): string
 		if translucent then
 			table.insert(rule, `\topacity: {opacity};`)
 		end
-		if params.facing == "left" then
-			table.insert(rule, "\ttransform: scaleX(-1);")
-		end
+		-- Never mirrored (see ringPace): the content box sits over the cat either way, and the
+		-- swat faces right so its letter reads correctly.
 		local ringList: { string } = {}
-		if pace then
-			table.insert(ringList, pace :: string)
+		if ringPace then
+			table.insert(ringList, ringPace :: string)
 		end
 		if emergeRing then
 			table.insert(ringList, emergeRing :: string)
@@ -726,8 +735,8 @@ local function css(params: Params): string
 			table.insert(list, `tern-cat-press {totalMs(press.durations)}ms step-end 1 forwards`)
 			table.insert(blocks, frameKeyframes("tern-cat-press", press.durations, boxW))
 		end
-		if pace then
-			table.insert(list, pace :: string)
+		if ringPace then
+			table.insert(list, ringPace :: string)
 		end
 		if emergeRing then
 			table.insert(list, emergeRing :: string)

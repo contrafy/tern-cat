@@ -81,6 +81,11 @@ rejected, and Tern has no nested `pointer-events: none` element that could host 
 the cat separately, so "near" and "on the cat" cannot be told apart. A CSS-only cat also cannot
 tell Lua it was touched, so hover and press never count as pets.
 
+The swat knocks a letter off, which would read backwards mirrored, so the cat faces right while
+swatting: a swat decision is drawn unmirrored, and the press sheet is drawn in the ring's content
+box, which never mirrors (with pacing the ring runs its own translate-only copy of the walk, in
+step with the cat). Everything else, the hover look included, keeps the cat's facing.
+
 ### Pane-switch transition
 
 `rendering.pane_transition` (`portal`, `vent`, `box`; `off`) makes the cat dive into a prop in

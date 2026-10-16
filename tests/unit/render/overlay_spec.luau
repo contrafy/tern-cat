@@ -447,18 +447,37 @@ describe("render/overlay.css", function()
 		it("keeps pacing through hover and press by repeating the walk by name", function()
 			local css = overlay.css(reactive({ pace = true }))
 			local walk = "tern-cat-pace-idle-1 8333ms step-end infinite"
-			for _, sel in { SELECTOR, HOST .. "::before", HOST .. ":hover::after", HOST .. ":active::before" } do
+			local ringWalk = "tern-cat-pace-idle-1-ring 8333ms step-end infinite"
+			for _, sel in { SELECTOR, HOST .. ":hover::after" } do
 				local body = block(css, sel)
 				assert(body, `missing {sel}`)
 				expect(body).toContain(walk)
 			end
-			expect(count(css, "@keyframes tern-cat-pace-idle-1")).toBe(1)
+			for _, sel in { HOST .. "::before", HOST .. ":active::before" } do
+				local body = block(css, sel)
+				assert(body, `missing {sel}`)
+				expect(body).toContain(ringWalk)
+			end
+			expect(count(css, "@keyframes tern-cat-pace-idle-1 ")).toBe(1)
+			expect(count(css, "@keyframes tern-cat-pace-idle-1-ring ")).toBe(1)
 		end)
 
-		it("mirrors the ring with the cat", function()
-			local ring = block(overlay.css(reactive({ facing = "left" })), HOST .. "::before")
-			assert(ring, "missing ring")
-			expect(ring).toContain("transform: scaleX(-1)")
+		it("draws the swat unmirrored for a left-facing cat, over the cat's box", function()
+			local css = overlay.css(reactive({ facing = "left", pace = true }))
+			local cat = block(css, SELECTOR)
+			local ring = block(css, HOST .. "::before")
+			local press = block(css, HOST .. ":active::before")
+			assert(cat and ring and press, "missing rules")
+			-- The hover and decision keep the cat's facing; the ring never turns.
+			expect(cat).toContain("transform: scaleX(-1)")
+			expect(ring).notToContain("scaleX")
+			expect(press).notToContain("scaleX")
+			local ringFrames = string.match(css, "@keyframes tern%-cat%-pace%-idle%-1%-ring (%b{})")
+			local catFrames = string.match(css, "@keyframes tern%-cat%-pace%-idle%-1 (%b{})")
+			assert(ringFrames and catFrames, "missing pace keyframes")
+			expect(ringFrames).notToContain("scaleX")
+			-- Walks in step with the cat: the same translations at the same stops.
+			expect((string.gsub(catFrames, " scaleX%(%-?1%)", ""))).toBe(ringFrames)
 		end)
 
 		it("shows each reaction's first frame without animation when still", function()
@@ -592,7 +611,7 @@ describe("render/overlay.css pane transition", function()
 		expect(hover).toContain("tern-cat-emerge 640ms step-end 1 backwards")
 		expect(ring).toContain("tern-cat-emerge-ring 640ms step-end 1 backwards")
 		expect(press).toContain("tern-cat-emerge-ring 640ms step-end 1 backwards")
-		expect(press).toContain("tern-cat-pace-idle-1 ")
+		expect(press).toContain("tern-cat-pace-idle-1-ring ")
 	end)
 
 	it("keeps a pressed cat emerging instead of swatting until the emerge ends", function()

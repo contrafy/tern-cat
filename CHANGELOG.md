@@ -31,6 +31,9 @@ the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matr
   busybox (Alpine). The probe ran `command -v pw-play paplay aplay`, but those shells look only at
   the first name, so sound stayed silent unless `pw-play` was installed. It is still one fixed
   argv with no interpolation, now one `command -v` per player.
+- The overlay cat faces right while swatting, so the knocked-off letter no longer reads
+  backwards when the cat faced left: the swat decision and the press reaction (including the pose
+  held after release, and while pacing) are drawn unmirrored; everything else keeps its facing.
 
 ### Changed
 

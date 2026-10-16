@@ -243,22 +243,32 @@ describe("window/presenter scheduling", function()
 	it("alternates facing when the animation changes", function()
 		local p, c = make()
 		local flips, changes = 0, 0
-		local facing = presenter.view(p).facing
+		local facing = p.facing
 		local anim = presenter.view(p).animation
 		for _ = 1, 40 do
 			if runUntilChange(p, c) then
 				local v = presenter.view(p)
 				if v.animation ~= anim then
 					changes += 1
-					if v.facing ~= facing then
+					if p.facing ~= facing then
 						flips += 1
 					end
 				end
-				facing, anim = v.facing, v.animation
+				facing, anim = p.facing, v.animation
 			end
 		end
 		expect(changes).toBeGreaterThan(0)
 		expect(flips).toBe(changes)
+	end)
+
+	it("faces right while swatting so the knocked-off letter reads correctly", function()
+		local p = make()
+		p.facing = "left"
+		p.engine.current = { animation = presenter.PRESS_ANIMATION } :: any
+		expect(presenter.view(p).facing).toBe("right")
+		expect(presenter.params(p, presenter.view(p), ASSET).facing).toBe("right")
+		p.engine.current = { animation = "idle" } :: any
+		expect(presenter.view(p).facing).toBe("left")
 	end)
 
 	it("paces only while walking with pacing allowed and motion not reduced", function()

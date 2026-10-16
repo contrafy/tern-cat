@@ -344,7 +344,8 @@ local function view(p: Presenter): View
 		-- Reduced motion: the cat simply appears in the newly focused pane.
 		transition = if hidden or isStill then "off" else p.config.rendering.pane_transition,
 		shrink = not hidden and aside == "shrink",
-		facing = p.facing,
+		-- The swat knocks a letter off; mirrored it would read backwards.
+		facing = if animation == PRESS_ANIMATION then "right" else p.facing,
 		seq = p.seq,
 	}
 end
