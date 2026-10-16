@@ -13,7 +13,9 @@ local MANIFEST_MAX_BYTES = 16 * 1024
 local SOUND_IDS: { T.SoundId } = { "meow", "purr", "surprise", "happy", "swat" }
 local EXTENSIONS = { "wav", "aiff", "aif", "mp3", "ogg" }
 local LINUX_PLAYERS = { "pw-play", "paplay", "aplay" }
-local PROBE_ARGV = { "sh", "-c", "command -v pw-play paplay aplay" }
+-- One `command -v` per name: dash (Debian, Ubuntu /bin/sh) and busybox ash (Alpine) look only at the
+-- first name of `command -v a b c`, which hid paplay and aplay unless pw-play was installed.
+local PROBE_ARGV = { "sh", "-c", 'for p in pw-play paplay aplay; do command -v "$p"; done; exit 0' }
 local AFPLAY = "/usr/bin/afplay"
 local PLAY_TIMEOUT_MS = 10000
 

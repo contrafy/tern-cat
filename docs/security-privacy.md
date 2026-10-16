@@ -107,8 +107,9 @@ does not ask the user before Carly calls them, so:
 Tern has no audio API, so sound effects run a local player (`cat/integrations/sound.luau`):
 
 - macOS: `/usr/bin/afplay` (fixed path, checked for existence).
-- Linux: one fixed probe, `sh -c "command -v pw-play paplay aplay"` (fixed argv, no
-  interpolation), then the first player found.
+- Linux: one fixed probe, `sh -c 'for p in pw-play paplay aplay; do command -v "$p"; done; exit 0'`
+  (fixed argv, no interpolation; one `command -v` per name because dash and busybox ignore extra
+  names), then the first player found.
 - Sound is opt-in (`sound.enabled`, default `false`) and Carly cannot turn it on (see above).
 - The argv is fixed per player; the only variable parts are the clamped volume and the file path.
 - The path comes from a validated sound pack: pack-relative, same segment rules as sprite paths,
