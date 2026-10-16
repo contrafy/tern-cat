@@ -7,6 +7,24 @@ All notable changes to tern-cat are documented here. The format follows
 
 ## [Unreleased]
 
+Tested against Tern 0.8.3 (macOS, Apple silicon). Tern 0.6.2 or later is still required; none of
+the plugin APIs tern-cat uses changed, and the overlay's Tern DOM and CSS hooks still match (see
+the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matrix.md#tern-083-delta)).
+
+### Fixed
+
+- **Open cat** focuses the card it floats. Tern 0.8 rests an unfocused floating card as a small
+  tilted "glance" card that ignores clicks, so the sprite and buttons did nothing until the card
+  was double-clicked. The card now takes the keyboard focus; click the pane to give it back (the
+  card then rests as a glance card again until double-clicked or brought back with **Open cat**).
+
+### Changed
+
+- CI type-checks against a pinned `stencil-hq/tern-sdk` commit whose `tern.d.luau` matches Tern
+  0.8.3, instead of the moving `main` branch (`TERN_SDK_REF` still overrides it).
+- The disabled Carly provider's reason now says Tern (through 0.8.3) offers no constrained or
+  hidden completion route.
+
 ## [0.2.0] - 2026-10-08
 
 Tested against Tern 0.6.2 (macOS, Apple silicon). Config written by 0.1.0 keeps working:

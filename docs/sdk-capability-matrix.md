@@ -1,6 +1,6 @@
 # SDK capability matrix (M0)
 
-Target: Tern `0.6.2 (4b3ed42)` on macOS arm64. The API types came from `tern plugin types` (`tern.d.luau`, 1814 lines). Line references point into that file.
+Target: Tern `0.6.2 (4b3ed42)` on macOS arm64. The API types came from `tern plugin types` (`tern.d.luau`, 1814 lines). Line references point into that file. Re-checked against Tern `0.8.3 (e2b8656)`: see [Tern 0.8.3 delta](#tern-083-delta).
 
 Tags:
 
@@ -72,7 +72,7 @@ Both ran against an isolated config, daemon and log directory (see [Dev isolatio
 | Reload | A sheet installed from a command handler is dropped on reload. A sheet installed at entry load survives. `tern.css(name, "")` leaves an empty sheet in place | VERIFIED |
 | Follow focus with zero Lua | `section.tn-pane.on > .tn-body::after { position:absolute; right:12px; bottom:12px }` follows the focused pane across `split` and `focus` | VERIFIED |
 | Interactivity | No input reaches the window half (no DOM or class API). CSS-only: a `pointer-events:auto` pseudo-element on `.tv > .tv-fx.top` (itself `pointer-events:none`) gives that host a cat-local `:hover`/`:active` while clicks, drags, typing and mouse reporting still reach the terminal (later spike; used by the overlay's pointer reactions) | VERIFIED |
-| Floated block (PiP) | `cx:new_block(kind, args, "beside")` then `cx.layout:float(pane, owner, "br")` gives a 465x278 CSS px card (59x14 cells) over the owner. The owner keeps 160x45 cells and keeps keyboard focus. A single click does not steal focus | VERIFIED |
+| Floated block (PiP) | `cx:new_block(kind, args, "beside")` then `cx.layout:float(pane, owner, "br")` gives a 465x278 CSS px card (59x14 cells) over the owner. The owner keeps 160x45 cells and keeps keyboard focus. A single click does not steal focus. Tern 0.8 changed this: see [Tern 0.8.3 delta](#behavior-changes) | VERIFIED |
 | Float limits | The plugin can set only the corner. `layout:resize` on a float returns `false`; only the user can resize it. `how="pip"` raises. The host `resize` hook did not fire for a float, and `cx.cols`/`rows` stayed at 80x24 | VERIFIED |
 
 ### Decision and rationale
@@ -209,6 +209,75 @@ VERIFIED.
 | Opening a block | Palette "New <title> block" (works headless) or window `cx:new_block`. `tern new` has no block argument | VERIFIED / INFERENCE (`tern new`) |
 | Permissions | "Tern does not declare, check or prompt for capabilities" ([concepts/security](https://docs.stencil.so/tern/concepts/security.html)). All safety rules are self-imposed | VERIFIED (docs) |
 | Examples | https://github.com/stencil-hq/tern-sdk/tree/main/plugins/examples/ | VERIFIED (docs link) |
+
+## Tern 0.8.3 delta
+
+Re-check of everything above on Tern `0.8.3 (e2b8656)`, macOS arm64, in sandboxes under
+`/tmp/tern-cat-dev/Compat083`. Sources: a diff of `tern plugin types` (2016 lines, up from 1814),
+the release notes Tern bundles for 0.6.3 to 0.8.3 (palette "What's new: release notes"; there is
+no public changelog), the docs (fetched 2026-10-15; they do not yet mention `agent_finished`,
+`cx:pick`/`cx:prompt` or `cx.whiteboard`, which the types and release notes do), and real-window
+runs: `scripts/smoke-window.sh` 19/19, `scripts/visual.sh` goldens, and manual checks with
+`tern ctl`.
+
+**Verdict:** nothing tern-cat calls changed, and every undocumented DOM/CSS hook the overlay uses
+still matches. One behavior changed: Tern 0.8 floats a card as a "glance" card that takes no
+clicks, so **Open cat** now focuses the card it floats. No new plugin API changes the roadmap:
+still no hover/pointer events, overlay API, pane or cell geometry, window id, occlusion signal,
+audio or constrained Carly completion.
+
+### API changes in the types
+
+| Change | Since | Effect on tern-cat | Tag |
+|---|---|---|---|
+| `BlockDef.features: { "edit" \| "undo" }?`: native caret, selection and undo in a block's input fields | 0.6.3 | None (the block has no text fields) | VERIFIED (types, release notes) |
+| `PaneKind` adds `"canvas"` and `"carly"` | 0.6.3-0.8.x | None: tern-cat compares `PaneInfo.block` with its own kind only | VERIFIED (types) |
+| `cx.canvas:open`/`set` raise on unknown fields and on an empty change (breaking) | 0.6.3 | None (`cx.canvas` unused) | VERIFIED (release notes) |
+| `cx.whiteboard` (`open`, `read`, `edit`) for canvas-kind blocks | 0.6.3 | None | VERIFIED (types) |
+| `cx:pick(opts)` and `cx:prompt(opts)`: a picker or a one-line field over the focused pane, resolving to the choice or text | 0.7.1 | Not used. Could offer foods, toys or packs without opening the block | VERIFIED (types, release notes) |
+| `agent_finished` window event (`AgentFinishedEvent = { pane, result: "done" \| "failed" \| "exited" \| "closed" }`), also a `tern.carly.schedule` watch event | 0.8.2 | Not used. A cat reaction to an agent turn ending is now possible from the window half without reading output | VERIFIED (types, release notes) |
+| `cx.agents:get(spec) -> Agent` (`pane`, `Agent:tocarly("finished", message)` schedules a Carly run when the turn ends); `ask`/`wait`/`transcript`/`interrupt`/`stop` take an `Agent` | 0.8.2 | None (`cx.agents` is banned by `tests/unit/safety_spec.luau`; `tocarly` starts a full-power Carly turn) | VERIFIED (types) |
+| `ExportCall:wait` returns a typed `ExportWait` marker instead of `userdata` | 0.8.x | None (tern-cat never defers an export reply) | VERIFIED (types) |
+| `os.time` reads date tables as local time; `cx.db.open` opens on the focused pane's host; browser `blocks`/`release` ops | 0.7.3-0.8.0 | None | VERIFIED (release notes) |
+
+`scripts/check.sh` (luau-lsp against the 0.8.3 types) passes without source changes. The CI
+download (`stencil-hq/tern-sdk`, `plugins/tern.d.luau`) at commit `ccdb4b8266` (2026-10-12, then
+`main`) is byte-identical to 0.8.3's `tern plugin types`; `scripts/fetch-types.sh` now pins that
+commit so CI keeps checking against the tested version (VERIFIED).
+
+### Capabilities on the roadmap
+
+| Question | 0.8.3 answer | Tag |
+|---|---|---|
+| Pointer, hover, move, drag events for plugins | None. Block nodes still have `actions = {click, dblclick, menu}` only; the release notes' hover changes are Tern's own UI | VERIFIED (types grep for hover, pointer, mouse; release notes) |
+| Overlay or decoration API | None; window-half `tern.css` remains the route | VERIFIED (types) |
+| Pane geometry, cell or caret metrics | None for plugins. The 0.8.3 note "Added Stage::caret method to obtain pane caret position" is Rust-internal; nothing in `tern.d.luau` (the existing `caret` field belongs to file blocks). Possibly a future API | VERIFIED (absence) / INFERENCE (future) |
+| Window id, occlusion, OS window focus | Unchanged: none | VERIFIED (types) |
+| Reduced-motion signal | Unchanged: `cx.settings:get("reduce_motion")` returns `"on"`/`"off"` (polled; no event). Tern's reduced-motion CSS still stops plugin-sheet animations (`ctl stats` showed no animating element with it on) | VERIFIED (sandbox) |
+| Sound | Still no audio API; `tern.process.run` + `afplay` unchanged | VERIFIED (types) |
+| Constrained or hidden Carly completion | None. New: `agent_finished` watches and `Agent:tocarly`, both full-power Carly turns | VERIFIED (types) |
+| Permissions, manifest | Still no permission system, `schema = 1`, no minimum-version key; `plugins: false` and per-plugin disable in `settings.json` are the controls ([concepts/security](https://docs.stencil.so/tern/concepts/security.html)) | VERIFIED (docs) |
+| Budgets and limits | Unchanged: host 2 s, window 50 ms, formatters and `available` 4 ms, 256 MiB per VM ([concepts/runtime](https://docs.stencil.so/tern/concepts/runtime.html), [reference/limits](https://docs.stencil.so/tern/reference/limits.html)). tern-cat's window load: 2-3 slices, slowest 15.2-17.5 ms, overlay setup 4.0-4.9 ms (one 26.6 ms during the CPU run, logged as a warning, still under 50 ms) | VERIFIED (docs, sandbox logs) |
+| First-party pet | 0.7.2 added "Desktop pet (Clawdi)" to the palette: a cat on the OS desktop that reacts to typing and scrolling anywhere (needs Accessibility and Input Monitoring) and tracks Claude Code and omp sessions, with a task-complete sound. No plugin API for it | VERIFIED (release notes, app strings) / INFERENCE (no API) |
+
+### Undocumented DOM and CSS the overlay relies on
+
+| Hook | 0.8.3 | Tag |
+|---|---|---|
+| `section.tn-pane.on:not(.off) > div.tn-body > div.tv > div.tv-fx.top` (`::after` cat, `::before` ring) | Present, box equal to the pane's view; cat drawn at all four corners; `ctl pick` on the cat reports `div.tv-fx.top>span` (the pseudo box) while the cursor stays `text` | VERIFIED |
+| Hidden tabs and sessions keep `.on` and gain `.off` | Yes (headless layout `section.tn-pane.on.lone.off`); tab and session switches replay the emerge | VERIFIED |
+| `div.tv-grid > div.tv-fx` (back prop), `div.tv-layer` (front prop), `--tv-px`/`--tv-py`/`--tv-aside` | Present; portal, vent and box dive in the pane losing focus and emerge in the gaining one, at bottom and top corners | VERIFIED |
+| Pointer pass-through | Hover plays `look`, press plays `swat`; a press on the cat leaves the terminal input focused and typing runs; a drag across the cat selects the text under it | VERIFIED |
+| `.sf-image ... .sf-img-frame` (image ring removal) | Matches (now an `img.sf-img-frame`); sprites show no frame or ring. Blocks render inside `div.tv.covered > div.tv-cover > div.sf-region.sf-main` | VERIFIED |
+| PiP classes | `section.tn-pane.pip.pip-glance.pip-r.pip-b`; tern-cat does not select on them (cover detection uses `cx.session:layout(tab).floats`) | VERIFIED |
+
+### Behavior changes
+
+| Item | Detail | Tag |
+|---|---|---|
+| Floated card | `cx.layout:float(pane, owner, "br")` leaves the card in `glance` mode: tilted, 297x280 CSS px here (glance size 480x280, capped by the owner), and `ctl pick` on its buttons hits `section.tn-pane.pip` itself, so clicks on the sprite and buttons did nothing. `float(..., { focus = true })` is still glance. Double-click, `ctl pip focus` or `cx.layout:focus(pane)` switches it to `focus` mode (446x420 here; focus size 720x420), where clicks reach the block. Fix: `cat/window/blocks.luau` focuses every card it floats. The card takes keyboard focus; clicking the pane returns focus and the card to glance | VERIFIED |
+| Late-attach images | 0.6.3: "block images published while the pane was hidden or before a restart show instead of 'The image data has not arrived'". tern-cat keeps every frame node in the view anyway (see [section 5](#5-images-blobs-frame-rate-hit-testing-sound)), which stays correct; dropping it would need 0.6.3 as the minimum and a re-test | VERIFIED (release notes) / INFERENCE (removal) |
+| Sandbox hazard | A 0.8.3 window on a fresh config dir offered and ran "Install omp", copying `~/.local/bin/omp` into `$TERN_CONFIG_DIR/omp`. Nothing outside the sandbox changed (`~/.local/bin/omp` and the shell rc files kept their dates) | VERIFIED |
 
 ## Headless testing recipe
 

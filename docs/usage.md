@@ -11,12 +11,14 @@ Detailed reference. Settings: [configuration.md](configuration.md). Privacy: [se
    motion). You do not have to do anything else.
 2. Open the interactive block from the command palette:
    - **Open cat** (group Tern Cat) opens it as a floating card in the bottom-right corner of the
-     focused pane. If the focused tab already shows a cat block (tiled or floating), it focuses
-     that one instead. A cat card floating in another tab, or a parked cat, moves over the focused
-     pane; a cat block tiled into another tab is left there and a new card opens. With
-     `rendering.block_placement: "split"` it opens as a split beside the focused pane instead (a
-     parked cat is dealt back beside it). If floating fails the block stays a split, and a toast
-     says why.
+     focused pane and focuses the card. If the focused tab already shows a cat block (tiled or
+     floating), it focuses that one instead. A cat card floating in another tab, or a parked cat,
+     moves over the focused pane; a cat block tiled into another tab is left there and a new card
+     opens. With `rendering.block_placement: "split"` it opens as a split beside the focused pane
+     instead (a parked cat is dealt back beside it). If floating fails the block stays a split,
+     and a toast says why.
+   - Tern 0.8 shows an unfocused card as a small tilted "glance" card that takes no clicks: after
+     you click back into the pane, double-click the card or run **Open cat** again to use it.
    - **New Tern Cat block** (Tern's own block catalog entry, not a tern-cat command) opens it like
      any other block, in a new tab or split; it never floats.
 3. While the block is focused, or floats over the focused pane, the overlay cat hides so it does
@@ -72,10 +74,10 @@ Detailed reference. Settings: [configuration.md](configuration.md). Privacy: [se
 
 ### Global hide chord
 
-`ctrl+alt+cmd+c` runs **Hide or show the overlay cat** in any window. It is free in Tern 0.6.2's
-default keymap. Your own keybinds always win over plugin binds, so you can move or remove it in
-Tern's `settings.json` (`<config>/settings.json`; macOS `~/Library/Application Support/Tern/`,
-Linux `~/.config/tern/`):
+`ctrl+alt+cmd+c` runs **Hide or show the overlay cat** in any window. It is free in Tern's
+default keymap (checked on 0.6.2 and 0.8.3). Your own keybinds always win over plugin binds, so
+you can move or remove it in Tern's `settings.json` (`<config>/settings.json`; macOS
+`~/Library/Application Support/Tern/`, Linux `~/.config/tern/`):
 
 ```json
 {
@@ -95,7 +97,7 @@ All are in the group **Tern Cat**; their action names are `plugin.tern-cat.<id>`
 
 | Title | Id | What it does |
 |---|---|---|
-| Open cat | `open` | Bring the cat to the focused pane, floated or split per `rendering.block_placement`; focus it if this tab already shows one. |
+| Open cat | `open` | Bring the cat to the focused pane, floated (and focused) or split per `rendering.block_placement`; focus it if this tab already shows one. |
 | Pet the cat | `pet` | Pet. |
 | Poke the cat | `poke` | Poke. |
 | Feed the cat | `feed` | Feed. |
@@ -187,7 +189,7 @@ journal text or reasons. tern-cat never starts Carly turns (`ask_carly`, `carly.
 ## AI status
 
 Autonomous AI behavior is disabled. `ai_status()` reports `enabled = false` and the
-`carly_schedule` provider reports: "Disabled: Tern 0.6.2 offers no constrained or hidden
+`carly_schedule` provider reports: "Disabled: Tern (through 0.8.3) offers no constrained or hidden
 completion route. Scheduled Carly turns run with full tool access (commands, input), so tern-cat
 will not start them." Ordinary behavior needs no AI. The AI policy code (turn budget, redaction,
 response allowlist, mock provider) exists and is tested so a constrained route can be adopted
@@ -233,13 +235,15 @@ command runs, and at volume 0; at most one sound every 2 seconds.
   stylesheet stops every animation, including the cat's. With `follow_tern` (default) the block
   keeps animating; set `"on"` for still frames everywhere. A change of Tern's setting can take up
   to about 2 s to reach the overlay.
-- A plugin cannot size the floated card (Tern picks the size; you can resize it yourself). Floating is per session, so
-  each window opens its own card.
+- A plugin cannot size the floated card (Tern picks the size; you can resize it yourself), nor
+  float it already focused: Tern 0.8 rests every card it floats as a glance card, so tern-cat
+  focuses the card right after floating it. Floating is per session, so each window opens its own
+  card.
 - In a user sprite pack, animations without a built sprite sheet show only their first frame in
   the overlay ([sprite-pack-spec.md](sprite-pack-spec.md)).
 - `ai.share_command_output` is accepted but has no effect in this version.
 - Recovery notes (for example after a corrupt save file) are shown until the next plugin reload.
-- Tested on macOS (Apple silicon) with Tern 0.6.2 only.
+- Tested on macOS (Apple silicon) with Tern 0.8.3 (0.2.0 with Tern 0.6.2).
 
 ## Uninstall
 
