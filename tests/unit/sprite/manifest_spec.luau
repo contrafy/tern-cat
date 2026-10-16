@@ -4,6 +4,7 @@ local serde = require("@lune/serde")
 local fs = require("@lune/fs")
 local support = require("./support")
 local manifest = require("../../../cat/sprite/manifest")
+local animations = require("../../../cat/render/animations")
 local T = require("../../../cat/types")
 
 local describe, it, expect = t.describe, t.it, t.expect
@@ -213,6 +214,20 @@ describe("sprite/manifest.validate", function()
 			expect(result.warnings[1]).toContain("moonwalk")
 			assert(result.manifest, "expected a manifest")
 			expect(result.manifest.animations.moonwalk).toBeNil()
+		end)
+
+		it("keeps every canonical animation the renderers know", function()
+			local raw = validManifest()
+			for _, name in animations.CANONICAL do
+				raw.animations[name] = animation({ "idle_0.png", "idle_1.png" })
+			end
+			local result = run(raw)
+			expect(result.errors).toEqual({})
+			expect(result.warnings).toEqual({})
+			assert(result.manifest, "expected a manifest")
+			for _, name in animations.CANONICAL do
+				assert(result.manifest.animations[name], `{name} was dropped`)
+			end
 		end)
 	end)
 

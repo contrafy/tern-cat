@@ -89,7 +89,8 @@ export type CatEvent = {
 
 -- Canonical animation names. Packs must provide `idle`; everything else falls back
 -- through cat/render/animations.luau. `dive` and `emerge` are only played by the overlay's
--- pane-switch transition, never as a decision.
+-- pane-switch transition, and `climb`, `leap` and `run` only by its walk between panes, never
+-- as a decision.
 export type Animation =
 	"idle"
 	| "walk"
@@ -113,6 +114,9 @@ export type Animation =
 	| "hop"
 	| "dive"
 	| "emerge"
+	| "climb"
+	| "leap"
+	| "run"
 
 export type SoundId = "meow" | "purr" | "surprise" | "happy" | "swat"
 
@@ -179,8 +183,10 @@ export type BlockPlacement = "float" | "split"
 -- Resting corner of the overlay cat in the focused pane.
 export type OverlayPosition = "top-right" | "top-left" | "bottom-right" | "bottom-left"
 
--- Prop the overlay cat dives into and emerges from when the focused pane changes.
-export type PaneTransition = "portal" | "vent" | "box" | "off"
+-- How the overlay cat moves to the newly focused pane: a prop it dives into and emerges from
+-- (`portal`, `vent`, `box`), a walk across the dividers (`walk`; other switches use the portal),
+-- a walk only between panes that share an edge (`auto`, else the portal), or nothing (`off`).
+export type PaneTransition = "portal" | "vent" | "box" | "walk" | "auto" | "off"
 
 -- What the overlay cat does while the focused pane runs a full-screen program (vim, less, htop).
 export type FullscreenBehavior = "hide" | "shrink" | "stay"

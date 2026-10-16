@@ -74,6 +74,9 @@ CANONICAL = [
     "hop",
     "dive",
     "emerge",
+    "climb",
+    "leap",
+    "run",
 ]
 SOUND_IDS = ["meow", "purr", "surprise", "happy", "swat"]
 SOUND_LIMITS = {"max_seconds": 1.5, "max_bytes": 80 * 1024, "rates": (8000, 48000)}

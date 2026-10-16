@@ -13,6 +13,17 @@ the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matr
 
 ### Added
 
+- `rendering.pane_transition` gains `walk` and `auto`. With `walk` the overlay cat walks from its
+  corner in the pane it leaves to its corner in the pane it enters when both are split panes of
+  the same tab: along the pane edges, leaping over vertical dividers and climbing along
+  horizontal ones, drawn by a small per-switch `travel` sheet on Tern's pane stage; a switch
+  during a walk continues from where the cat is. Tab and session switches, zoomed tabs and
+  floating panes play the portal entrance instead. `auto` walks only to a pane that shares an
+  edge with the old one. Exactly one cat shows at any time; off under reduced motion; the
+  traveler takes no pointer reactions. `portal`, `vent`, `box` and `off` are unchanged.
+- New canonical animations `climb`, `leap` and `run` (bundled packs orange-menace, tuxedo and
+  void) for the walk between panes, with fallbacks to `walk`, `hop` and `walk`. They cannot be
+  performed.
 - The overlay cat steps aside while the focused pane runs a full-screen program (terminal
   editors, pagers, `man`, `top`/`htop`/`btop`, `tmux`; not `ssh`), whose title and status bars
   sit under the default top-right corner. New `rendering.fullscreen_behavior`: `hide` (default),

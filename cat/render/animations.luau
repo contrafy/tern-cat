@@ -3,8 +3,9 @@
 -- pack-independent loop/duration defaults. Pure.
 --
 -- `dive` and `emerge` are the overlay's pane-switch transition (the cat sinks into a portal in the
--- pane it leaves and rises out of one in the pane it enters). They are canonical so packs can
--- provide them, but they are never performed as a decision.
+-- pane it leaves and rises out of one in the pane it enters); `climb`, `leap` and `run` are the legs
+-- of its walk between panes (cat/render/travel.luau). They are canonical so packs can provide them,
+-- but they are never performed as a decision.
 
 local T = require("../types")
 
@@ -31,9 +32,12 @@ local CANONICAL: { T.Animation } = {
 	"hop",
 	"dive",
 	"emerge",
+	"climb",
+	"leap",
+	"run",
 }
 
-local TRANSITIONS: { [string]: boolean } = { dive = true, emerge = true }
+local TRANSITIONS: { [string]: boolean } = { dive = true, emerge = true, climb = true, leap = true, run = true }
 
 local CANONICAL_SET: { [string]: boolean } = {}
 for _, name in CANONICAL do
@@ -64,9 +68,12 @@ local FALLBACKS: { [string]: { T.Animation } } = {
 	hop = { "look", "idle" },
 	dive = { "hop", "idle" },
 	emerge = { "wake", "blink", "idle" },
+	climb = { "walk", "idle" },
+	leap = { "hop", "idle" },
+	run = { "walk", "idle" },
 }
 
-local LOOPS: { [string]: boolean } = { idle = true, walk = true, sit = true, sleep = true }
+local LOOPS: { [string]: boolean } = { idle = true, walk = true, sit = true, sleep = true, climb = true, run = true }
 
 local DURATIONS_MS: { [string]: number } = {
 	idle = 6000,
@@ -92,6 +99,10 @@ local DURATIONS_MS: { [string]: number } = {
 	-- The overlay transition's timing (docs/sprite-pack-spec.md): bundled packs match it exactly.
 	dive = 480,
 	emerge = 640,
+	-- One cycle of the walk-between-panes legs (bundled packs match them exactly).
+	climb = 360,
+	leap = 480,
+	run = 280,
 }
 
 local function isCanonical(name: any): boolean

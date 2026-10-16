@@ -11,6 +11,7 @@ local paths = require("../../../cat/adapters/paths")
 local commands = require("../../../cat/core/commands")
 local controller = require("../../../cat/window/controller")
 local presenter = require("../../../cat/window/presenter")
+local travel = require("../../../cat/render/travel")
 
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -540,6 +541,185 @@ describe("window/controller pane transition", function()
 		controller.start(controller.new(w.ports))
 		expect(lastCss(w)).notToContain(GRID)
 		expect(warnings(w, 'no style "vent"')).toBe(1)
+	end)
+end)
+
+describe("window/controller pane walk", function()
+	local SETTINGS = { layout = "Tiles", density = "Compact", pane_headers = "Never", ui_size = 13 }
+
+	local function columns(n: number, zoomed: boolean?): any
+		local node: any = { pane = n }
+		for pane = n - 1, 1, -1 do
+			local split: any = { split = "right", ratio = 1 / (n - pane + 1) }
+			split[1], split[2] = { pane = pane }, node
+			node = split
+		end
+		return { tab = 9, root = node, floats = {}, zoomed = zoomed == true, focus = 1 }
+	end
+
+	local function reader(layout: any): controller.SceneReader
+		return function(): controller.Scene?
+			return { layout = layout, settings = SETTINGS }
+		end
+	end
+
+	local function sheets(w: World, name: string): { string }
+		local out = {}
+		for _, entry in w.css do
+			if entry.name == name then
+				table.insert(out, entry.source)
+			end
+		end
+		return out
+	end
+
+	local function lastTravel(w: World): string?
+		local list = sheets(w, "travel")
+		return list[#list]
+	end
+
+	local function lastOverlay(w: World): string
+		local list = sheets(w, "overlay")
+		return list[#list]
+	end
+
+	-- A started controller whose focused pane is 1 (seeded from the timer's focus info).
+	local function walking(style: string?, config: any?): (World, controller.Controller)
+		local cfg = config or {}
+		cfg.rendering = cfg.rendering or {}
+		cfg.rendering.pane_transition = style or "walk"
+		local w = world({ portals = true, config = cfg })
+		local c = controller.new(w.ports)
+		controller.start(c)
+		fire(w, { focus = { pane = 1, at_prompt = true } })
+		return w, c
+	end
+
+	local function focus(c: controller.Controller, pane: number, layout: any)
+		controller.onWindowEvent(c, "focus", { pane = pane, tab = 9 }, reader(layout))
+	end
+
+	-- Fires the travel sheet's clear timer (the newest live timer).
+	local function fireClear(w: World)
+		local live = pending(w)
+		local timer = live[#live]
+		timer.cancelled = true
+		w.clock.advance(timer.ms)
+		timer.fn(nil)
+	end
+
+	it("lingers and waits in the main sheet instead of diving into the portal", function()
+		local w = walking()
+		local css = lastOverlay(w)
+		expect(css).toContain("tern-cat-arrive 80ms step-end 1 backwards")
+		expect(css).toContain("transition: height 0s step-end 150ms;")
+		expect(css).notToContain("tern-cat-dive")
+		expect(css).notToContain("tern-cat-emerge")
+		expect(lastTravel(w)).toBeNil()
+	end)
+
+	it("walks between tiled panes of the focused tab and clears the sheet after the trip", function()
+		local w, c = walking()
+		focus(c, 2, columns(2))
+		local sheet = lastTravel(w)
+		assert(sheet, "no travel sheet")
+		expect(sheet).toContain("/* tern-cat travel 1 */")
+		expect(sheet).toContain("div.tn-stage::after {")
+		expect(sheet).toContain("@keyframes tern-cat-travel-path-1")
+		-- The hold repeats the focused cat's animations, so the hand-off restarts nothing.
+		expect(sheet).toContain("tern-cat-arrive 80ms step-end 1 backwards, tern-cat-travel-hold-1 ")
+		local trip = c.trip
+		assert(trip, "no trip")
+		expect(trip.from).toBe(1)
+		expect(trip.to).toBe(2)
+		local timer = pending(w)[#pending(w)]
+		expect(timer.ms).toBe(trip.total_ms + 200)
+		fireClear(w)
+		expect(lastTravel(w)).toBe("/* tern-cat travel */\n")
+		expect(c.trip).toBeNil()
+		expect(c.metrics.switches).toBe(1)
+	end)
+
+	it("plays the portal entrance when the cat cannot walk", function()
+		local w, c = walking()
+		-- Another tab or session: the old pane is not tiled in the new pane's tab.
+		controller.onWindowEvent(c, "focus", { pane = 7, tab = 10 }, reader(columns(2)))
+		local sheet = lastTravel(w)
+		assert(sheet, "no entrance")
+		expect(string.sub(sheet, 1, 23)).toBe("/* tern-cat entrance */")
+		expect(sheet).toContain("tern-cat-emerge 640ms step-end 1 backwards")
+		expect(c.entrance).toBe(true)
+		expect(pending(w)[#pending(w)].ms).toBe(800 + 200)
+		-- A zoomed tab and a missing layout fall back too.
+		focus(c, 1, columns(2, true))
+		expect(c.trip).toBeNil()
+		expect(c.entrance).toBe(true)
+		controller.onWindowEvent(c, "focus", { pane = 2, tab = 9 }, function(): controller.Scene?
+			return nil
+		end)
+		expect(c.entrance).toBe(true)
+		fireClear(w)
+		expect(lastTravel(w)).toBe("/* tern-cat travel */\n")
+	end)
+
+	it("walks with auto only to a pane that shares an edge", function()
+		local w, c = walking("auto")
+		focus(c, 3, columns(3))
+		expect(c.trip).toBeNil()
+		expect(c.entrance).toBe(true)
+		focus(c, 2, columns(3))
+		local trip = c.trip
+		assert(trip, "no trip to the neighbour")
+		expect(trip.adjacent).toBe(true)
+		expect(lastTravel(w)).toContain("div.tn-stage::after {")
+	end)
+
+	it("starts a switch during a trip where the traveler is", function()
+		local w, c = walking()
+		focus(c, 2, columns(3))
+		local first = c.trip
+		assert(first, "no first trip")
+		w.clock.advance(300)
+		focus(c, 3, columns(3))
+		local second = c.trip
+		assert(second, "no second trip")
+		local at = travel.positionAt(first, 300)
+		assert(at, "first trip already over")
+		expect(second.start.xp).toBe(at.xp)
+		expect(second.start.xo).toBe(at.xo)
+		expect(c.trip_id).toBe(2)
+	end)
+
+	it("keeps the trip's names when the decision changes mid-trip", function()
+		local w, c = walking()
+		focus(c, 2, columns(2))
+		local before = lastTravel(w)
+		controller.request(c, "pet", {}, "keyboard")
+		local after = lastTravel(w)
+		assert(before and after, "missing travel sheets")
+		expect(after).notToEqual(before)
+		expect(after).toContain("@keyframes tern-cat-travel-path-1")
+		expect(after).toContain("tern-cat-pet-")
+	end)
+
+	it("removes the traveler when the overlay steps aside", function()
+		local w, c = walking()
+		focus(c, 2, columns(2))
+		controller.setCovered(c, true)
+		expect(lastTravel(w)).toBe("/* tern-cat travel */\n")
+		expect(c.trip).toBeNil()
+	end)
+
+	it("never installs a travel sheet for the portal, vent, box or off, or with reduced motion", function()
+		for _, style in { "portal", "off" } do
+			local w, c = walking(style)
+			focus(c, 2, columns(2))
+			expect(#sheets(w, "travel")).toBe(0)
+		end
+		local w, c = walking("walk", { rendering = { reduced_motion = "on" } })
+		focus(c, 2, columns(2))
+		expect(#sheets(w, "travel")).toBe(0)
+		expect(lastOverlay(w)).notToContain("tern-cat-arrive")
 	end)
 end)
 

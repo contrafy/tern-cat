@@ -174,6 +174,24 @@ switch is the switching minus idle window CPU over 40 s, divided by 20). The dae
 per-switch work (0.17-0.19% while switching, against 0.13-0.14% idle). Rapid switching (one
 every 2 s) stays at about 4% window CPU, a burst rather than a steady state.
 
+#### Walk between panes
+
+`bash scripts/perf-baseline.sh --transition --styles portal,walk --repeats 2 --ab-seconds 20`
+(same setup as above: two-pane split, 20 `focus next` 2 s apart, so every switch walks the
+893 ms trip between the two top-right corners; Tern 0.8.3, Apple silicon, 2026-10-15):
+
+| Style | Idle window CPU (runs) | Idle frames/s | Switching window CPU (runs) | Switching frames/s | Extra frames per switch (runs) |
+|---|---|---|---|---|---|
+| `portal` | 2.07% (2.83, 1.31) | 12.6 | 2.09% (2.09, 2.08) | 33.8 | 42 (44.0, 40.6) |
+| `walk` | 1.32% (1.22, 1.41) | 14.0 | 2.45% (2.43, 2.47) | 34.1 | 40 (41.3, 39.3) |
+
+Daemon 0.12-0.16% in every run. The walk paints no more frames per switch than the portal (its
+stepped path, frame strip and hold change only on 10 fps steps), costs about 0.36 points of
+window CPU more while switching every 2 s (about 7 ms per switch: the Lua focus handler plus
+parsing a sheet of a few KB with the leg sheets as data URLs), and nothing while idle. The focus
+handler itself (layout and settings read, plan, CSS) took 0.1-1.0 ms per switch in a sandbox
+window, far under Tern's 50 ms hook budget.
+
 #### Exits as keyframes
 
 The figures above were taken with the exits (the cat's dive, the props' close) as stepped

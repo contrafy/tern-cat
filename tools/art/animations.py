@@ -443,6 +443,39 @@ def _emerge() -> Anim:
     )
 
 
+# The walk between panes (cat/render/travel.luau) steps the cat along a path and plays these
+# legs as stepped sheets, so each uses one frame duration. The cat stays centered in the frame:
+# the path does the moving.
+
+
+def _climb() -> Anim:
+    # Head up, paws on a wall at the right edge; the overlay flips it for down and the left side.
+    ms = 90
+    return Anim("climb", True, [(P.cling(s, ears="perk"), ms) for s in range(4)])
+
+
+def _leap() -> Anim:
+    # Crouch, launch, airborne, reach, land, stand (idle's first frame, so walk and idle follow).
+    ms = 80
+    return Anim(
+        "leap",
+        False,
+        [
+            (P.crouch(0), ms),
+            (P.leap(0, ears="perk", eyes="wide", dy=-1), ms),
+            (P.leap(1, ears="back", eyes="wide", dy=-5), ms),
+            (P.leap(2, ears="perk", dy=-3), ms),
+            (P.leap(3, ears="back", eyes="squeeze"), ms),
+            (P.stand(tail="up"), ms),
+        ],
+    )
+
+
+def _run() -> Anim:
+    ms = 70
+    return Anim("run", True, [(P.gallop(s, ears="back"), ms) for s in range(4)])
+
+
 BUILDERS = [
     _idle,
     _walk,
@@ -466,6 +499,9 @@ BUILDERS = [
     _hop,
     _dive,
     _emerge,
+    _climb,
+    _leap,
+    _run,
 ]
 
 

@@ -16,7 +16,7 @@ local ACTIVITIES = { "quiet_office", "menace", "chaos", "zen" }
 local ACTIVITY_ALIASES: { [string]: string } = { orange_menace = "menace" }
 local REDUCED_MOTION = { "follow_tern", "on", "off" }
 local BLOCK_PLACEMENTS = { "float", "split" }
-local PANE_TRANSITIONS = { "portal", "vent", "box", "off" }
+local PANE_TRANSITIONS = { "portal", "vent", "box", "walk", "auto", "off" }
 local FULLSCREEN_BEHAVIORS = { "hide", "shrink", "stay" }
 local OVERLAY_POSITIONS = { "top-right", "top-left", "bottom-right", "bottom-left" }
 local AI_PROVIDERS = { "none", "mock", "carly_schedule" }

@@ -300,10 +300,14 @@ describe("block view", function()
 			expect(found.control.k).toBe("choice")
 			expect(found.control.value).toBe("portal")
 			local values = {}
+			local labels: { [string]: string } = {}
 			for _, o in found.control.options do
 				table.insert(values, o.value)
+				labels[o.value] = o.label
 			end
-			expect(values).toEqual({ "portal", "vent", "box", "off" })
+			expect(values).toEqual({ "portal", "vent", "box", "walk", "auto", "off" })
+			expect(labels.walk).toBe("Walk over")
+			expect(labels.auto).toBe("Walk to neighbors")
 		end)
 
 		it("labels the activity presets, with Menace as the default", function()

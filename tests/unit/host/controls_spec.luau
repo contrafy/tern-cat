@@ -100,6 +100,12 @@ describe("controls", function()
 				"vent"
 			)
 			expect((controls.settingsChange("rendering.pane_transition", "warp"))).toBeNil()
+			expect((controls.settingsChange("rendering.pane_transition", "walk") :: any)["rendering.pane_transition"]).toBe(
+				"walk"
+			)
+			expect((controls.settingsChange("rendering.pane_transition", "auto") :: any)["rendering.pane_transition"]).toBe(
+				"auto"
+			)
 			expect(
 				(controls.settingsChange("rendering.fullscreen_behavior", "shrink") :: any)["rendering.fullscreen_behavior"]
 			).toBe("shrink")

@@ -91,8 +91,8 @@ step with the cat). Everything else, the hover look included, keeps the cat's fa
 `rendering.pane_transition` (`portal`, `vent`, `box`; `off`) makes the cat dive into a prop in
 the pane that loses focus and climb out of the same kind of prop in the pane that gains it. It is
 pure CSS in the same `overlay` sheet, so no Lua runs per switch and nothing can lag a frame
-behind (a Lua per-switch sheet is not possible: panes carry no id in the DOM, and a spike showed
-a stale frame in 4 of 20 switches).
+behind (panes carry no id in the DOM, and a spike showed a Lua sheet one frame late in 4 of 20
+switches). `walk` and `auto` are the exception: see [Pane travel](#pane-travel-walk-auto).
 
 - **Enter**: keyframe animations under `.on:not(.off)`, which restart whenever a pane becomes
   the visible focused pane (focus, new pane, tab or session switch). The cat's animation list
@@ -136,6 +136,86 @@ the focused pane. A switch costs extra frames while the exit and enter keyframes
 640 ms, enter 800 ms); idle cost is unchanged. Stepped `background-position` transitions are
 avoided: Tern redraws them at display rate for their whole duration, while `step-end`
 keyframes draw only when a frame changes (docs/performance.md, "Exits as keyframes").
+
+### Pane travel (walk, auto)
+
+With `walk` the cat walks from its corner in the pane that loses focus to its corner in the pane
+that gains it when both are tiled panes of the same tab; `auto` walks only between panes that
+share an edge. Every other switch (tab or session switch, a zoomed tab, a floating pane, a closed
+old pane, `auto` between panes that only meet at a corner) plays the `portal` prop's entrance
+(the old pane's cat lingers briefly, then the cat climbs out of a portal in the new pane).
+
+Hosts. Tern 0.8.3 tiles `div.tn-stage` exactly by the ratios of `cx.session:layout(tab)` (pane
+rectangles are ratio products of the stage in every layout), the stage is `position: absolute`
+and holds a `section.tn-pane` for every pane of every tab and session, and its `::after` spans
+all panes, draws above dividers and is clipped only by the panel. The traveler is drawn there,
+placed with `calc(X% ± Npx)` in stage percentages, so no pixel size is read. None of this is
+documented Tern API; it was measured with `tern ctl dump` (see the risks below).
+
+Per switch (`cat/window/controller.luau`, `cat/render/travel.luau`):
+
+1. The window `focus` event gives the new pane and tab; the controller remembers the pane
+   focused before. The glue reads `cx.session:layout(tab)` and the settings that place the
+   in-pane cat (`layout`, `density`, `pane_headers`, `ui_font_size` or `font_size`).
+2. `travel.plan` turns the split tree into rectangles and plans corner to corner: walk (or run,
+   for at least 40% of the stage width) along the start's row, `leap` over each vertical divider
+   on that row, then `climb` along the destination corner's column (`climb` is drawn head up
+   with the wall on its right; mirrored and flipped for the other wall and for going down). The
+   cat's box and gaps come from the main sheet (`overlay.Info`), so the start and end are
+   exactly the in-pane cat's resting spots. Steps run at 10 fps.
+3. `travel.css` builds the `travel` sheet (`tern.css("travel", …)`): it hides every unfocused
+   pane's cat (`visibility: hidden !important`), holds the focused cat hidden for the trip
+   (its animation list repeats the main sheet's focused entries, from `overlay.Info.hold`, plus
+   `tern-cat-travel-hold-<id>`, so nothing restarts at the hand-off; it and its pointer ring
+   take no pointer state meanwhile) and draws the traveler (`pointer-events: none`) with a
+   stepped path, a frame strip per leg and a visibility animation that ends at the trip's
+   length. The hold and the traveler start in the same style pass, so the hand-off is frame
+   exact: one frame the traveler is one step short of the corner, the next the in-pane cat
+   sits there.
+4. A timer replaces the sheet with an empty one 200 ms after the trip. A switch during a trip
+   plans the next one from `travel.positionAt` (where the traveler is now). A new main sheet
+   during a trip (decision change) reinstalls the trip with the same id, so its animations keep
+   running; hiding the overlay (covered, full-screen `hide`, toggled off) or leaving walk mode
+   removes it.
+
+Latency mask (main sheet in walk mode): the Lua sheet arrives 1-3 ms after Tern applies the
+focus classes, a frame late in about one of four keyboard switches. So the main sheet keeps an
+unfocused pane's cat for 150 ms (a zero-duration `height` transition delayed 150 ms; Tern 0.8.3
+does not delay a `visibility` transition, and an `opacity` gate would clash with the focused
+rule's press-hold transition) and makes the focused cat wait 80 ms (`tern-cat-arrive`, a
+constant name repeated by the hover rule). A late sheet therefore shows exactly the frame
+before the switch. The main sheet has no dive, emerge or prop in walk mode.
+
+Entrance (fallback): in walk mode `overlay.css` also returns the portal entrance as a separate
+sheet (`overlay.Info.entrance`): the focused-pane rules again with a `div.tn-stage > ` prefix
+(more specific than the main sheet) and `tern-cat-emerge` last, plus the enter props. The
+controller installs it as the `travel` sheet for a switch it cannot walk and removes it 200 ms
+after the entrance; removing it restarts nothing (the emerge has ended, every other name stays).
+
+Insets (Tern 0.8.3, measured per layout): the in-pane cat's host is inset from its pane by the
+pane padding (Compact density: 3 px in Tiles, 0 in Rail, Float and Studio; Islands: 4 px) and,
+when split panes wear headers (`pane_headers` Split or Always), a 30 px header scaled by the
+interface size (`ui_font_size`, else `font_size`, over 13 px). `travel.insets` maps the settings
+to these numbers.
+
+Cost: the focus handler (layout and settings read, plan, CSS) took 0.1-1.0 ms in a sandbox
+window (logged at debug level with each switch); the sheet is a few KB plus the walk, run,
+climb and leap sheets as data URLs. See docs/performance.md for frames and CPU per switch.
+
+Risks and limits:
+
+- Undocumented Tern internals: `div.tn-stage` as an absolutely positioned, ratio-exact
+  container of every pane, `.on`/`.off` on `section.tn-pane`, the pane padding and header
+  heights. A wrong inset shows as a 3-34 px jump at the hand-off; a changed stage would put the
+  traveler in the wrong place.
+- The mask needs the sheet within the 80 ms wait; a stalled window VM shows the new pane's cat
+  early for a moment (two cats), never none.
+- Ratios are targets: during a split or divider animation the trip aims where the panes are
+  going. A traveler can cross a floating card (it draws above it).
+- At 10 fps a run moves up to about 200 px per step, so long legs read as a dash, and the
+  traveler takes its last step straight into the in-pane cat.
+- Frame captures with `tern ctl freeze-anims` skip transitions (the linger) and keep running
+  Lua timers (the clear); verify the linger with real-time shots.
 
 ### Full-screen programs
 
@@ -185,9 +265,10 @@ All modules are `--!strict` and return a table of functions. Only the entries an
 
 | Module | Responsibility | Key functions |
 |---|---|---|
-| `cat/render/animations.luau` | The 22 canonical animations (`dive`/`emerge` for the pane-switch transition only) and fallback chains ending in `idle` | `resolve(pack_animations, wanted)`, `isCanonical(name)`, `isPerformable(name)` |
+| `cat/render/animations.luau` | The 25 canonical animations (`dive`/`emerge` for the pane-switch transition and `climb`/`leap`/`run` for the walk between panes only) and fallback chains ending in `idle` | `resolve(pack_animations, wanted)`, `isCanonical(name)`, `isPerformable(name)` |
 | `cat/render/block.luau` | Block view: sprite stack, needs bars, stats, buttons, menus, `prefs` settings page, `ls` parody | `view(model, ui)` |
-| `cat/render/overlay.luau` | Overlay CSS generator (sanitized string output; corner placement; optional `still`; optional hover/press reaction sheets with the proximity ring; optional pane-switch transition) | `css(params)`, `SELECTOR`, `HOST` |
+| `cat/render/overlay.luau` | Overlay CSS generator (sanitized string output; corner placement; optional `still`; optional hover/press reaction sheets with the proximity ring; optional pane-switch transition; walk mode with the linger, the arrive wait and the portal entrance as a separate sheet). Also returns `Info`: the focused cat's animation entries, its box and gaps | `css(params)`, `SELECTOR`, `HOST`, `ARRIVE` |
+| `cat/render/travel.luau` | Pane travel planner for the `walk`/`auto` pane switch: pane rectangles in stage fractions from `cx.session:layout(tab)` ratios, shared-edge test, corner-to-corner legs (walk/run along the row, leap over vertical dividers, climb across horizontal ones) stepped at 10 fps, the traveler's position at any time (interrupts), insets from Tern's layout settings, and the per-switch sanitized `div.tn-stage::after` sheet with the hide and hold rules and main-sheet timing (linger 150 ms, arrive 80 ms) | `plan(input)`, `css(params)`, `positionAt(trip, ms)`, `neighbors(layout, a, b)`, `insets(settings)`, `timing(trip)` |
 | `cat/sprite/png.luau` | PNG/APNG header parsing without decoding pixels | `inspect(bytes)` |
 | `cat/sprite/manifest.luau` | `pack.json` validation: limits, path segment rules, animation set | `validate(table, fs, root)`, `checkPath` |
 | `cat/sprite/loader.luau` | Discover bundled and user packs, validate, fall back to the default pack; the only folder a pack removal may delete | `loadAll(fs, roots)`, `select`, `removableDir(pack, user_root)` |
@@ -209,7 +290,7 @@ passes it to `sound.detect` and `sound.play`.
 
 | Module | Responsibility | Key functions |
 |---|---|---|
-| `cat/window/controller.luau` | The window loop behind injected ports: one self-rescheduling timer (next decision, kv poll every 2 s, config poll every 3 s), requests to intents, overlay toggle, reset confirmation (second run within 10 s), cover state, pane-transition assets (prop plus the pack's exact `dive`/`emerge`, one warning when unavailable), Carly snapshot and context. Never writes kv | `new`, `start`, `onWindowEvent`, `request`, `toggleOverlay`, `reloadConfig`, `confirmReset`, `setCovered`, `snapshot`, `context` |
+| `cat/window/controller.luau` | The window loop behind injected ports: one self-rescheduling timer (next decision, kv poll every 2 s, config poll every 3 s), requests to intents, overlay toggle, reset confirmation (second run within 10 s), cover state, pane-transition assets (prop plus the pack's exact `dive`/`emerge`, one warning when unavailable; the portal's for `walk`/`auto`), the pane travel per focus event (trip or entrance in the `travel` sheet, its clear timer, interrupts, switch cost metrics), Carly snapshot and context. Never writes kv | `new`, `start`, `onWindowEvent`, `request`, `toggleOverlay`, `reloadConfig`, `confirmReset`, `setCovered`, `setFocus`, `snapshot`, `context` |
 | `cat/window/presenter.luau` | One read-only behavior engine per window; command lines reduced to a category immediately; this window's running commands (focus mode, tracked even while the overlay is hidden; host `react.*` mirrors are skipped while busy); overlay parameters, including the pointer reaction sheets (`HOVER_ANIMATION` look, `PRESS_ANIMATION` swat) when shown and allowed; local override until config agrees | `new`, `view`, `params`, `tick`, `react`, `observe`, `gesture`, `mirror`, `eventFor`, `setConfig`, `setCovered`, `visible` |
 | `cat/window/packs.luau` | Validates only the wanted and default packs (full scan only if both miss), resolves fallbacks, caches each sheet as a data URL; a pack without a built sheet uses its first frame; a cached pack whose `pack.json` is gone (removed) invalidates the cache. The controller reselects on every config poll | `new`, `select`, `asset`, `invalidate` |
 | `cat/window/portals.luau` | Reads and validates `assets/portals/portals.json` once (pack path rules, frame counts and durations, PNG size and format) and turns only the selected style's sheets into cached data URLs | `new`, `prop`, `parse`, `invalidate` |

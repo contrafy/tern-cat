@@ -133,6 +133,10 @@ class Pose:
     props: Sequence[Callable[[Canvas], None]] = field(default_factory=tuple)
     under: Sequence[Callable[[Canvas], None]] = field(default_factory=tuple)
     extra: Sequence[Callable[[Canvas], None]] = field(default_factory=tuple)
+    # Body, legs and tail are authored on the floor and then turned a quarter turn
+    # counterclockwise, so the floor becomes a wall at the right edge (climbing). The head
+    # and any over-head legs are drawn after the turn, upright, in turned coordinates.
+    wall: bool = False
 
     def but(self, **kw) -> "Pose":
         return replace(self, **kw)
@@ -279,6 +283,8 @@ def render(pose: Pose) -> Canvas:
             _draw_leg(c, leg)
     for fn in pose.extra:
         fn(c)
+    if pose.wall:
+        c = c.turned_ccw()
     if not pose.head_first:
         _draw_head(c, pose)
     for leg in pose.legs:

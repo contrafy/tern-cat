@@ -55,6 +55,9 @@ PREVIEW_ANIMS = [
     ("flop", 3),
     ("dive", 3),
     ("emerge", 3),
+    ("run", 0),
+    ("leap", 2),
+    ("climb", 0),
 ]
 PREVIEW_SCALE = 4
 LIGHT_BG = (246, 244, 239, 255)

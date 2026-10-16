@@ -27,6 +27,9 @@ local ALL = {
 	"hop",
 	"dive",
 	"emerge",
+	"climb",
+	"leap",
+	"run",
 }
 
 local function only(...: string): { [string]: boolean }
@@ -78,6 +81,10 @@ describe("render.animations", function()
 		expect(animations.resolve(only("idle", "blink"), "wake")).toBe("blink")
 		expect(animations.resolve(only("idle", "hop"), "dive")).toBe("hop")
 		expect(animations.resolve(only("idle", "blink"), "emerge")).toBe("blink")
+		expect(animations.resolve(only("idle", "walk", "hop"), "climb")).toBe("walk")
+		expect(animations.resolve(only("idle", "walk", "hop"), "leap")).toBe("hop")
+		expect(animations.resolve(only("idle", "walk"), "leap")).toBe("idle")
+		expect(animations.resolve(only("idle", "walk", "hop"), "run")).toBe("walk")
 	end)
 
 	it("always lands on idle for minimal packs and unknown names", function()
@@ -95,10 +102,10 @@ describe("render.animations", function()
 	end)
 
 	it("loops resting states and plays reactions once", function()
-		for _, name in { "idle", "walk", "sit", "sleep" } do
+		for _, name in { "idle", "walk", "sit", "sleep", "climb", "run" } do
 			expect(animations.isLoop(name)).toBeTruthy()
 		end
-		for _, name in { "happy", "swat", "flop", "wake", "poke", "hop", "blink", "dive", "emerge" } do
+		for _, name in { "happy", "swat", "flop", "wake", "poke", "hop", "blink", "dive", "emerge", "leap" } do
 			expect(animations.isLoop(name)).toBeFalsy()
 		end
 	end)
@@ -113,12 +120,15 @@ describe("render.animations", function()
 	it("times the pane-switch animations for the overlay transition", function()
 		expect(animations.defaultDurationMs("dive")).toBe(480)
 		expect(animations.defaultDurationMs("emerge")).toBe(640)
+		expect(animations.defaultDurationMs("climb")).toBe(360)
+		expect(animations.defaultDurationMs("leap")).toBe(480)
+		expect(animations.defaultDurationMs("run")).toBe(280)
 	end)
 
 	it("keeps the pane-switch animations out of performances", function()
+		local transitions: { [string]: boolean } = { dive = true, emerge = true, climb = true, leap = true, run = true }
 		for _, name in ALL do
-			local transition = name == "dive" or name == "emerge"
-			expect(animations.isPerformable(name)).toBe(not transition)
+			expect(animations.isPerformable(name)).toBe(not transitions[name])
 		end
 		expect(animations.isPerformable("moonwalk")).toBe(false)
 		expect(animations.isPerformable(nil)).toBe(false)

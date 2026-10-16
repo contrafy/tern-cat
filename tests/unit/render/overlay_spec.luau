@@ -915,6 +915,146 @@ describe("render/overlay.css opacity", function()
 	end)
 end)
 
+describe("render/overlay.css travel mode", function()
+	local STAGE = "div.tn-stage > "
+	local ARRIVE = "tern-cat-arrive 80ms step-end 1 backwards"
+
+	local function walk(overrides: { [string]: any }?, transition: { [string]: any }?): overlay.Params
+		local p: { [string]: any } = { travel = true }
+		for k, v in overrides or {} do
+			p[k] = v
+		end
+		return portal(p, transition)
+	end
+
+	it("keeps the old pane's cat for the linger and draws no dive or prop", function()
+		local css = overlay.css(walk(nil, { dive = PACK_DIVE, emerge = PACK_EMERGE }))
+		local every = block(css, EVERY)
+		assert(every, "missing every-pane rule")
+		expect(every).toContain("height: 0px;")
+		expect(every).toContain("visibility: visible;")
+		expect(every).toContain("transition: height 0s step-end 150ms;")
+		expect(every).toContain('background-image: url("data:image/png;base64,iVBORw0KGgo=");')
+		expect(every).notToContain("animation")
+		expect(css).notToContain("tern-cat-dive")
+		expect(css).notToContain("tern-cat-emerge")
+		expect(css).notToContain(DIVE_URL)
+		expect(css).notToContain(ENTER_URL)
+		expect(css).notToContain(EXIT_URL)
+		expect(block(css, BACK)).toBeNil()
+		expect(block(css, BACK_ON)).toBeNil()
+	end)
+
+	it("makes the new pane's cat wait for the travel sheet, and hover repeats the wait", function()
+		local css = overlay.css(walk())
+		local cat = block(css, SELECTOR)
+		assert(cat, "missing cat rule")
+		expect(cat).toContain(`animation: tern-cat-idle-1 200ms step-end infinite, {ARRIVE};`)
+		expect(cat).toContain("visibility: visible;")
+		-- The press-hold transition is on opacity only, so the linger's visibility never delays it.
+		expect(cat).toContain("transition: opacity 0s linear 700ms;")
+		expect(css).toContain("@keyframes tern-cat-arrive {\n\t0% { opacity: 0; }\n\t100% { opacity: 0; }\n}")
+		local hover = block(css, HOST .. ":hover::after")
+		assert(hover, "missing hover rule")
+		expect(hover).toContain(`animation: tern-cat-hover 400ms step-end 1 forwards, {ARRIVE};`)
+		local plain = block(overlay.css(params({ travel = true })), SELECTOR)
+		assert(plain, "missing plain cat rule")
+		expect(plain).toContain("transition: none;")
+	end)
+
+	it("places the cat where the portal would, so the entrance and the walk agree", function()
+		local css, info = overlay.css(walk())
+		local portalCss, portalInfo = overlay.css(portal())
+		assert(info and portalInfo, "missing info")
+		expect(info.gap_h).toBe(portalInfo.gap_h)
+		expect(info.gap_v).toBe(portalInfo.gap_v)
+		expect(info.gap_h).toBe(16)
+		expect(info.gap_v).toBe(24)
+		expect(info.box_w).toBe(64)
+		expect(info.box_h).toBe(64)
+		expect(info.z).toBe(2147483000)
+		local cat = block(css, SELECTOR)
+		local portalCat = block(portalCss, SELECTOR)
+		assert(cat and portalCat, "missing cat rules")
+		expect(cat).toContain("right: 16px;")
+		expect(portalCat).toContain("right: 16px;")
+	end)
+
+	it("exposes the focused cat's animation entries for the travel hold", function()
+		local _, info = overlay.css(walk({ pace = true, durations_ms = { 100, 300 } }))
+		assert(info, "missing info")
+		expect(#info.hold).toBe(3)
+		expect(info.hold[1]).toBe("tern-cat-idle-1 400ms step-end infinite")
+		expect(string.sub(info.hold[2], 1, 22)).toBe("tern-cat-pace-idle-1 8")
+		expect(info.hold[3]).toBe(ARRIVE)
+		local _, portalInfo = overlay.css(portal())
+		assert(portalInfo, "missing portal info")
+		expect(portalInfo.entrance).toBeNil()
+		expect(portalInfo.hold[#portalInfo.hold]).toBe("tern-cat-emerge 640ms step-end 1 backwards")
+		local _, hiddenInfo = overlay.css(params({ hidden = true }))
+		expect(hiddenInfo).toBeNil()
+	end)
+
+	it("builds the portal entrance for switches the cat cannot walk", function()
+		local frontProp = prop({
+			enter = {
+				back = { sheet_url = ENTER_URL, durations_ms = { 80, 80, 160, 160, 160, 80, 80 } },
+				front = { sheet_url = FLAP_IN_URL, durations_ms = { 100, 100, 100, 100, 100, 100, 100, 100, 100, 100 } },
+			},
+		})
+		local _, info = overlay.css(walk(nil, { prop = frontProp, emerge = PACK_EMERGE }))
+		assert(info and info.entrance, "missing entrance")
+		local e = info.entrance :: string
+		expect(string.sub(e, 1, 25)).toBe("/* tern-cat entrance */\n" .. "d")
+		expect(e).toContain(
+			`{STAGE}{SELECTOR} \{ animation: tern-cat-idle-1 200ms step-end infinite, {ARRIVE}, tern-cat-emerge 640ms step-end 1 backwards; }`
+		)
+		expect(e).toContain(`{STAGE}{HOST}::before \{ animation: tern-cat-emerge-ring 640ms step-end 1 backwards; }`)
+		expect(e).toContain(
+			`{STAGE}{HOST}:hover::after \{ animation: tern-cat-hover 400ms step-end 1 forwards, {ARRIVE}, tern-cat-emerge 640ms step-end 1 backwards; }`
+		)
+		expect(e).toContain(
+			`{STAGE}{HOST}:active::before \{ animation: tern-cat-press 400ms step-end 1 forwards, tern-cat-emerge-ring 640ms step-end 1 backwards; }`
+		)
+		local back = block(e, STAGE .. BACK_ON)
+		local front = block(e, STAGE .. FRONT_ON)
+		assert(back and front, "missing entrance props")
+		expect(back).toContain('content: "";')
+		expect(back).toContain(`background-image: url("{ENTER_URL}");`)
+		expect(back).toContain("animation: tern-cat-prop-back 800ms step-end 1;")
+		expect(back).toContain("right: calc(0px - var(--tv-aside, 0px));")
+		expect(front).toContain("animation: tern-cat-prop-front 1000ms step-end 1;")
+		expect(e).toContain("@keyframes tern-cat-emerge {")
+		expect(e).toContain("@keyframes tern-cat-emerge-ring {")
+		expect(e).toContain("@keyframes tern-cat-prop-back {")
+		expect(e).toContain(`\t{STAGE}{SELECTOR}, `)
+		expect(e).toContain("\t\tanimation: none !important;")
+		expect(info.entrance_ms).toBe(1000)
+		expect(balanced(e)).toBe(true)
+		expect(e).notToContain(EXIT_URL)
+	end)
+
+	it("has no entrance without a prop, and reduced motion turns travel mode off", function()
+		local _, bare = overlay.css(params({ travel = true }))
+		assert(bare, "missing info")
+		expect(bare.entrance).toBeNil()
+		expect(bare.entrance_ms).toBe(0)
+		local css, still = overlay.css(walk({ still = true }))
+		assert(still, "missing info")
+		expect(still.entrance).toBeNil()
+		expect(css).notToContain("tern-cat-arrive")
+		expect(block(css, EVERY)).toBeNil()
+	end)
+
+	it("settles the linger under reduced motion", function()
+		local css = overlay.css(walk())
+		local media = string.match(css, "@media %(prefers%-reduced%-motion: reduce%) (%b{})")
+		assert(media, "missing media block")
+		expect(media).toContain(EVERY .. " {\n\t\ttransition: none !important;")
+		expect(media).toContain(`, {EVERY} \{\n\t\tanimation: none !important;`)
+	end)
+end)
+
 describe("render/overlay.dataUrl", function()
 	it("wraps encoder output as a PNG data URL that css accepts", function()
 		local url = overlay.dataUrl("\137PNG", function(_bytes: string): string

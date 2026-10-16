@@ -114,6 +114,12 @@ class Canvas:
                     out.put(x + dx, y + dy, c)
         return out
 
+    def turned_ccw(self) -> "Canvas":
+        """A quarter turn counterclockwise: the bottom row becomes the right column."""
+        out = Canvas(self.height, self.width)
+        out.px = [[self.px[y][self.width - 1 - x] for y in range(self.height)] for x in range(self.width)]
+        return out
+
 
 def _inside(pts: Sequence[Point], x: float, y: float) -> bool:
     """Even-odd test, with points on an edge counted as inside."""
