@@ -49,7 +49,9 @@ you want it gone too.
   `portal` (default), `vent`, `box`, `walk` (walks, leaps and climbs between split panes of a
   tab; a portal otherwise), `auto` (walks only to a neighbouring pane) or `off`.
 
-  ![The overlay cat diving into a portal in one split pane and climbing out of one in the other](docs/images/pane-switch.gif)
+  | `portal` | `walk` |
+  | --- | --- |
+  | ![The overlay cat diving into a portal in one split pane and climbing out of one in the other](docs/images/pane-switch.gif) | ![The overlay cat walking from the left pane across the divider into the top-right pane, climbing down to the pane below it, then walking back to the left pane](docs/images/pane-walk.gif) |
 
 - **Block.** **Open cat** in the palette floats the interactive block over the focused pane and
   focuses it. Click the sprite to pet, double-click to play, right-click for food, toys and more;

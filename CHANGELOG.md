@@ -31,6 +31,7 @@ the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matr
   set it. Tern exposes no alternate-screen state, so the window half recognizes the program from
   the command line (reduced to a boolean, never kept) and, for a program already running when the
   window loads, from the focused pane's program name.
+- README: a GIF of the `walk` pane transition (`docs/images/pane-walk.gif`) beside the portal one.
 
 ### Fixed
 
