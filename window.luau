@@ -43,6 +43,7 @@ local BOOT_MODULES = {
 	"sprite/png",
 	"sprite/manifest",
 	"sprite/loader",
+	"render/travel",
 	"render/overlay",
 	"config/schema",
 	"core/events",
@@ -144,6 +145,28 @@ local function focusInfo(cx: WindowCx): FocusInfo?
 		return { pane = pane.pane, program = pane.program, at_prompt = pane.at_prompt }
 	end)
 	return if ok then info else nil
+end
+
+-- The new pane's tab layout and the settings that place the in-pane cat, for a pane walk.
+local function scene(cx: WindowCx, ev: any): any
+	local ok, s = pcall(function(): any
+		local tab = if type(ev.tab) == "number" then ev.tab else cx.session:tab_of(ev.pane)
+		local layout = if tab then cx.session:layout(tab) else nil
+		if layout == nil then
+			return nil
+		end
+		local settings = cx.settings
+		return {
+			layout = layout,
+			settings = {
+				layout = settings:get("layout"),
+				density = settings:get("density"),
+				pane_headers = settings:get("pane_headers"),
+				ui_size = settings:get("ui_font_size") or settings:get("font_size"),
+			},
+		}
+	end)
+	return if ok then s else nil
 end
 
 -- Re-reads what the overlay needs to know about the focused pane after an event or command.
@@ -322,7 +345,12 @@ for _, name in WINDOW_EVENTS do
 		if ctl == nil then
 			return
 		end
-		controllerMod.onWindowEvent(ctl, name, ev)
+		local read = if name == "focus" and type(ev) == "table"
+			then function(): any
+				return scene(cx, ev)
+			end
+			else nil
+		controllerMod.onWindowEvent(ctl, name, ev, read)
 		updatePane(cx)
 	end)
 end

@@ -357,7 +357,8 @@ local function reaction(a: Asset?): overlay.Reaction?
 	return { sheet_url = a.sheet_url, durations_ms = a.durations_ms, loop = a.loop }
 end
 
--- `transition` is the pane-switch prop and the pack's dive/emerge sheets for `v.transition`.
+-- `transition` is the pane-switch prop and the pack's dive/emerge sheets for `v.transition`
+-- (the portal's for `walk` and `auto`, which only draw its entrance).
 local function params(
 	p: Presenter,
 	v: View,
@@ -389,6 +390,7 @@ local function params(
 			then { hover = reaction(reactions.hover), press = reaction(reactions.press) }
 			else nil,
 		transition = if v.transition ~= "off" then transition else nil,
+		travel = v.transition == "walk" or v.transition == "auto",
 	}
 end
 

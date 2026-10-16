@@ -8,6 +8,7 @@ local store = require("../core/store")
 local commands = require("../core/commands")
 local rngMod = require("../core/rng")
 local overlay = require("../render/overlay")
+local travel = require("../render/travel")
 local configAdapter = require("../adapters/config")
 local kvAdapter = require("../adapters/kv")
 local fsAdapter = require("../adapters/fs")
@@ -24,6 +25,11 @@ export type Handle = { cancel: (self: any) -> () }
 
 -- Extra signals the Tern glue can read from a timer's fresh cx.
 export type TickInfo = { reduce_motion: boolean?, covered: boolean?, focus: presenterMod.FocusInfo? }
+
+-- What the Tern glue reads for a pane walk on a focus event: the new pane's tab layout
+-- (`cx.session:layout`) and Tern's settings that place the in-pane cat (see travel.insets).
+export type Scene = { layout: any, settings: travel.InsetSettings }
+export type SceneReader = () -> Scene?
 
 export type Ports = {
 	clock: T.Clock,
@@ -48,6 +54,11 @@ export type Metrics = {
 	last_tick_ms: number,
 	max_tick_ms: number,
 	css_installs: number,
+	-- Focus events handled with a pane transition (walk, auto) and their cost.
+	switches: number,
+	last_switch_ms: number,
+	max_switch_ms: number,
+	travel_installs: number,
 }
 
 export type Controller = {
@@ -78,12 +89,24 @@ export type Controller = {
 	-- Request token buckets per intent source (see RATE_LIMITS).
 	buckets: { [string]: Bucket },
 	metrics: Metrics,
+	-- Pane travel (`walk`, `auto`): the pane focused last, the main sheet's facts for the travel
+	-- sheet, the selected style while the overlay shows, and the installed trip or entrance.
+	focus_pane: number?,
+	overlay_info: overlay.Info?,
+	travel_style: T.PaneTransition?,
+	trip: travel.Trip?,
+	entrance: boolean,
+	trip_id: number,
+	trip_at_ms: number,
+	travel_css: string?,
+	travel_timer: Handle?,
 }
 
 type Bucket = { tokens: number, at_ms: number }
 export type RateLimit = { burst: number, per_s: number }
 
 local SHEET = "overlay"
+local TRAVEL_SHEET = "travel"
 local DEFAULT_PACK = "orange-menace"
 local KV_POLL_MS = 2000
 local CONFIG_POLL_MS = 3000
@@ -153,7 +176,26 @@ local function new(ports: Ports): Controller
 		next_cfg_ms = now,
 		reset_armed_ms = nil,
 		buckets = {},
-		metrics = { load_ms = 0, ticks = 0, last_tick_ms = 0, max_tick_ms = 0, css_installs = 0 },
+		metrics = {
+			load_ms = 0,
+			ticks = 0,
+			last_tick_ms = 0,
+			max_tick_ms = 0,
+			css_installs = 0,
+			switches = 0,
+			last_switch_ms = 0,
+			max_switch_ms = 0,
+			travel_installs = 0,
+		},
+		focus_pane = nil,
+		overlay_info = nil,
+		travel_style = nil,
+		trip = nil,
+		entrance = false,
+		trip_id = 0,
+		trip_at_ms = 0,
+		travel_css = nil,
+		travel_timer = nil,
 	}
 	return c
 end
@@ -191,12 +233,17 @@ local function exact(c: Controller, pack: T.LoadedPack, anim: T.Animation): over
 	return if a then { sheet_url = a.sheet_url, durations_ms = a.durations_ms } else nil
 end
 
+-- `walk` and `auto` use the portal's prop for the entrance of a switch the cat cannot walk.
+local function propStyle(style: T.PaneTransition): string
+	return if style == "walk" or style == "auto" then "portal" else style
+end
+
 -- Prop plus dive/emerge for the selected style; nil (and one warning) when the props cannot load.
 local function transition(c: Controller, pack: T.LoadedPack, style: T.PaneTransition): overlay.Transition?
 	if style == "off" then
 		return nil
 	end
-	local prop, problem = portalsMod.prop(c.portals, style)
+	local prop, problem = portalsMod.prop(c.portals, propStyle(style))
 	if prop == nil then
 		if problem ~= c.portal_warning then
 			c.ports.log("warn", `tern-cat overlay: pane transition off: {problem or "props unavailable"}`)
@@ -205,6 +252,157 @@ local function transition(c: Controller, pack: T.LoadedPack, style: T.PaneTransi
 		return nil
 	end
 	return { prop = prop, dive = exact(c, pack, "dive"), emerge = exact(c, pack, "emerge") }
+end
+
+-- Pane travel ------------------------------------------------------------------------------------
+
+local function installTravelCss(c: Controller, css: string)
+	if css ~= c.travel_css then
+		c.ports.css(TRAVEL_SHEET, css)
+		c.travel_css = css
+		c.metrics.travel_installs += 1
+	end
+end
+
+-- Removes the traveler or the entrance: the empty travel sheet, once one was installed.
+local function clearTravel(c: Controller)
+	if c.travel_timer then
+		c.travel_timer:cancel()
+		c.travel_timer = nil
+	end
+	c.trip = nil
+	c.entrance = false
+	if c.travel_css ~= nil and c.travel_css ~= travel.EMPTY then
+		installTravelCss(c, travel.EMPTY)
+	end
+end
+
+local function armClear(c: Controller, ms: number)
+	if c.travel_timer then
+		c.travel_timer:cancel()
+	end
+	c.travel_timer = c.ports.timer(math.max(0, math.ceil(ms)), function(_info: TickInfo?)
+		c.travel_timer = nil
+		clearTravel(c)
+	end)
+end
+
+local function sumMs(durations: { number }): number
+	local total = 0
+	for _, d in durations do
+		total += d
+	end
+	return total
+end
+
+-- The pack's sheet for a leg, resolved through its fallbacks (the resolved name decides the
+-- climb's orientation and whether the strip loops).
+local function legSheet(c: Controller, pack: T.LoadedPack, anim: T.Animation): travel.Sheet?
+	local a, resolved = packsMod.asset(c.packs, pack, anim)
+	return if a then { sheet_url = a.sheet_url, durations_ms = a.durations_ms, animation = resolved } else nil
+end
+
+-- Installs the current trip's sheet. The trip keeps its id, so a reinstall (the main sheet
+-- changed mid-trip and the hold must repeat its new animations) keeps every animation running.
+-- False when the pack's walk sheet is unusable.
+local function installTrip(c: Controller): boolean
+	local trip, info, pack = c.trip, c.overlay_info, c.pack
+	if trip == nil or info == nil or pack == nil then
+		return false
+	end
+	local walk = legSheet(c, pack, "walk")
+	if walk == nil then
+		return false
+	end
+	local css = travel.css({
+		trip = trip,
+		id = c.trip_id,
+		art = {
+			walk = walk,
+			run = legSheet(c, pack, "run"),
+			climb = legSheet(c, pack, "climb"),
+			leap = legSheet(c, pack, "leap"),
+		},
+		hold = info.hold,
+		z = info.z,
+	})
+	if css == nil then
+		return false
+	end
+	installTravelCss(c, css)
+	return true
+end
+
+-- Keeps an installed trip or entrance in step with a new main sheet, or removes it once the
+-- overlay hides or stops travelling (style changed, reduced motion).
+local function refreshTravel(c: Controller)
+	if c.trip == nil and not c.entrance then
+		return
+	end
+	local info = c.overlay_info
+	local entrance = if info and not c.trip then info.entrance else nil
+	if c.travel_style ~= nil and info ~= nil and c.trip ~= nil and installTrip(c) then
+		return
+	elseif c.travel_style ~= nil and entrance ~= nil then
+		installTravelCss(c, entrance)
+	else
+		clearTravel(c)
+	end
+end
+
+-- A focus change with `walk` or `auto`: the cat walks from the pane focused before when both are
+-- tiled in the new pane's tab and it is not zoomed (`auto`: only when they share an edge);
+-- otherwise the portal entrance plays (tab and session switches, zoom, floats, a closed pane).
+-- A switch during a trip starts the new one where the traveler is.
+local function switchPane(c: Controller, from: number?, to: number, scene: SceneReader?)
+	local info, pack, style = c.overlay_info, c.pack, c.travel_style
+	if style == nil or info == nil or pack == nil then
+		clearTravel(c)
+		return
+	end
+	local now = c.ports.clock.now_ms()
+	local trip: travel.Trip? = nil
+	local s = if from ~= nil and from ~= to and scene ~= nil then scene() else nil
+	if s then
+		local current = c.trip
+		local elapsed = now - c.trip_at_ms
+		local leap = packsMod.asset(c.packs, pack, "leap")
+		trip = travel.plan({
+			layout = s.layout,
+			from = from :: number,
+			to = to,
+			position = c.config.rendering.overlay_position,
+			offset_px = info.gap_h,
+			offset_v_px = info.gap_v,
+			box_w = info.box_w,
+			box_h = info.box_h,
+			insets = travel.insets(s.settings),
+			leap_ms = if leap then sumMs(leap.durations_ms) else nil,
+			interrupt = if current and elapsed < current.total_ms
+				then { trip = current, elapsed_ms = elapsed }
+				else nil,
+		})
+		if trip and (#trip.legs == 0 or (style == "auto" and not trip.adjacent)) then
+			trip = nil
+		end
+	end
+	c.trip_id += 1
+	c.trip_at_ms = now
+	c.trip = trip
+	c.entrance = false
+	if trip and installTrip(c) then
+		armClear(c, travel.timing(trip).clear_ms)
+		return
+	end
+	c.trip = nil
+	local entrance = info.entrance
+	if entrance then
+		c.entrance = true
+		installTravelCss(c, entrance)
+		armClear(c, info.entrance_ms + travel.CLEAR_AFTER_MS)
+	else
+		clearTravel(c)
+	end
 end
 
 local function render(c: Controller)
@@ -224,12 +422,15 @@ local function render(c: Controller)
 		end
 		switch = transition(c, pack, v.transition)
 	end
-	local css = overlay.css(presenterMod.params(p, v, asset, reactions, switch))
+	local css, info = overlay.css(presenterMod.params(p, v, asset, reactions, switch))
 	if css ~= c.css_last then
 		c.ports.css(SHEET, css)
 		c.css_last = css
 		c.metrics.css_installs += 1
 	end
+	c.overlay_info = info
+	c.travel_style = if info and (v.transition == "walk" or v.transition == "auto") then v.transition else nil
+	refreshTravel(c)
 end
 
 -- Re-reads config.json when its text changed (or always when forced). True when applied. A file
@@ -316,6 +517,9 @@ local function onTimer(c: Controller, info: TickInfo?)
 		end
 		if info and info.focus then
 			presenterMod.setFocus(p, info.focus)
+			if c.focus_pane == nil then
+				c.focus_pane = info.focus.pane
+			end
 		end
 		local now = clock.now_ms()
 		local reloaded = false
@@ -405,21 +609,58 @@ local function rerender(c: Controller)
 	armTimer(c, nil)
 end
 
-local function onWindowEvent(c: Controller, name: string, payload: any)
+-- `scene` reads the new pane's tab layout and Tern's settings on a `focus` event, only when the
+-- cat may walk (see switchPane).
+local function onWindowEvent(c: Controller, name: string, payload: any, scene: SceneReader?)
 	local p = c.presenter
+	local t0 = c.ports.clock.now_ms()
 	local wasFullscreen = presenterMod.fullscreen(p)
 	presenterMod.observe(p, name, payload)
-	if not presenterMod.visible(p) then
-		return
+	local from = c.focus_pane
+	local to = if name == "focus"
+			and type(payload) == "table"
+			and type(payload.pane) == "number"
+		then payload.pane :: number
+		else nil
+	if to then
+		c.focus_pane = to
 	end
-	local ev = presenterMod.eventFor(p, name, payload)
-	if ev and presenterMod.react(p, ev) then
-		if ev.type == "command_start" or ev.type == "command_finish" then
-			c.recent.command_at = c.ports.wall_ms() / 1000
+	if presenterMod.visible(p) then
+		local ev = presenterMod.eventFor(p, name, payload)
+		if ev and presenterMod.react(p, ev) then
+			if ev.type == "command_start" or ev.type == "command_finish" then
+				c.recent.command_at = c.ports.wall_ms() / 1000
+			end
+			rerender(c)
+		elseif presenterMod.fullscreen(p) ~= wasFullscreen then
+			render(c)
 		end
-		rerender(c)
-	elseif presenterMod.fullscreen(p) ~= wasFullscreen then
-		render(c)
+	end
+	if to and to ~= from and (c.travel_style ~= nil or c.trip ~= nil or c.entrance) then
+		switchPane(c, from, to, scene)
+		local dt = c.ports.clock.now_ms() - t0
+		local m = c.metrics
+		m.switches += 1
+		m.last_switch_ms = dt
+		m.max_switch_ms = math.max(m.max_switch_ms, dt)
+		c.ports.log(
+			if dt > SLOW_MS then "warn" else "debug",
+			string.format(
+				"tern-cat travel: %s %d -> %d in %.2f ms (%s)",
+				c.travel_style or "off",
+				from or -1,
+				to,
+				dt,
+				if c.trip
+					then string.format(
+						"%d legs, %d ms",
+						#(c.trip :: travel.Trip).legs,
+						(c.trip :: travel.Trip).total_ms
+					)
+					elseif c.entrance then "entrance"
+					else "none"
+			)
+		)
 	end
 end
 
@@ -544,6 +785,9 @@ end
 -- What the glue read about the focused pane (see presenter.setFocus); re-renders when the
 -- focused pane starts or stops counting as running a full-screen program.
 local function setFocus(c: Controller, info: presenterMod.FocusInfo)
+	if c.focus_pane == nil then
+		c.focus_pane = info.pane
+	end
 	local was = presenterMod.fullscreen(c.presenter)
 	presenterMod.setFocus(c.presenter, info)
 	if presenterMod.fullscreen(c.presenter) ~= was then
