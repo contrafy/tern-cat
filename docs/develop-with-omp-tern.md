@@ -264,7 +264,7 @@ uv run tools/validate_packs.py      # validate every bundled sprite and sound pa
 
 ## README screenshots (needs Tern and a desktop)
 
-`docs/images/overlay-cat.png`, `floated-card.png` and `pane-switch.gif` come from a sandbox
+`docs/images/overlay-cat.png`, `floated-card.png`, `pane-switch.gif` and `pane-walk.gif` come from a sandbox
 window, cropped to the panes so the window chrome (account avatar, tabs) is not in them:
 
 - Link a snapshot copy of the package, as `scripts/smoke-window.sh` does, and start the window in
@@ -281,6 +281,14 @@ window, cropped to the panes so the window chrome (account avatar, tabs) is not 
 - For the pane-switch GIF: `freeze-anims`, `focus left`, then `motion-at <ms>` and `shot` every
   40 ms from 0 to 840 (the dive and the emerge both start at the switch), and again for
   `focus right`. Assemble the frames with Pillow on one shared palette.
+
+- For `pane-walk.gif`: set `rendering.pane_transition` to `walk`, split right and then split the
+  right pane down, and `ctl size 960 600` so the shots are 1920x1200 (halve with a box filter
+  and crop below the tab strip for a 960 px wide GIF). A walk takes about 0.9 s and a climb or
+  leap trip longer: shoot `focus right`, `focus down` and `focus left` the same way, `freeze-anims`
+  first, then the switch, then `motion-at <ms>` and `shot` every 40 ms. The in-pane cat's
+  clear timer runs in real time, so shoot a sandbox copy whose `CLEAR_AFTER_MS` in
+  `cat/render/travel.luau` is raised to 20000. Join the trips with short holds on one shared palette.
 
 View every frame before committing it.
 
