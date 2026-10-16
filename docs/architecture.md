@@ -81,6 +81,11 @@ rejected, and Tern has no nested `pointer-events: none` element that could host 
 the cat separately, so "near" and "on the cat" cannot be told apart. A CSS-only cat also cannot
 tell Lua it was touched, so hover and press never count as pets.
 
+The swat knocks a letter off, which would read backwards mirrored, so the cat faces right while
+swatting: a swat decision is drawn unmirrored, and the press sheet is drawn in the ring's content
+box, which never mirrors (with pacing the ring runs its own translate-only copy of the walk, in
+step with the cat). Everything else, the hover look included, keeps the cat's facing.
+
 ### Pane-switch transition
 
 `rendering.pane_transition` (`portal`, `vent`, `box`; `off`) makes the cat dive into a prop in
@@ -95,33 +100,65 @@ a stale frame in 4 of 20 switches).
   `backwards` fill hides the cat until its first frame). Every rule that sets the cat's animation
   (the focused rule, `:hover`) repeats that constant name, so a decision change, hover or sheet
   reinstall never replays it; the decision animation gets no delay.
-- **Exit**: transitions on an every-pane rule (`section.tn-pane > … > div.tv-fx.top::after`)
-  that holds the dive's end state (no box). Only a pane that loses `.on` while still displayed
-  transitions there; panes of hidden tabs and sessions become `display: none` and show nothing,
-  and nothing fires at install or for a new pane. Transitions step evenly, so the pack's `dive`
-  plays with equal frame times; the facing is copied so the cat does not flip.
+- **Exit**: an every-pane rule (`section.tn-pane > … > div.tv-fx.top::after`) holds the dive's
+  end state (no box) and plays the dive as a keyframe animation with a constant name
+  (`tern-cat-dive`, the pack's own frame times). A zero-duration transition delayed by the
+  dive's length is the visibility gate: only a pane that loses `.on` while still displayed
+  transitions from the focused rule's full height, so it stays shown until the dive ends. Every
+  other pane also starts the animation (at install, for a new pane, on tab switches) but has no
+  prior style to transition from, so the gate is already shut and nothing is drawn. Panes of
+  hidden tabs and sessions become `display: none`. The facing is copied so the cat does not
+  flip.
 - **Props** (`assets/portals/portals.json`, loaded by `cat/window/portals.luau`): the back layer
   on the grid's effects layer (`div.tv-grid > div.tv-fx::after`, under the cat; its box starts
   at `--tv-px`/`--tv-py` and ends `--tv-aside` short, compensated with `calc()`), the optional
   front layer (box flap) on `div.tv-layer::after` (above the cat). Both are `pointer-events:
-  none`. Enter keyframes play under `.on:not(.off)`; the exit is a stepped `background-position`
-  transition plus a delayed `opacity` flip. The prop anchor sits under the cat's feet at the
+  none`. Enter keyframes play under `.on:not(.off)`; the exit is a keyframe animation on the
+  every-pane rule (`tern-cat-prop-back-exit`, `tern-cat-prop-front-exit`) gated by a delayed
+  zero-duration `opacity` flip. The prop anchor sits under the cat's feet at the
   cat's scale, and the cat is lifted off the edges far enough for the prop to fit (Tern clips
   the view). At top corners the cat's box is anchored by its bottom edge (`calc(100% - …)`) so
   the clip keeps the floor line fixed.
 - **Fallback**: packs without `dive`/`emerge` sink and rise with a stepped height clip of the
-  current decision sheet.
+  current decision sheet (`tern-cat-dive` animates the height). Its gate is `visibility`, not
+  `height` or `opacity`: the focused rule's `opacity` press-hold transition would otherwise
+  delay the cat's reappearance and hide the emerge.
 - **Press during the emerge**: the emerge keyframes hold `opacity: 1` on the cat and the ring
   runs a `tern-cat-emerge-ring` that keeps the swat sheet hidden, so the cat keeps emerging
   instead of popping to a full-height swat frame.
 - **Off**: reduced motion (either setting), `pane_transition: "off"`, a hidden or covered
   overlay, or props that fail to load (one warning) draw no transition at all.
 
-Caveats: a pacing cat snaps back to its resting spot in the frame its pane loses focus
-(transitions start from the base value, not the animated one), then dives there; a pacing cat
-keeps walking during its emerge. Turning the transition on, or switching to the box style,
-plays the new prop's enter once in the focused pane. Transitions tick at display rate for their
-duration, so a switch costs extra frames (exit 640 ms, enter 800 ms); idle cost is unchanged.
+Caveats: a pacing cat snaps back to its resting spot in the frame its pane loses focus (the
+every-pane rule does not pace), then dives there; a pacing cat keeps walking during its emerge.
+Turning the transition on, or switching to the box style, plays the new prop's enter once in
+the focused pane. A switch costs extra frames while the exit and enter keyframes run (exit
+640 ms, enter 800 ms); idle cost is unchanged. Stepped `background-position` transitions are
+avoided: Tern redraws them at display rate for their whole duration, while `step-end`
+keyframes draw only when a frame changes (docs/performance.md, "Exits as keyframes").
+
+### Full-screen programs
+
+At a top corner the cat covers the end of the first rows, where full-screen programs (vim, less,
+htop) draw title and status bars. Tern 0.8.3 exposes no alternate-screen state: `PaneInfo` and
+the window events have no such field, and the pane's DOM (`ctl dump`/`ctl tree`) is identical at
+the prompt and in `less`, `vim` or `top` apart from the cursor shape class. So the overlay steps
+aside from window-side state (`rendering.fullscreen_behavior`: `hide`, `shrink`, `stay`):
+
+- `command_started` lines go through `events.fullscreen` (terminal editors, pagers, monitors,
+  tmux; past `sudo`/`env` wrappers and in any pipe stage), which marks the pane at once;
+  `command_finished` and `pane_closed` clear it.
+- After every window event and on every timer tick the glue reads the focused pane's
+  `PaneInfo.program` and `at_prompt`. `program` is the running command's program as typed (`vim`,
+  `top`, but `v` for an alias and `git` for `git log | less`), so it adds nothing for new
+  commands; it catches a full-screen program already running when the window (re)loads, and a
+  pane at its prompt clears a mark whose finish event was missed.
+- `focus` events move the check to the newly focused pane. The sheet change lags the DOM focus
+  change by one event round trip (about 10 ms from Enter to the hidden sheet in a sandbox), so
+  the emerge may start in the full-screen pane for a moment before the hidden sheet replaces it.
+- The default gap stays 12 px. The cat's box (64 px at scale 2) spans about the first four
+  rows, and one- or two-line prompts put a right prompt on row 1 or 2, so no gap that keeps the
+  cat in the top rows clears it; moving it below the prompt only moves the overlap onto output.
 
 ## Modules
 

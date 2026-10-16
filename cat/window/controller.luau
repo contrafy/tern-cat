@@ -23,7 +23,7 @@ local mirror = require("./mirror")
 export type Handle = { cancel: (self: any) -> () }
 
 -- Extra signals the Tern glue can read from a timer's fresh cx.
-export type TickInfo = { reduce_motion: boolean?, covered: boolean? }
+export type TickInfo = { reduce_motion: boolean?, covered: boolean?, focus: presenterMod.FocusInfo? }
 
 export type Ports = {
 	clock: T.Clock,
@@ -314,6 +314,9 @@ local function onTimer(c: Controller, info: TickInfo?)
 		if info and info.covered ~= nil then
 			presenterMod.setCovered(p, info.covered == true)
 		end
+		if info and info.focus then
+			presenterMod.setFocus(p, info.focus)
+		end
 		local now = clock.now_ms()
 		local reloaded = false
 		if now >= c.next_cfg_ms then
@@ -404,6 +407,7 @@ end
 
 local function onWindowEvent(c: Controller, name: string, payload: any)
 	local p = c.presenter
+	local wasFullscreen = presenterMod.fullscreen(p)
 	presenterMod.observe(p, name, payload)
 	if not presenterMod.visible(p) then
 		return
@@ -414,6 +418,8 @@ local function onWindowEvent(c: Controller, name: string, payload: any)
 			c.recent.command_at = c.ports.wall_ms() / 1000
 		end
 		rerender(c)
+	elseif presenterMod.fullscreen(p) ~= wasFullscreen then
+		render(c)
 	end
 end
 
@@ -535,6 +541,16 @@ local function setCovered(c: Controller, on: boolean)
 	end
 end
 
+-- What the glue read about the focused pane (see presenter.setFocus); re-renders when the
+-- focused pane starts or stops counting as running a full-screen program.
+local function setFocus(c: Controller, info: presenterMod.FocusInfo)
+	local was = presenterMod.fullscreen(c.presenter)
+	presenterMod.setFocus(c.presenter, info)
+	if presenterMod.fullscreen(c.presenter) ~= was then
+		render(c)
+	end
+end
+
 local function context(c: Controller): string
 	return c.context_text
 end
@@ -554,6 +570,7 @@ return {
 	reloadConfig = reloadConfig,
 	confirmReset = confirmReset,
 	setCovered = setCovered,
+	setFocus = setFocus,
 	snapshot = snapshot,
 	context = context,
 }

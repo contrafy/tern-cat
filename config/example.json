@@ -24,7 +24,8 @@
     "block_scale": 4,
     "reduced_motion": "follow_tern",
     "block_placement": "float",
-    "pane_transition": "portal"
+    "pane_transition": "portal",
+    "fullscreen_behavior": "hide"
   },
   "behavior": {
     "activity": "menace",

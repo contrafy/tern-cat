@@ -50,6 +50,7 @@ local SET_CONFIG_KEYS = {
 	"rendering.overlay_offset_px",
 	"rendering.reduced_motion",
 	"rendering.pane_transition",
+	"rendering.fullscreen_behavior",
 	"quiet.hours_enabled",
 	"quiet.start",
 	"quiet.stop",

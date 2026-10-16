@@ -22,8 +22,18 @@ export type View = {
 	reactions: boolean,
 	-- Pane-switch prop style; "off" while still or hidden.
 	transition: T.PaneTransition,
+	-- The focused pane runs a full-screen program and `fullscreen_behavior` is "shrink".
+	shrink: boolean,
 	facing: Facing,
 	seq: number,
+}
+
+-- What the Tern glue reads about the focused pane: its id, program name and whether
+-- its shell sits at the prompt. Only the derived booleans are kept.
+export type FocusInfo = {
+	pane: number?,
+	program: string?,
+	at_prompt: boolean?,
 }
 
 export type Asset = {
@@ -43,6 +53,8 @@ export type ReactionAssets = {
 -- Animations the overlay plays while the pointer is near the cat and while it is pressed.
 local HOVER_ANIMATION: T.Animation = "look"
 local PRESS_ANIMATION: T.Animation = "swat"
+-- Opacity of the overlay cat shrunk aside for a full-screen program.
+local SHRINK_OPACITY = 0.5
 
 export type Presenter = {
 	clock: T.Clock,
@@ -56,6 +68,12 @@ export type Presenter = {
 	tern_reduce_motion: boolean,
 	-- The interactive cat block floats over the focused pane's corner: the overlay steps aside.
 	covered: boolean,
+	-- Full-screen programs (see fullscreen()): the focused pane, the panes whose running command
+	-- line starts one, and whether `program_pane`'s program is one.
+	focused_pane: number?,
+	fullscreen_panes: { [number]: boolean },
+	program_pane: number?,
+	program_fullscreen: boolean,
 	-- Local, immediate overlay visibility (toggle command) until config.json agrees.
 	overlay_override: boolean?,
 	facing: Facing,
@@ -89,6 +107,10 @@ local function new(opts: Options): Presenter
 		running = running.new(),
 		tern_reduce_motion = false,
 		covered = false,
+		focused_pane = nil,
+		fullscreen_panes = {},
+		program_pane = nil,
+		program_fullscreen = false,
 		overlay_override = nil,
 		facing = inward(opts.config),
 		seq = 0,
@@ -151,9 +173,9 @@ local function react(p: Presenter, event: T.CatEvent): boolean
 	return adopt(p, state, decision)
 end
 
--- Tracks which of this window's panes run a command, from raw window events (before eventFor, so
--- it also runs while the overlay is hidden). Call before reacting: a command's own start counts
--- as busy, its finish does not.
+-- Tracks which of this window's panes run a command (and which a full-screen one) and which pane
+-- is focused, from raw window events (before eventFor, so it also runs while the overlay is
+-- hidden). Call before reacting: a command's own start counts as busy, its finish does not.
 local function observe(p: Presenter, name: string, payload: any)
 	if type(payload) ~= "table" then
 		return
@@ -161,9 +183,43 @@ local function observe(p: Presenter, name: string, payload: any)
 	local pane = if type(payload.pane) == "number" then payload.pane else nil
 	if name == "command_started" then
 		running.started(p.running, pane, p.clock.now_ms())
+		if pane and events.fullscreen(payload.line) then
+			p.fullscreen_panes[pane] = true
+		end
 	elseif name == "command_finished" or name == "pane_closed" then
 		running.stopped(p.running, pane)
+		if pane then
+			p.fullscreen_panes[pane] = nil
+		end
+	elseif name == "focus" and pane then
+		p.focused_pane = pane
 	end
+end
+
+-- Takes what the glue read about the focused pane. A pane back at its prompt runs nothing, which
+-- also clears a full-screen mark whose finish event was missed.
+local function setFocus(p: Presenter, info: FocusInfo)
+	local pane = info.pane
+	if pane == nil then
+		return
+	end
+	p.focused_pane = pane
+	if info.at_prompt == true then
+		p.fullscreen_panes[pane] = nil
+	end
+	p.program_pane = pane
+	p.program_fullscreen = info.at_prompt ~= true and events.fullscreenProgram(info.program)
+end
+
+-- True while the focused pane runs a full-screen program: its command line started one, or its
+-- `PaneInfo.program` is one (Tern reports the running command's program as typed, which also
+-- covers a program already running when this window loaded).
+local function fullscreen(p: Presenter): boolean
+	local pane = p.focused_pane
+	if pane == nil then
+		return false
+	end
+	return p.fullscreen_panes[pane] == true or (p.program_pane == pane and p.program_fullscreen)
 end
 
 local function newEventId(p: Presenter): string
@@ -276,8 +332,9 @@ local function view(p: Presenter): View
 	local current = p.engine.current
 	local animation: T.Animation = if current then current.animation else "idle"
 	local isStill = still(p)
+	local aside = if fullscreen(p) then p.config.rendering.fullscreen_behavior else "stay"
 	-- The overlay is drawn over terminal panes, so it only shows while covering text is allowed.
-	local hidden = not visible(p) or p.covered or not p.config.behavior.allow_visual_obscuring
+	local hidden = not visible(p) or p.covered or not p.config.behavior.allow_visual_obscuring or aside == "hide"
 	return {
 		hidden = hidden,
 		animation = animation,
@@ -286,7 +343,9 @@ local function view(p: Presenter): View
 		reactions = not hidden and p.config.behavior.allow_pointer_reactions,
 		-- Reduced motion: the cat simply appears in the newly focused pane.
 		transition = if hidden or isStill then "off" else p.config.rendering.pane_transition,
-		facing = p.facing,
+		shrink = not hidden and aside == "shrink",
+		-- The swat knocks a letter off; mirrored it would read backwards.
+		facing = if animation == PRESS_ANIMATION then "right" else p.facing,
 		seq = p.seq,
 	}
 end
@@ -310,13 +369,15 @@ local function params(
 		return { hidden = true } :: any
 	end
 	local key = if asset.loop then v.animation else `{v.animation}-{v.seq}`
+	local scale = p.config.rendering.overlay_scale
 	return {
 		sheet_url = asset.sheet_url,
 		frame_w = asset.frame_w,
 		frame_h = asset.frame_h,
 		durations_ms = asset.durations_ms,
 		loop = asset.loop,
-		scale = p.config.rendering.overlay_scale,
+		scale = if v.shrink then math.max(1, math.floor(scale / 2)) else scale,
+		opacity = if v.shrink then SHRINK_OPACITY else nil,
 		position = p.config.rendering.overlay_position,
 		offset_px = p.config.rendering.overlay_offset_px,
 		facing = v.facing,
@@ -342,6 +403,8 @@ return {
 	tick = tick,
 	react = react,
 	observe = observe,
+	setFocus = setFocus,
+	fullscreen = fullscreen,
 	gesture = gesture,
 	mirror = mirror,
 	eventFor = eventFor,

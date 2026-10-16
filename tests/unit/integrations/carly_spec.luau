@@ -140,6 +140,7 @@ describe("integrations/carly exports", function()
 		expect(doc).toContain("behavior.focus_mode (true only")
 		expect(doc).toContain("behavior.allow_pointer_reactions (false only")
 		expect(doc).toContain("rendering.pane_transition (portal, vent, box, off")
+		expect(doc).toContain("rendering.fullscreen_behavior (hide, shrink, stay)")
 		expect(doc).toContain("behavior.activity (quiet_office, menace, chaos, zen)")
 		expect(doc).notToContain("orange_menace")
 		for _, key in { "sound.volume", "quiet.start", "quiet.stop" } do

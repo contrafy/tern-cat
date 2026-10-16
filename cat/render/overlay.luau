@@ -61,6 +61,8 @@ export type Params = {
 	-- Resting corner (default top-right) and its gap from both edges in CSS px (default 12).
 	position: Corner?,
 	offset_px: number?,
+	-- Opacity of the cat, its swat pose and its props (0.1-1, default 1: no declaration).
+	opacity: number?,
 	-- Pointer reactions: `hover` plays while the pointer is on the cat or its proximity ring,
 	-- `press` while the button is down there (held briefly after release). Nil: no reactions,
 	-- the cat takes no pointer state at all.
@@ -83,7 +85,8 @@ local RING = HOST .. "::before"
 local HOVER = HOST .. ":hover::after"
 local PRESS = HOST .. ":active::after"
 local PRESS_RING = HOST .. ":active::before"
--- The cat on every pane: the dive's end state, reached by transitions on the pane that loses focus.
+-- The cat on every pane: the dive's end state. The pane that loses focus plays the dive as a
+-- keyframe animation while a delayed zero-duration transition keeps it visible until the end.
 local EVERY = PANE .. TV .. " > div.tv-fx.top::after"
 -- Back prop: the grid's effects layer (under the cat; the grid box starts at the terminal's
 -- padding, `--tv-px`/`--tv-py`, and ends `--tv-aside` short of the right edge).
@@ -98,6 +101,10 @@ local EMERGE = "tern-cat-emerge"
 local EMERGE_RING = "tern-cat-emerge-ring"
 local PROP_BACK = "tern-cat-prop-back"
 local PROP_FRONT = "tern-cat-prop-front"
+-- Exits run on the every-pane rules, so they also start (unseen) at install and on tab switches.
+local DIVE = "tern-cat-dive"
+local PROP_BACK_EXIT = "tern-cat-prop-back-exit"
+local PROP_FRONT_EXIT = "tern-cat-prop-front-exit"
 
 local HIDDEN_SHEET = "/* tern-cat overlay hidden */\n"
 local DATA_PREFIX = "data:image/png;base64,"
@@ -208,18 +215,19 @@ local function frameKeyframes(name: string, durations: { number }, stepPx: numbe
 end
 
 -- `dir` is -1 from a right corner (the first leg walks left) and 1 from a left corner. The sprite
--- faces right unmirrored, so a leftward leg is mirrored.
-local function paceKeyframes(name: string, steps: number, dir: number): string
+-- faces right unmirrored, so a leftward leg is mirrored unless `mirror` is false (the ring, whose
+-- swat must read unmirrored, walks along without turning).
+local function paceKeyframes(name: string, steps: number, dir: number, mirror: boolean): string
 	local far = px(dir * PACE_PX)
-	local out = if dir < 0 then "-1" else "1"
-	local back = if dir < 0 then "1" else "-1"
+	local out = if not mirror then "" elseif dir < 0 then " scaleX(-1)" else " scaleX(1)"
+	local back = if not mirror then "" elseif dir < 0 then " scaleX(1)" else " scaleX(-1)"
 	return table.concat({
 		`@keyframes {name} \{`,
-		`\t0% \{ transform: translateX(0px) scaleX({out}); animation-timing-function: steps({steps}, end); }`,
-		`\t48% \{ transform: translateX({far}) scaleX({out}); animation-timing-function: step-end; }`,
-		`\t50% \{ transform: translateX({far}) scaleX({back}); animation-timing-function: steps({steps}, end); }`,
-		`\t98% \{ transform: translateX(0px) scaleX({back}); animation-timing-function: step-end; }`,
-		`\t100% \{ transform: translateX(0px) scaleX({back}); }`,
+		`\t0% \{ transform: translateX(0px){out}; animation-timing-function: steps({steps}, end); }`,
+		`\t48% \{ transform: translateX({far}){out}; animation-timing-function: step-end; }`,
+		`\t50% \{ transform: translateX({far}){back}; animation-timing-function: steps({steps}, end); }`,
+		`\t98% \{ transform: translateX(0px){back}; animation-timing-function: step-end; }`,
+		`\t100% \{ transform: translateX(0px){back}; }`,
 		"}",
 	}, "\n")
 end
@@ -316,16 +324,17 @@ local function clipSteps(frameH: number): number
 	return 1
 end
 
--- Exit transition for one strip: steps evenly through its frames (transitions cannot honour
--- per-frame durations) and holds the last frame until `hold` ms, then `property` flips.
-local function exitTransition(sheet: Sheet, holdMs: number, flip: string): string
-	local n = #sheet.durations
-	local frame = totalMs(sheet.durations) / n
-	local flipPart = `{flip} 0s step-end {ms(holdMs)}`
-	if n <= 1 then
-		return flipPart
+-- Exit for one strip on an every-pane rule: a keyframe animation through its frames (honouring
+-- per-frame durations) while `gate` flips once it ends, through a delayed zero-duration transition.
+-- Stepped `background-position` transitions would cost a redraw per display frame instead.
+local function exitAnimation(sheet: Sheet, name: string, stepPx: number, gate: string, blocks: { string }): { string }
+	local total = totalMs(sheet.durations)
+	local lines = { `\ttransition: {gate} 0s step-end {ms(total)};` }
+	if #sheet.durations > 1 then
+		table.insert(lines, `\tanimation: {name} {ms(total)} step-end 1 forwards;`)
+		table.insert(blocks, stripKeyframes(name, sheet.durations, stepPx, nil))
 	end
-	return `background-position {ms(frame * (n - 1))} steps({n - 1}, end), {flipPart}`
+	return lines
 end
 
 type Geometry = {
@@ -335,6 +344,8 @@ type Geometry = {
 	h: number,
 	v: number,
 	scale: number,
+	-- Formatted opacity of the cat and its props.
+	opacity: string,
 }
 
 -- Position declarations for a prop host. `inset` adds the host's offset from the cat's host as a
@@ -347,6 +358,7 @@ local function propRules(
 	exit: Sheet?,
 	enter: Sheet?,
 	name: string,
+	exitName: string,
 	grid: boolean,
 	blocks: { string }
 ): { string }
@@ -367,7 +379,6 @@ local function propRules(
 			vValue = `calc({px(vEdge)} - var(--tv-py, 0px))`
 		end
 	end
-	local exitTotal = if exit then totalMs(exit.durations) else 0
 	local enterTotal = if enter then totalMs(enter.durations) else 0
 	local rules = {
 		`{every} \{`,
@@ -389,8 +400,8 @@ local function propRules(
 			`\tbackground-size: {px(pw * #exit.durations)} {px(ph)};`,
 			`\tbackground-position: {px(-(#exit.durations - 1) * pw)} 0px;`,
 			"\topacity: 0;",
-			`\ttransition: {exitTransition(exit, exitTotal, "opacity")};`,
 		})
+		append(rules, exitAnimation(exit, exitName, pw, "opacity", blocks))
 	else
 		table.insert(rules, "\topacity: 0;")
 	end
@@ -402,7 +413,7 @@ local function propRules(
 	append(rules, {
 		"\tbackground-size: 0px 0px;",
 		"\tbackground-position: 0px 0px;",
-		"\topacity: 1;",
+		`\topacity: {g.opacity};`,
 		"\ttransition: none;",
 	})
 	if enter then
@@ -411,6 +422,9 @@ local function propRules(
 			blocks,
 			stripKeyframes(name, enter.durations, pw, `background-size: {px(pw * #enter.durations)} {px(ph)}; `)
 		)
+	else
+		-- Stops the exit (animations restart only when their name changes).
+		table.insert(rules, "\tanimation: none;")
 	end
 	table.insert(rules, "}")
 	return rules
@@ -432,6 +446,9 @@ local function css(params: Params): string
 	local side = CORNERS[if type(params.position) == "string" then params.position else DEFAULT_CORNER]
 		or CORNERS[DEFAULT_CORNER]
 	local gap = clampInt(params.offset_px, 0, 4096, DEFAULT_OFFSET)
+	local alpha = math.floor(clampNumber(params.opacity, 0.1, 1, 1) * 100 + 0.5) / 100
+	local opacity = num(alpha)
+	local translucent = alpha < 1
 	local durations = safeDurations(params.durations_ms)
 
 	local key = safeKey(params.anim_key)
@@ -469,20 +486,29 @@ local function css(params: Params): string
 		table.insert(animations, `{frameName} {totalMs(durations)}ms step-end {iteration}`)
 		table.insert(blocks, frameKeyframes(frameName, durations, boxW))
 	end
-	-- Reaction rules repeat the pacing animation by name so a hover or press keeps the walk going.
-	local pace: string? = nil
-	if params.pace == true and not still then
-		local steps = math.floor(PACE_PX / PACE_STEP_PX)
-		local legMs = PACE_PX / PACE_SPEED_PX_S * 1000
-		pace = `{paceName} {math.floor(legMs / 0.48 + 0.5)}ms step-end infinite`
-		table.insert(animations, pace :: string)
-		table.insert(blocks, paceKeyframes(paceName, steps, if side.h == "right" then -1 else 1))
-	end
-
 	local reactions = if type(params.reactions) == "table" then params.reactions else {} :: any
 	local hover = safeReaction(reactions.hover)
 	local press = safeReaction(reactions.press)
 	local reactive = hover ~= nil or press ~= nil
+
+	-- Reaction rules repeat the pacing animation by name so a hover or press keeps the walk going.
+	-- The ring walks with the cat but never mirrors: the swat drawn in it faces right, so its
+	-- knocked-off letter reads correctly whichever way the cat walks.
+	local pace: string? = nil
+	local ringPace: string? = nil
+	if params.pace == true and not still then
+		local steps = math.floor(PACE_PX / PACE_STEP_PX)
+		local legMs = PACE_PX / PACE_SPEED_PX_S * 1000
+		local dir = if side.h == "right" then -1 else 1
+		local period = math.floor(legMs / 0.48 + 0.5)
+		pace = `{paceName} {period}ms step-end infinite`
+		table.insert(animations, pace :: string)
+		table.insert(blocks, paceKeyframes(paceName, steps, dir, true))
+		if reactive then
+			ringPace = `{paceName}-ring {period}ms step-end infinite`
+			table.insert(blocks, paceKeyframes(`{paceName}-ring`, steps, dir, false))
+		end
+	end
 
 	-- The emerge goes last: while it runs it wins over the decision for the properties it sets.
 	local emerge: string? = nil
@@ -497,15 +523,15 @@ local function css(params: Params): string
 		emerge = `{EMERGE} {ms(emergeMs)} step-end 1 backwards`
 		table.insert(animations, emerge :: string)
 
-		-- Every pane holds the dive's end state (no box). The pane that just lost focus
-		-- transitions there from the focused pane's values; nothing fires at install or for a new
-		-- pane, which starts in this state.
+		-- Every pane holds the dive's end state (no box). The pane that just lost focus plays the
+		-- dive as an animation and a delayed zero-duration transition (the gate) keeps it shown
+		-- until the dive ends. Other panes start the animation too (at install, on tab switches)
+		-- but the gate is already shut there. Without a dive sheet the cat sinks through a height
+		-- clip and the gate is `visibility`: `opacity` would clash with the press-hold transition
+		-- of the focused rule, which then hides the emerging cat.
 		local sheet = if dive then dive.url else url
 		local frames = if dive then #dive.durations else #durations
 		local last = if dive then -(#dive.durations - 1) * boxW else 0
-		local diveTransition = if dive
-			then exitTransition(dive, diveMs, "height")
-			else `height {ms(diveMs)} steps({clipSteps(frameH)}, end)`
 		append(rule, {
 			`{EVERY} \{`,
 			'\tcontent: "";',
@@ -515,7 +541,7 @@ local function css(params: Params): string
 			`\twidth: {px(boxW)};`,
 			"\theight: 0px;",
 			"\tpointer-events: none;",
-			"\tvisibility: visible;",
+			`\tvisibility: {if dive then "visible" else "hidden"};`,
 			`\tz-index: {num(z)};`,
 			"\timage-rendering: pixelated;",
 			`\tbackground-image: url("{sheet}");`,
@@ -523,10 +549,28 @@ local function css(params: Params): string
 			`\tbackground-size: {px(boxW * frames)} {px(boxH)};`,
 			`\tbackground-position: {px(last)} 0px;`,
 		})
+		if translucent then
+			table.insert(rule, `\topacity: {opacity};`)
+		end
 		if params.facing == "left" then
 			table.insert(rule, "\ttransform: scaleX(-1);")
 		end
-		append(rule, { `\ttransition: {diveTransition};`, "}" })
+		if dive then
+			append(rule, exitAnimation(dive, DIVE, boxW, "height", blocks))
+		else
+			local steps = clipSteps(frameH)
+			local lines = { `@keyframes {DIVE} \{`, `\t0% \{ height: {px(boxH)}; }` }
+			for i = 1, steps do
+				table.insert(lines, `\t{num(i / steps * 100)}% \{ height: {px(boxH * (steps - i) / steps)}; }`)
+			end
+			table.insert(lines, "}")
+			table.insert(blocks, table.concat(lines, "\n"))
+			append(rule, {
+				`\ttransition: visibility 0s step-end {ms(diveMs)};`,
+				`\tanimation: {DIVE} {ms(diveMs)} step-end 1 forwards;`,
+			})
+		end
+		table.insert(rule, "}")
 
 		-- The emerge also holds the cat visible (`opacity`) so a press during it does not swap
 		-- in the full-height swat frame; the ring's emerge hides that frame meanwhile.
@@ -537,19 +581,19 @@ local function css(params: Params): string
 					EMERGE,
 					rise.durations,
 					boxW,
-					`opacity: 1; background-image: url("{rise.url}"); background-size: {px(boxW * #rise.durations)} {px(
-						boxH
-					)}; `
+					`opacity: {opacity}; background-image: url("{rise.url}"); background-size: {px(
+						boxW * #rise.durations
+					)} {px(boxH)}; `
 				)
 			)
 		else
 			local steps = clipSteps(frameH)
-			local lines = { `@keyframes {EMERGE} \{`, "\t0% { opacity: 1; height: 0px; }" }
+			local lines = { `@keyframes {EMERGE} \{`, `\t0% \{ opacity: {opacity}; height: 0px; }` }
 			for i = 1, steps do
 				local pct = RISE_START_PCT + (i - 1) * RISE_PCT / steps
 				table.insert(lines, `\t{num(pct)}% \{ height: {px(boxH * i / steps)}; }`)
 			end
-			append(lines, { `\t100% \{ opacity: 1; height: {px(boxH)}; }`, "}" })
+			append(lines, { `\t100% \{ opacity: {opacity}; height: {px(boxH)}; }`, "}" })
 			table.insert(blocks, table.concat(lines, "\n"))
 		end
 		if press then
@@ -584,6 +628,9 @@ local function css(params: Params): string
 		`\tbackground-size: {px(boxW * #durations)} {px(boxH)};`,
 		"\tbackground-position: 0px 0px;",
 	})
+	if translucent then
+		table.insert(rule, `\topacity: {opacity};`)
+	end
 	if params.facing == "left" then
 		table.insert(rule, "\ttransform: scaleX(-1);")
 	end
@@ -627,12 +674,14 @@ local function css(params: Params): string
 			`\tz-index: {num(z)};`,
 			`\ttransform-origin: {px(pad.left + boxW / 2)} {px(pad.top + boxH / 2)};`,
 		})
-		if params.facing == "left" then
-			table.insert(rule, "\ttransform: scaleX(-1);")
+		if translucent then
+			table.insert(rule, `\topacity: {opacity};`)
 		end
+		-- Never mirrored (see ringPace): the content box sits over the cat either way, and the
+		-- swat faces right so its letter reads correctly.
 		local ringList: { string } = {}
-		if pace then
-			table.insert(ringList, pace :: string)
+		if ringPace then
+			table.insert(ringList, ringPace :: string)
 		end
 		if emergeRing then
 			table.insert(ringList, emergeRing :: string)
@@ -686,8 +735,8 @@ local function css(params: Params): string
 			table.insert(list, `tern-cat-press {totalMs(press.durations)}ms step-end 1 forwards`)
 			table.insert(blocks, frameKeyframes("tern-cat-press", press.durations, boxW))
 		end
-		if pace then
-			table.insert(list, pace :: string)
+		if ringPace then
+			table.insert(list, ringPace :: string)
 		end
 		if emergeRing then
 			table.insert(list, emergeRing :: string)
@@ -709,15 +758,30 @@ local function css(params: Params): string
 	local settled: { string } = {}
 	if prop then
 		local p = prop :: PropSpec
-		local g: Geometry = { side = side, boxW = boxW, boxH = boxH, h = gapH, v = gapV, scale = scale }
-		append(rule, propRules(g, p, BACK, BACK_ON, p.exit_back, p.enter_back, PROP_BACK, true, blocks))
+		local g: Geometry =
+			{ side = side, boxW = boxW, boxH = boxH, h = gapH, v = gapV, scale = scale, opacity = opacity }
+		append(rule, propRules(g, p, BACK, BACK_ON, p.exit_back, p.enter_back, PROP_BACK, PROP_BACK_EXIT, true, blocks))
 		table.insert(settled, EVERY)
 		table.insert(settled, BACK)
-		table.insert(reduced, BACK_ON)
+		append(reduced, { EVERY, BACK, BACK_ON })
 		if p.enter_front or p.exit_front then
-			append(rule, propRules(g, p, FRONT, FRONT_ON, p.exit_front, p.enter_front, PROP_FRONT, false, blocks))
+			append(
+				rule,
+				propRules(
+					g,
+					p,
+					FRONT,
+					FRONT_ON,
+					p.exit_front,
+					p.enter_front,
+					PROP_FRONT,
+					PROP_FRONT_EXIT,
+					false,
+					blocks
+				)
+			)
 			table.insert(settled, FRONT)
-			table.insert(reduced, FRONT_ON)
+			append(reduced, { FRONT, FRONT_ON })
 		end
 	end
 

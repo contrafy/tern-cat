@@ -11,6 +11,16 @@ Tested against Tern 0.8.3 (macOS, Apple silicon). Tern 0.6.2 or later is still r
 the plugin APIs tern-cat uses changed, and the overlay's Tern DOM and CSS hooks still match (see
 the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matrix.md#tern-083-delta)).
 
+### Added
+
+- The overlay cat steps aside while the focused pane runs a full-screen program (terminal
+  editors, pagers, `man`, `top`/`htop`/`btop`, `tmux`; not `ssh`), whose title and status bars
+  sit under the default top-right corner. New `rendering.fullscreen_behavior`: `hide` (default),
+  `shrink` (half scale, half opacity) or `stay`; settings row "Full-screen programs"; Carly may
+  set it. Tern exposes no alternate-screen state, so the window half recognizes the program from
+  the command line (reduced to a boolean, never kept) and, for a program already running when the
+  window loads, from the focused pane's program name.
+
 ### Fixed
 
 - **Open cat** focuses the card it floats. Tern 0.8 rests an unfocused floating card as a small
@@ -21,6 +31,9 @@ the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matr
   busybox (Alpine). The probe ran `command -v pw-play paplay aplay`, but those shells look only at
   the first name, so sound stayed silent unless `pw-play` was installed. It is still one fixed
   argv with no interpolation, now one `command -v` per player.
+- The overlay cat faces right while swatting, so the knocked-off letter no longer reads
+  backwards when the cat faced left: the swat decision and the press reaction (including the pose
+  held after release, and while pacing) are drawn unmirrored; everything else keeps its facing.
 
 ### Changed
 
@@ -28,6 +41,11 @@ the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matr
   0.8.3, instead of the moving `main` branch (`TERN_SDK_REF` still overrides it).
 - The disabled Carly provider's reason now says Tern (through 0.8.3) offers no constrained or
   hidden completion route.
+- Pane-switch exits (the cat's dive and the props closing) play as keyframe animations at the
+  pack's own frame times instead of stepped transitions, which Tern redraws at display rate:
+  about 44% fewer extra frames per switch from the transition in a same-window A/B. Rapid pane
+  switching still exceeds the 3% animation target, as Tern's own focus change does with the
+  transition off (see [docs/performance.md](docs/performance.md#exits-as-keyframes)).
 
 ## [0.2.0] - 2026-10-08
 

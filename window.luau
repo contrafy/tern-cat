@@ -131,13 +131,33 @@ local function cardCovers(cx: WindowCx): boolean?
 	return if ok then covered else nil
 end
 
-local function updateCover(cx: WindowCx)
+type FocusInfo = { pane: number?, program: string?, at_prompt: boolean? }
+
+-- The focused pane's id, program name and prompt state (full-screen programs).
+local function focusInfo(cx: WindowCx): FocusInfo?
+	local ok, info = pcall(function(): FocusInfo?
+		local focused = cx.session:focused()
+		local pane = if focused then cx.session:pane(focused) else nil
+		if pane == nil then
+			return nil
+		end
+		return { pane = pane.pane, program = pane.program, at_prompt = pane.at_prompt }
+	end)
+	return if ok then info else nil
+end
+
+-- Re-reads what the overlay needs to know about the focused pane after an event or command.
+local function updatePane(cx: WindowCx)
 	if ctl == nil then
 		return
 	end
 	local covered = cardCovers(cx)
 	if covered ~= nil then
 		controllerMod.setCovered(ctl, covered)
+	end
+	local focus = focusInfo(cx)
+	if focus then
+		controllerMod.setFocus(ctl, focus)
 	end
 end
 
@@ -235,7 +255,7 @@ local function openBlock(cx: WindowCx, settings: boolean)
 		tern.log.warn(`tern-cat: {opened.note}`)
 		toast(cx, "info", TITLE, `Opened as a split: {opened.note}`)
 	end
-	updateCover(cx)
+	updatePane(cx)
 end
 
 command("open", "Open cat", function(cx: WindowCx)
@@ -303,7 +323,7 @@ for _, name in WINDOW_EVENTS do
 			return
 		end
 		controllerMod.onWindowEvent(ctl, name, ev)
-		updateCover(cx)
+		updatePane(cx)
 	end)
 end
 
@@ -393,7 +413,7 @@ local function start()
 					if not keysChecked then
 						checkChord(cx)
 					end
-					info = { reduce_motion = reduceMotion(cx), covered = cardCovers(cx) }
+					info = { reduce_motion = reduceMotion(cx), covered = cardCovers(cx), focus = focusInfo(cx) }
 				end
 				fn(info)
 			end)

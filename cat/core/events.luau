@@ -1,6 +1,6 @@
 --!strict
--- Event construction and the command-line classifier. A command line is reduced to a
--- CommandCategory here and never stored, returned or copied into an event.
+-- Event construction, the command-line classifier and the full-screen check. A command line is
+-- reduced to a CommandCategory or a boolean here and never stored, returned or copied into an event.
 
 local T = require("../types")
 
@@ -346,6 +346,81 @@ local function classify(line: string): T.CommandCategory
 	return classifyFrom(tokens, 1)
 end
 
+-- Full-screen programs ----------------------------------------------------------------------
+
+-- Terminal programs that take over the whole screen, by command name. GUI editors (code, subl,
+-- zed) return at once, and ssh is left out: the remote side is usually a plain shell.
+local FULLSCREEN = {
+	vi = true,
+	vim = true,
+	nvim = true,
+	nano = true,
+	emacs = true,
+	hx = true,
+	helix = true,
+	micro = true,
+	kak = true,
+	less = true,
+	more = true,
+	most = true,
+	man = true,
+	htop = true,
+	top = true,
+	btop = true,
+	tmux = true,
+}
+-- sudo/doas flags that take a value (`sudo -u root vim`).
+local SUDO_VALUE_FLAGS = { ["-u"] = true, ["-g"] = true }
+local MAX_STAGES = 8
+
+-- The command one pipeline stage runs, past env assignments, wrappers and sudo with its flags.
+local function stageCommand(stage: string): string?
+	local afterWrapper = false
+	local skipValue = false
+	local count = 0
+	for tok in string.gmatch(stage, "%S+") do
+		count += 1
+		if count > MAX_TOKENS then
+			return nil
+		end
+		local name = basename(tok)
+		if skipValue then
+			skipValue = false
+		elseif SUDO[name] or WRAPPERS[name] then
+			afterWrapper = true
+		elseif afterWrapper and SUDO_VALUE_FLAGS[tok] then
+			skipValue = true
+		elseif not (isAssignment(tok) or (afterWrapper and (isFlag(tok) or tonumber(tok) ~= nil))) then
+			return name
+		end
+	end
+	return nil
+end
+
+-- True when a pane's program name (`PaneInfo.program`) is a full-screen program.
+local function fullscreenProgram(name: string?): boolean
+	return type(name) == "string" and FULLSCREEN[basename(name)] == true
+end
+
+-- True when a command line runs a full-screen program in any pipeline stage (`git log | less`).
+-- Like classify, it reduces the line to a boolean and keeps nothing of it.
+local function fullscreen(line: string): boolean
+	if type(line) ~= "string" then
+		return false
+	end
+	local stages = 0
+	for stage in string.gmatch((string.gsub(line, "||", ";")), "[^|]+") do
+		stages += 1
+		if stages > MAX_STAGES then
+			return false
+		end
+		if fullscreenProgram(stageCommand(stage)) then
+			return true
+		end
+	end
+	return false
+end
+
 -- Attributes ------------------------------------------------------------------------------
 
 type Kind = "category" | "bool" | "number" | "word"
@@ -490,6 +565,8 @@ end
 
 return {
 	classify = classify,
+	fullscreen = fullscreen,
+	fullscreenProgram = fullscreenProgram,
 	sanitizeAttributes = sanitizeAttributes,
 	newId = newId,
 	commandStarted = commandStarted,

@@ -39,6 +39,9 @@ you want it gone too.
 - **Overlay.** On by default in every window, resting in the focused pane's top-right corner.
   `rendering.overlay_position` picks another corner and `rendering.overlay_offset_px` the gap.
   `ctrl+alt+cmd+c` hides or shows it.
+- **Full-screen programs.** While the focused pane runs vim, less, htop or a similar full-screen
+  program, the overlay cat steps aside. `rendering.fullscreen_behavior`: `hide` (default),
+  `shrink` (smaller and translucent) or `stay`.
 - **Pointer reactions.** Move the pointer near or onto the overlay cat and it looks at you; press
   there and it swats. Visual only: the click still goes to the terminal and counts as nothing.
 - **Pane switches.** When focus moves to another pane, tab or session, the cat dives into a prop

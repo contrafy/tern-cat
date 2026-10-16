@@ -422,6 +422,18 @@ local function sections(model: Model, s: SettingsModel): { any }
 					off = "Off",
 				}),
 			}),
+			row(c, base, "rendering.fullscreen_behavior", {
+				label = "Full-screen programs",
+				hint = "What the overlay cat does while the focused pane runs vim, less, htop or the like.",
+			}, {
+				k = "choice",
+				value = c.rendering.fullscreen_behavior,
+				options = choiceOptions(schema.FULLSCREEN_BEHAVIORS, {
+					hide = "Step aside",
+					shrink = "Shrink and fade",
+					stay = "Stay",
+				}),
+			}),
 		}
 		for _, p in s.packs do
 			if p.removable then

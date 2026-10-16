@@ -182,6 +182,9 @@ export type OverlayPosition = "top-right" | "top-left" | "bottom-right" | "botto
 -- Prop the overlay cat dives into and emerges from when the focused pane changes.
 export type PaneTransition = "portal" | "vent" | "box" | "off"
 
+-- What the overlay cat does while the focused pane runs a full-screen program (vim, less, htop).
+export type FullscreenBehavior = "hide" | "shrink" | "stay"
+
 export type AiProvider = "none" | "mock" | "carly_schedule"
 
 export type Config = {
@@ -206,6 +209,7 @@ export type Config = {
 		reduced_motion: ReducedMotion,
 		block_placement: BlockPlacement,
 		pane_transition: PaneTransition,
+		fullscreen_behavior: FullscreenBehavior,
 	},
 	behavior: {
 		activity: Activity,

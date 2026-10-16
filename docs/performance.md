@@ -174,6 +174,51 @@ switch is the switching minus idle window CPU over 40 s, divided by 20). The dae
 per-switch work (0.17-0.19% while switching, against 0.13-0.14% idle). Rapid switching (one
 every 2 s) stays at about 4% window CPU, a burst rather than a steady state.
 
+#### Exits as keyframes
+
+The figures above were taken with the exits (the cat's dive, the props' close) as stepped
+`background-position` transitions. Tern redraws a running transition at display rate for its
+whole duration, `steps()` or not, while a keyframe animation with `step-end` timing draws only
+when a frame changes. The exits now run as keyframe animations on the every-pane rules, with
+zero-duration delayed transitions only as visibility gates (docs/architecture.md).
+
+Same-window A/B, interleaved (sandbox window with a two-pane split, the tern-cat sheet replaced
+through `tern ctl css plugin:local:tern-cat:overlay FILE` by the portal CSS the old and new code
+generate for the same idle decision, or by an empty sheet; 4 rounds of 5 `key cmd+]` switches
+each, frames in the 2 s after a switch minus the 2 s before):
+
+| Sheet | Extra frames per switch, mean (sd) | Over no sheet |
+|---|---|---|
+| none | 23.1 (6.3) | |
+| stepped transitions (before) | 32.6 (4.3) | 9.5 |
+| keyframe exits (after) | 28.4 (2.9) | 5.3 |
+
+The transition's own frames drop by about 44%. The prototype A/B in an earlier session, with
+fewer ambient frames, measured 35 against 11 extra frames (-69%); here the window already drew
+about 12 frames/s at idle (Tern's own `.tn-gate` live marks and the caret, from `tern ctl
+stats`), and frames that coincide with those cost nothing extra.
+
+`bash scripts/perf-baseline.sh --transition --styles off,portal --settle 15`, three runs each,
+old code then new code, back to back on the same machine:
+
+| Code | Style | Idle window CPU (runs) | Idle frames/s | Switching window CPU (runs) | Extra frames per switch (runs) |
+|---|---|---|---|---|---|
+| before | `off` | 3.12% (3.14, 2.41, 3.82) | 13.3 | 4.24% (5.11, 1.84, 5.75) | 19 (16, 27, 15) |
+| before | `portal` | 3.52% (3.24, 3.73, 3.60) | 12.9 | 7.38% (7.08, 7.97, 7.07) | 30 (31, 30, 28) |
+| after | `off` | 3.59% (3.11, 3.60, 4.07) | 12.2 | 5.91% (5.85, 5.88, 5.98) | 17 (20, 17, 15) |
+| after | `portal` | 3.66% (3.74, 3.48, 3.75) | 12.8 | 7.56% (7.59, 7.57, 7.53) | 27 (28, 28, 25) |
+
+Daemon 0.15-0.16% in every run. On this day the window idled at 3-4% CPU and 12-13 frames/s
+with or without tern-cat's transition (against about 1% and 3 frames/s in the table above), so
+the CPU columns cannot resolve a few frames per switch: the switching CPU of `portal` is
+unchanged within run-to-run noise, and the transition's extra frames over `off` went from about
+11 to about 10. The A/B above is the better measure of the change.
+
+Floor: with the transition `off`, one switch every 2 s already costs 3.24% window CPU in the
+table above (5.9% here), all of it Tern's own focus change (pane highlight, caret, re-layout).
+The 3% animation target is therefore not reachable while switching panes that fast, whatever
+the transition costs; it holds for steady animation.
+
 ### Memory
 
 Incremental memory baseline (method above). MiB per repeat, after a 2-minute settle:
@@ -270,7 +315,7 @@ logged `sound: played purr (afplay) status 0` at debug level. The real player pa
 |---|---|---|
 | p95 event-to-visible at most 150 ms | Max 29.2 ms over 12 clicks (p95 not computable from 12 samples; every sample is far under the bound) | Pass |
 | Idle CPU at most 1% | Pane-switch transition A/B (60 s, 3 runs per style, split, frozen animation): window plus daemon 1.31% (`off`), 1.08% (`portal`), 1.20% (`vent`), 0.97% (`box`), no difference between styles beyond run-to-run noise; no idle frames from the transition. Zen, 10 min no input: window plus daemon mean 0.85% (block floated) and 0.89% (block closed); window p95 1.24-1.39%, 7 of 40 window samples over 1% in each run. Earlier short runs: daemon 0.11-0.13%, window 0.82-0.87% | Pass on the 10-minute mean, with little margin; individual 15 s samples exceed 1%. Figures include Tern's own idle cost |
-| Animated CPU at most 3% | Daemon 0.22% plus window 1.29% with block and overlay animating. Pane switches every 2 s with a transition: window 3.6-4.1% plus daemon 0.17-0.19% (3.2% plus 0.18% with `off`), about 11-21 ms of extra window CPU per switch | Pass for steady animation; a burst of rapid pane switching exceeds 3% while it lasts, about 0.4-0.9 points of it from the transition |
+| Animated CPU at most 3% | Daemon 0.22% plus window 1.29% with block and overlay animating. Pane switches every 2 s with a transition: window 3.6-4.1% plus daemon 0.17-0.19% (3.2% plus 0.18% with `off`), about 11-21 ms of extra window CPU per switch, measured with stepped exit transitions; keyframe exits cut the transition's extra frames per switch by about 44% in a same-window A/B | Pass for steady animation; a burst of rapid pane switching exceeds 3% while it lasts, and cannot meet it: with the transition `off` Tern's own focus change already costs 3.24% at one switch per 2 s |
 | Memory at most 100 MiB incremental | Window plus daemon physical footprint over plugin unlinked: median +18.5 MiB (overlay only), +33.5 MiB (block floated); one of three repeats +96-111 MiB because of a low unlinked baseline. RSS deltas: median +47 / +122 MiB, per repeat 37-125 MiB. No RSS growth in any process over a 30-minute soak | Pass on median footprint, no leak seen; RSS is too noisy to confirm, and its block-floated median exceeds the bound |
 
 ## Not measured

@@ -17,6 +17,7 @@ local ACTIVITY_ALIASES: { [string]: string } = { orange_menace = "menace" }
 local REDUCED_MOTION = { "follow_tern", "on", "off" }
 local BLOCK_PLACEMENTS = { "float", "split" }
 local PANE_TRANSITIONS = { "portal", "vent", "box", "off" }
+local FULLSCREEN_BEHAVIORS = { "hide", "shrink", "stay" }
 local OVERLAY_POSITIONS = { "top-right", "top-left", "bottom-right", "bottom-left" }
 local AI_PROVIDERS = { "none", "mock", "carly_schedule" }
 local SOUND_IDS = { "meow", "purr", "surprise", "happy", "swat" }
@@ -88,6 +89,7 @@ local SECTIONS: { SectionSpec } = {
 			enum("reduced_motion", REDUCED_MOTION),
 			enum("block_placement", BLOCK_PLACEMENTS),
 			enum("pane_transition", PANE_TRANSITIONS),
+			enum("fullscreen_behavior", FULLSCREEN_BEHAVIORS),
 		},
 	},
 	{
@@ -179,6 +181,7 @@ local function defaults(): T.Config
 			reduced_motion = "follow_tern",
 			block_placement = "float",
 			pane_transition = "portal",
+			fullscreen_behavior = "hide",
 		},
 		behavior = {
 			activity = "menace",
@@ -543,6 +546,7 @@ return {
 	ACTIVITIES = ACTIVITIES,
 	SOUND_IDS = SOUND_IDS,
 	PANE_TRANSITIONS = PANE_TRANSITIONS,
+	FULLSCREEN_BEHAVIORS = FULLSCREEN_BEHAVIORS,
 	OVERLAY_POSITIONS = OVERLAY_POSITIONS,
 	defaults = defaults,
 	preset = preset,
