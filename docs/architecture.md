@@ -185,7 +185,7 @@ All modules are `--!strict` and return a table of functions. Only the entries an
 
 | Module | Responsibility | Key functions |
 |---|---|---|
-| `cat/render/animations.luau` | The 22 canonical animations (`dive`/`emerge` for the pane-switch transition only) and fallback chains ending in `idle` | `resolve(pack_animations, wanted)`, `isCanonical(name)`, `isPerformable(name)` |
+| `cat/render/animations.luau` | The 25 canonical animations (`dive`/`emerge` for the pane-switch transition and `climb`/`leap`/`run` for the walk between panes only) and fallback chains ending in `idle` | `resolve(pack_animations, wanted)`, `isCanonical(name)`, `isPerformable(name)` |
 | `cat/render/block.luau` | Block view: sprite stack, needs bars, stats, buttons, menus, `prefs` settings page, `ls` parody | `view(model, ui)` |
 | `cat/render/overlay.luau` | Overlay CSS generator (sanitized string output; corner placement; optional `still`; optional hover/press reaction sheets with the proximity ring; optional pane-switch transition) | `css(params)`, `SELECTOR`, `HOST` |
 | `cat/sprite/png.luau` | PNG/APNG header parsing without decoding pixels | `inspect(bytes)` |

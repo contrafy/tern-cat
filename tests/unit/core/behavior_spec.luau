@@ -851,7 +851,7 @@ describe("core.behavior", function()
 		end)
 
 		it("never performs the pane-switch animations", function()
-			for _, anim in { "dive", "emerge" } do
+			for _, anim in { "dive", "emerge", "climb", "leap", "run" } do
 				local _, d = behavior.react(behavior.newState(0), gestureEv("perform", anim), makeCtx({ now_ms = 10 }))
 				expect(d).toBeNil()
 			end

@@ -203,7 +203,7 @@ local function validateArgs(kind: string, args: Args, source: string): (Args?, s
 			return nil, err
 		end
 		if not animations.isPerformable(args.animation) then
-			return nil, "animation must be a canonical animation name other than dive or emerge"
+			return nil, "animation must be a canonical animation name other than dive, emerge, climb, leap or run"
 		end
 		return { animation = args.animation }, nil
 	elseif kind == "set_personality" then

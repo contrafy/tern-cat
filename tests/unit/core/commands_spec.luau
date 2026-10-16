@@ -95,8 +95,9 @@ describe("commands", function()
 			rejects(factories.intent("perform", {}))
 			rejects(factories.intent("perform", { animation = "explode" }))
 			rejects(factories.intent("perform", { animation = 3 }))
-			rejects(factories.intent("perform", { animation = "dive" }))
-			rejects(factories.intent("perform", { animation = "emerge" }))
+			for _, anim in { "dive", "emerge", "climb", "leap", "run" } do
+				rejects(factories.intent("perform", { animation = anim }))
+			end
 		end)
 
 		it("set_personality clamps values and rejects unknown traits", function()

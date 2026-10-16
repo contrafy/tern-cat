@@ -411,7 +411,7 @@ local function sections(model: Model, s: SettingsModel): { any }
 			}),
 			row(c, base, "rendering.pane_transition", {
 				label = "Pane switch",
-				hint = "What the overlay cat dives into and climbs out of when you switch panes.",
+				hint = "How the overlay cat gets to the pane you switch to: through a prop, or on foot across the dividers.",
 			}, {
 				k = "choice",
 				value = c.rendering.pane_transition,
@@ -419,6 +419,8 @@ local function sections(model: Model, s: SettingsModel): { any }
 					portal = "Swirly portal",
 					vent = "Floor vent",
 					box = "Cardboard box",
+					walk = "Walk over",
+					auto = "Walk to neighbors",
 					off = "Off",
 				}),
 			}),
