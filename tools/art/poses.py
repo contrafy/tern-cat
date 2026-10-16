@@ -1,4 +1,5 @@
-"""Pose builders: stand, sit, curl (sleep loaf), loaf (sleepy sit), belly-up flop."""
+"""Pose builders: stand, sit, curl (sleep loaf), loaf (sleepy sit), belly-up flop, and the
+travel gaits (gallop, leap, cling)."""
 
 from __future__ import annotations
 
@@ -330,5 +331,156 @@ def climb(**kw) -> Pose:
         ],
         tail=[(10.0, 33.0), (10.0, 34.0)],
         head=(10, 14),
+        **kw,
+    )
+
+
+def gallop(stage: int, **kw) -> Pose:
+    """Run cycle. 0: flight, legs stretched fore and aft; 1: front paws land; 2: all four
+    gathered under an arched back; 3: hind legs push off while the front reach."""
+    if stage == 0:
+        cy = 20.5
+        torso = [(14.5, cy, 8.4, 4.0), (8.5, cy + 0.5, 4.0, 3.8)]
+        legs = [
+            Leg((11.0, 23), (3.5, 26.5), knee=(7.0, 25.5), near=False, paw_forward=-1),
+            Leg((21.0, 23), (27.5, 25.5), near=False),
+            Leg((8.0, 23), (2.0, 25.0), knee=(5.0, 24.5), paw_forward=-1),
+            Leg((19.0, 23), (26.0, 27.0)),
+        ]
+        tail = [(5.5, 19.5), (2.5, 18.5), (0.5, 17.0)]
+        head = (18, 9)
+    elif stage == 1:
+        cy = 21.5
+        torso = [(14.5, cy, 8.0, 4.4), (8.5, cy - 0.5, 4.0, 4.0)]
+        legs = [
+            Leg((11.0, 24), (8.0, 28.0), knee=(7.0, 26.0), near=False, paw_forward=-1),
+            Leg((21.0, 24), (19.0, 30), near=False, paw_forward=0),
+            Leg((8.0, 24), (5.5, 27.5), knee=(4.5, 26.0), paw_forward=-1),
+            Leg((19.0, 24), (22.5, 30)),
+        ]
+        tail = [(5.5, 19.5), (2.5, 17.5), (1.0, 15.0)]
+        head = (18, 10)
+    elif stage == 2:
+        cy = 20.5
+        torso = [(14.0, cy, 7.2, 4.8), (9.5, cy + 0.5, 4.0, 4.2)]
+        legs = [
+            Leg((11.5, 24), (15.0, 30), knee=(11.0, 27.0), near=False),
+            Leg((20.0, 24), (17.0, 30), near=False, paw_forward=-1),
+            Leg((9.0, 24), (13.0, 30), knee=(8.5, 27.5)),
+            Leg((18.5, 24), (16.0, 30), paw_forward=0),
+        ]
+        tail = [(6.0, 20), (3.0, 20), (1.0, 21.5)]
+        head = (17, 9)
+    else:
+        cy = 21.0
+        torso = [(14.0, cy, 8.0, 4.4), (8.5, cy + 0.5, 4.0, 4.0)]
+        legs = [
+            Leg((11.0, 24), (7.5, 30), near=False),
+            Leg((21.0, 23.5), (25.5, 27.5), knee=(24.5, 24.5), near=False),
+            Leg((8.5, 24), (4.5, 30)),
+            Leg((19.0, 23.5), (24.0, 28.0), knee=(23.0, 25.0)),
+        ]
+        tail = [(5.5, 20), (2.5, 19.5), (0.5, 19.0)]
+        head = (18, 9)
+    return Pose(torso=torso, chest=(torso[0][0] + 6.5, cy + 1.5, 2.8, 2.8), legs=legs, tail=tail, head=head, **kw)
+
+
+def leap(stage: int, **kw) -> Pose:
+    """Jump over a divider. 0: launch, hind legs driving, front tucked; 1: airborne stretch;
+    2: descent, front paws reaching for the ground; 3: landing, front down, rear still high."""
+    if stage == 0:
+        return Pose(
+            torso=[(14.5, 19.5, 7.6, 4.2), (8.5, 21.5, 4.0, 4.0)],
+            chest=(20.5, 21.0, 2.8, 2.8),
+            legs=[
+                Leg((10.5, 24), (5.5, 30), near=False, paw_forward=-1),
+                Leg((20.5, 21.5), (24.5, 19.5), knee=(23.5, 23.5), near=False),
+                Leg((8.0, 24), (3.5, 30), paw_forward=-1),
+                Leg((18.5, 22), (23.0, 21.0), knee=(22.0, 25.0)),
+            ],
+            tail=[(5.0, 22), (2.0, 23.5), (0.5, 26.0)],
+            head=(18, 7),
+            **kw,
+        )
+    if stage == 1:
+        return Pose(
+            torso=[(14.5, 19.0, 8.6, 3.8), (8.0, 19.5, 4.0, 3.6)],
+            chest=(21.0, 20.5, 2.8, 2.6),
+            legs=[
+                Leg((10.5, 21.5), (3.0, 24.5), knee=(6.5, 23.5), near=False, paw_forward=-1),
+                Leg((21.0, 21), (28.0, 22.5), near=False),
+                Leg((8.0, 21.5), (1.5, 23.5), knee=(4.5, 22.5), paw_forward=-1),
+                Leg((19.5, 21), (27.0, 24.0)),
+            ],
+            tail=[(5.0, 18.0), (2.0, 16.5), (0.5, 14.0)],
+            head=(18, 7),
+            **kw,
+        )
+    if stage == 2:
+        return Pose(
+            torso=[(14.5, 20.5, 8.0, 4.0), (8.5, 19.5, 4.0, 3.8)],
+            chest=(21.0, 22.5, 2.8, 2.6),
+            legs=[
+                Leg((10.5, 22.5), (13.0, 24.5), knee=(9.0, 25.5), near=False),
+                Leg((21.0, 23), (25.0, 29.0), near=False),
+                Leg((8.0, 22.5), (10.5, 24.5), knee=(6.5, 25.5)),
+                Leg((19.5, 23), (23.5, 30.0)),
+            ],
+            tail=[(5.0, 18.5), (2.5, 15.5), (2.0, 12.0)],
+            head=(18, 10),
+            **kw,
+        )
+    return Pose(
+        torso=[(14.0, 22.5, 7.4, 4.2), (8.5, 21.5, 4.0, 4.0)],
+        chest=(20.5, 24.0, 2.8, 2.8),
+        legs=[
+            Leg((10.5, 24), (10.0, 30), knee=(8.0, 27.0), near=False),
+            Leg((21.0, 25), (22.5, 30), near=False),
+            Leg((8.0, 24), (7.5, 30), knee=(5.0, 27.0)),
+            Leg((19.0, 25), (20.0, 30)),
+        ],
+        tail=[(5.0, 20.5), (2.0, 18.5), (1.5, 15.0)],
+        head=(18, 12),
+        **kw,
+    )
+
+
+def cling(stage: int, **kw) -> Pose:
+    """Climbing a wall at the frame's right edge, head up (see Pose.wall).
+
+    Authored on the floor facing right, then turned: x is height up the wall (31 - x after
+    the turn) and y is distance from it. Stages 0 and 2 reach: one front paw stretched up, the
+    diagonal hind leg pushing down. Stages 1 and 3 pull the body up a pixel with the paws
+    gathered, alternating which pair leads.
+    """
+    s = stage % 4
+    cx, cy = 13.5 + (s % 2), 21.0
+    fx, hx, t = cx + 4.5, cx - 5.0, 23.5
+    if s % 2 == 0:
+        near_leads = s == 0
+        legs = [
+            Leg((fx, t), (cx + 11.5, 29.5), knee=(fx + 4.5, 25.0), near=near_leads),
+            Leg((fx + 1.5, t), (cx + 4.5, 30), knee=(fx + 2.5, 27.5), near=not near_leads, paw_forward=0),
+            Leg((hx + 1.5, t + 0.5), (cx - 9.5, 30), knee=(hx - 2.0, 28.0), near=not near_leads, paw_forward=-1),
+            Leg((hx, t + 0.5), (cx - 3.0, 30), knee=(hx + 2.5, 26.5), near=near_leads, paw_forward=0),
+        ]
+    else:
+        a = 1.5 if s == 1 else -1.5
+        legs = [
+            Leg((fx + 1.5, t), (fx + 5 - a, 30), knee=(fx + 4, 26.5), near=False),
+            Leg((hx + 1.5, t + 0.5), (hx - 2 + a, 30), knee=(hx + 1, 27.0), near=False, paw_forward=-1),
+            Leg((hx, t + 0.5), (hx - 2 - a, 30), knee=(hx + 0.5, 27.5), paw_forward=-1),
+            Leg((fx, t), (fx + 5 + a, 30), knee=(fx + 3, 26.5)),
+        ]
+    # The tail hangs down and swings out from the wall.
+    sway = [(1.0, 18.0), (0.5, 16.5), (1.0, 15.0), (0.5, 16.5)][s]
+    return Pose(
+        torso=[(cx, cy, 7.0, 4.0), (cx - 5.0, cy + 0.3, 3.8, 3.8)],
+        chest=(cx + 5.5, cy + 1.5, 2.6, 2.6),
+        legs=legs,
+        tail=[(cx - 8.0, cy - 0.5), (3.0, 20.0), sway],
+        # Upright, left of the body's axis so the reaching paw shows beside it.
+        head=(round(cy) - 8, 31 - int(cx + 7.5) - 8),
+        wall=True,
         **kw,
     )

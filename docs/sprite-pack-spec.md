@@ -164,11 +164,14 @@ available animation in the chain is shown, and every chain ends in `idle`.
 | `hop` | Small hop | `look`, `idle` |
 | `dive` | Sinks into the floor portal (overlay pane switch only) | `hop`, `idle` (the overlay clips the decision sheet instead) |
 | `emerge` | Rises out of the floor portal and lands (overlay pane switch only) | `wake`, `blink`, `idle` (the overlay clips the decision sheet instead) |
+| `climb` | Climbs a wall, head up (overlay walk between panes only) | `walk`, `idle` (the overlay turns `walk` on its side) |
+| `leap` | Jumps over a pane divider (overlay walk between panes only) | `hop`, `idle` |
+| `run` | Fast gait for long stretches (overlay walk between panes only) | `walk`, `idle` |
 
 `durations_ms` only times the frames. How long the cat stays in an animation is decided by the
 behavior engine (`defaultDurationMs` in `cat/render/animations.luau`), not by the pack. The
 engine treats `idle`, `walk`, `sit` and `sleep` as looping states, so set `"loop": true` on those
-and `false` on one-shot reactions.
+(and on `climb` and `run`) and `false` on one-shot reactions.
 
 `dive` and `emerge` are only played by the overlay's pane-switch transition (see
 [architecture.md](architecture.md#pane-switch-transition)); they are never decisions and cannot
@@ -180,7 +183,17 @@ unequal durations are averaged), `emerge` 640 ms, its empty first frame lasting 
 while the prop opens. A pack without them sinks and rises with a height clip of whatever the
 cat is doing.
 
-Bundled packs must provide all 22 animations (`tools/validate_packs.py` enforces this when run
+`climb`, `leap` and `run` are the legs of the overlay's walk between panes
+(`rendering.pane_transition` `walk` or `auto`); they are never decisions and cannot be performed.
+The overlay moves the frame along the path, so keep the cat in place inside it. Draw `leap` and
+`run` facing right on the bottom-edge floor like `walk`; draw `climb` head up with the paws on a
+wall at the frame's right edge (the overlay mirrors it for the other side and flips it to climb
+down). The walk plays each one as a stepped strip, so give every frame the same duration. Timing
+guidance (bundled packs match it exactly): `climb` 4 frames of 90 ms, looping; `leap` 480 ms
+(crouch, launch, airborne, reach, land, and a last frame matching `idle`'s first); `run` 4
+frames of 70 ms, looping.
+
+Bundled packs must provide all 25 animations (`tools/validate_packs.py` enforces this when run
 without arguments). Community packs only need `idle`.
 
 ## Minimal complete example

@@ -49,6 +49,9 @@ for _, name in
 		"hop",
 		"dive",
 		"emerge",
+		"climb",
+		"leap",
+		"run",
 	}
 do
 	CANONICAL[name] = true

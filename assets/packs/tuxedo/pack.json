@@ -651,6 +651,91 @@
       ],
       "apng": "build/emerge.apng",
       "sheet": "build/emerge.sheet.png"
+    },
+    "climb": {
+      "frames": [
+        "frames/climb/01.png",
+        "frames/climb/02.png",
+        "frames/climb/03.png",
+        "frames/climb/04.png"
+      ],
+      "durations_ms": [
+        90,
+        90,
+        90,
+        90
+      ],
+      "loop": true,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        12,
+        0,
+        20,
+        32
+      ],
+      "apng": "build/climb.apng",
+      "sheet": "build/climb.sheet.png"
+    },
+    "leap": {
+      "frames": [
+        "frames/leap/01.png",
+        "frames/leap/02.png",
+        "frames/leap/03.png",
+        "frames/leap/04.png",
+        "frames/leap/05.png",
+        "frames/leap/06.png"
+      ],
+      "durations_ms": [
+        80,
+        80,
+        80,
+        80,
+        80,
+        80
+      ],
+      "loop": false,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        2,
+        32,
+        30
+      ],
+      "apng": "build/leap.apng",
+      "sheet": "build/leap.sheet.png"
+    },
+    "run": {
+      "frames": [
+        "frames/run/01.png",
+        "frames/run/02.png",
+        "frames/run/03.png",
+        "frames/run/04.png"
+      ],
+      "durations_ms": [
+        70,
+        70,
+        70,
+        70
+      ],
+      "loop": true,
+      "anchor": [
+        16,
+        31
+      ],
+      "hitbox": [
+        0,
+        9,
+        32,
+        23
+      ],
+      "apng": "build/run.apng",
+      "sheet": "build/run.sheet.png"
     }
   }
 }
