@@ -7,8 +7,12 @@ Detailed reference. Settings: [configuration.md](configuration.md). Privacy: [se
 1. After install, every Tern window shows the overlay cat in the top-right corner of the focused
    pane (`rendering.overlay_position` picks another corner). When you switch panes, tabs or
    sessions, it dives into a portal and climbs out of one in the newly focused pane
-   (`rendering.pane_transition`: `portal`, `vent`, `box` or `off`; nothing with reduced
-   motion). You do not have to do anything else.
+   (`rendering.pane_transition`: `portal`, `vent`, `box`, `walk`, `auto` or `off`; nothing with
+   reduced motion). With `walk` it instead walks, leaps and climbs along the pane edges from its
+   corner in the old pane to its corner in the new one when both are split panes of the same
+   tab, and still comes out of a portal after a tab or session switch, in a zoomed tab or for a
+   floating pane; `auto` walks only to a pane that shares an edge with the old one. You do not
+   have to do anything else.
 2. Open the interactive block from the command palette:
    - **Open cat** (group Tern Cat) opens it as a floating card in the bottom-right corner of the
      focused pane and focuses the card. If the focused tab already shows a cat block (tiled or
@@ -75,7 +79,12 @@ Detailed reference. Settings: [configuration.md](configuration.md). Privacy: [se
   Step aside (`hide`), Shrink and fade (`shrink`) or Stay (`stay`). Aliases (`v` for `vim`) and
   pagers that other programs open (`git log`) are not recognized.
 - A pacing cat jumps back to its resting spot in the frame you switch away from its pane, then
-  dives there.
+  dives there (with `walk` or `auto`, it walks off from there).
+- With `walk` or `auto` the traveling cat is decoration only: it takes no pointer reactions, and
+  the cat in the new pane reacts again once it has arrived. A switch during a walk turns the cat
+  around where it is. It walks with the panes' sizes at the moment you switch, so after a divider
+  drag mid-walk it may arrive a few pixels off for a frame. Packs without `climb`, `leap` or
+  `run` walk on their side up and down, hop or walk instead.
 
 ### Global hide chord
 

@@ -46,7 +46,8 @@ you want it gone too.
   there and it swats. Visual only: the click still goes to the terminal and counts as nothing.
 - **Pane switches.** When focus moves to another pane, tab or session, the cat dives into a prop
   in the pane it leaves and climbs out of one in the pane it enters. `rendering.pane_transition`:
-  `portal` (default), `vent`, `box` or `off`.
+  `portal` (default), `vent`, `box`, `walk` (walks, leaps and climbs between split panes of a
+  tab; a portal otherwise), `auto` (walks only to a neighbouring pane) or `off`.
 
   ![The overlay cat diving into a portal in one split pane and climbing out of one in the other](docs/images/pane-switch.gif)
 
