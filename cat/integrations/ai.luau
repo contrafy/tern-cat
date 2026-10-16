@@ -75,7 +75,7 @@ local DEFAULT_ALLOWED: { T.Animation } = {
 	"hop",
 }
 
-local CARLY_UNAVAILABLE = "Disabled: Tern 0.6.2 offers no constrained or hidden completion route. "
+local CARLY_UNAVAILABLE = "Disabled: Tern (through 0.8.3) offers no constrained or hidden completion route. "
 	.. "Scheduled Carly turns run with full tool access (commands, input), so tern-cat will not start them."
 
 export type Budget = { history: { number } }

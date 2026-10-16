@@ -18,8 +18,8 @@ local GROUP = "Tern Cat"
 local TITLE = "Tern Cat"
 local TOGGLE_ID = "toggle-overlay"
 local TOGGLE_ACTION = "plugin.tern-cat." .. TOGGLE_ID
--- The always-available instant dismiss. Free in Tern 0.6.2's default keymap; rebind it with a
--- settings.json "keybinds" entry for action plugin.tern-cat.toggle-overlay.
+-- The always-available instant dismiss. Free in Tern's default keymap (0.6.2 to 0.8.3); rebind
+-- it with a settings.json "keybinds" entry for action plugin.tern-cat.toggle-overlay.
 local TOGGLE_CHORD = "ctrl+alt+cmd+c"
 local SNOOZE_MINUTES = 30
 local STARTING = "Tern Cat is still starting; try again in a moment."
