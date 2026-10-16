@@ -4,7 +4,8 @@
 -- a floating card in its bottom-right corner: a cat card floating in another tab or parked moves
 -- here, else a new block opens beside the focused pane and floats. Cat blocks tiled into other
 -- tabs are left where they are. When floating fails the block stays a split and the reason is
--- returned as a note.
+-- returned as a note. A floated card is focused: since Tern 0.8 an unfocused card rests as a
+-- tilted "glance" card that takes no clicks until it is focused.
 
 export type CatBlock = {
 	pane: number,
@@ -51,6 +52,13 @@ local function showSettings(ui: Ui, pane: number, settings: boolean)
 	end
 end
 
+-- Focuses a card that was just floated (it would otherwise rest as a glance card that ignores
+-- clicks), then shows the settings page when asked.
+local function focusCard(ui: Ui, pane: number, settings: boolean)
+	pcall(ui.focus, pane)
+	showSettings(ui, pane, settings)
+end
+
 -- Runs a (boolean, string?) layout call; a raise becomes false with the error as the reason.
 local function attempt(call: () -> (boolean, string?)): (boolean, string)
 	local called, ok, why = pcall(call)
@@ -94,7 +102,7 @@ local function open(ui: Ui, placement: Placement, settings: boolean): Opened
 				end)
 				if ok then
 					ui.debug(`open: floated cat block {b.pane} over pane {owner}`)
-					showSettings(ui, b.pane, settings)
+					focusCard(ui, b.pane, settings)
 					return { pane = b.pane, placement = "float" }
 				end
 				ui.debug(`open: floating cat block {b.pane} failed: {why}; opening a new block`)
@@ -130,6 +138,7 @@ local function open(ui: Ui, placement: Placement, settings: boolean): Opened
 	end)
 	if floated then
 		ui.debug(`open: opened cat block {pane} floating over pane {owner}`)
+		focusCard(ui, pane, false)
 		return { pane = pane, placement = "float" }
 	end
 	ui.debug(`open: floating new cat block {pane} failed: {why}; keeping the split`)

@@ -62,6 +62,8 @@ sleep 3
 ctl "$WA" plugins run plugin.tern-cat.open >/dev/null
 sleep 2
 ctl "$WA" tree | grep -q 'Tern Cat ·' || { echo "soak: cat block did not open in window A" >&2; exit 1; }
+# The opened card takes the focus; the driver types into the shell, so click it back there.
+ctl "$WA" click 200 200 >/dev/null
 
 echo "==> soak for ${DURATION}s"
 uv run --quiet --with psutil python tools/soak.py --sb "$SB" --duration "$DURATION"
