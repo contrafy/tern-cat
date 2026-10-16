@@ -148,8 +148,10 @@ local STAGE = "div.tn-stage"
 local TV = " > div.tn-body > div.tv > div.tv-fx.top::after"
 -- Every unfocused pane's cat (the old pane's lingering one) goes as the traveler appears.
 local HIDE = STAGE .. " > section.tn-pane:not(.on)" .. TV
--- The focused, visible pane's cat waits for the traveler.
+-- The focused, visible pane's cat waits for the traveler; it and its pointer ring take no pointer
+-- state meanwhile.
 local HOLD = STAGE .. " > section.tn-pane.on:not(.off)" .. TV
+local HOLD_RING = STAGE .. " > section.tn-pane.on:not(.off) > div.tn-body > div.tv > div.tv-fx.top::before"
 local TRAVELER = STAGE .. "::after"
 local DATA_PREFIX = "data:image/png;base64,"
 local MAX_URL_BYTES = 4 * 1024 * 1024
@@ -604,6 +606,32 @@ local function plan(input: PlanInput): Trip?
 	}
 end
 
+-- What Tern's settings say about the in-pane cat's host (Tern 0.8.3, measured with `ctl dump`):
+-- `layout`, `density`, `pane_headers` and the interface size (`ui_font_size`, else `font_size`).
+export type InsetSettings = { layout: string?, density: string?, pane_headers: string?, ui_size: number? }
+
+local TERN_UI_PX = 13
+local HEADER_PX = 30
+
+-- The pane padding (Islands 4 px, Compact tiles 3 px, other Compact layouts 0) and the header a
+-- split pane wears unless `pane_headers` is Never (30 px at a 13 px interface, scaled with it).
+-- Unknown values take Tern's defaults (Tiles, Compact, Never, 13 px).
+local function insets(s: InsetSettings): Insets
+	local layout = if type(s) == "table" and type(s.layout) == "string" then s.layout else "Tiles"
+	local density = if type(s) == "table" then s.density else nil
+	local headers = if type(s) == "table" then s.pane_headers else nil
+	local size = if type(s) == "table" then s.ui_size else nil
+	if type(size) ~= "number" or not (size >= 8 and size <= 32) then
+		size = TERN_UI_PX
+	end
+	local pad = if density == "Islands"
+		then 4
+		elseif layout == "Rail" or layout == "Float" or layout == "Studio" then 0
+		else 3
+	local header = if headers == "Split" or headers == "Always" then HEADER_PX * (size :: number) / TERN_UI_PX else 0
+	return { pad = pad, header = header }
+end
+
 local function timing(trip: Trip?): Timing
 	local arrival = if type(trip) == "table" then trip.total_ms else 0
 	return {
@@ -760,8 +788,9 @@ local function css(params: CssParams): string?
 
 	return table.concat({
 		`/* tern-cat travel {id} */`,
-		`{HIDE} \{ opacity: 0 !important; transition: none !important; }`,
-		`{HOLD} \{ animation: {table.concat(hold, ", ")}; }`,
+		`{HIDE} \{ visibility: hidden !important; transition: none !important; }`,
+		`{HOLD} \{ animation: {table.concat(hold, ", ")}; pointer-events: none; }`,
+		`{HOLD_RING} \{ pointer-events: none; }`,
 		`{TRAVELER} \{`,
 		'\tcontent: "";',
 		"\tposition: absolute;",
@@ -794,6 +823,7 @@ return {
 	neighbors = neighbors,
 	positionAt = positionAt,
 	timing = timing,
+	insets = insets,
 	transform = transform,
 	EMPTY = EMPTY,
 	HIDE = HIDE,

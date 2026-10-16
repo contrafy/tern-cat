@@ -9,6 +9,7 @@
 
 local manifest = require("../sprite/manifest")
 local animationDefaults = require("./animations")
+local travelMod = require("./travel")
 
 -- A reaction's sheet: same frame size as the main sheet (one pack).
 export type Reaction = {
@@ -69,6 +70,25 @@ export type Params = {
 	reactions: { hover: Reaction?, press: Reaction? }?,
 	-- Pane-switch transition; nil: the cat simply appears in the newly focused pane.
 	transition: Transition?,
+	-- `walk`/`auto`: the main sheet keeps the old pane's cat for LINGER_MS and the new pane's cat
+	-- away for ARRIVE_MS (no dive or emerge); the travel sheet walks the cat between them, and the
+	-- transition's prop (when given) only places the cat and draws `Info.entrance`.
+	travel: boolean?,
+}
+
+-- What the travel sheet needs from the main sheet: the focused cat's animation entries (the
+-- travel hold rule repeats them, so nothing restarts at the hand-off), the cat's box and its gaps
+-- from the corner's edges in CSS px, and in travel mode with a prop the portal entrance sheet
+-- for switches the cat cannot walk (tab and session switches, zoom, floats) with its length.
+export type Info = {
+	hold: { string },
+	box_w: number,
+	box_h: number,
+	gap_h: number,
+	gap_v: number,
+	z: number,
+	entrance: string?,
+	entrance_ms: number,
 }
 
 -- Panes in hidden tabs and sessions keep `.on` and gain `.off` (display:none); `:not(.off)` makes
@@ -105,6 +125,13 @@ local PROP_FRONT = "tern-cat-prop-front"
 local DIVE = "tern-cat-dive"
 local PROP_BACK_EXIT = "tern-cat-prop-back-exit"
 local PROP_FRONT_EXIT = "tern-cat-prop-front-exit"
+-- Travel mode: the newly focused cat waits ARRIVE_MS (constant name, repeated like the emerge)
+-- and an unfocused pane's cat stays LINGER_MS, which covers the travel sheet's Lua latency.
+local ARRIVE = "tern-cat-arrive"
+local ARRIVE_MS = travelMod.ARRIVE_MS
+local LINGER_MS = travelMod.LINGER_MS
+-- The entrance sheet's rules: more specific than the main sheet's, so they win while installed.
+local STAGE = "div.tn-stage > "
 
 local HIDDEN_SHEET = "/* tern-cat overlay hidden */\n"
 local DATA_PREFIX = "data:image/png;base64,"
@@ -348,24 +375,13 @@ type Geometry = {
 	opacity: string,
 }
 
--- Position declarations for a prop host. `inset` adds the host's offset from the cat's host as a
--- CSS variable (the grid layer) or nothing (Tern's full-view layer).
-local function propRules(
-	g: Geometry,
-	p: PropSpec,
-	every: string,
-	on: string,
-	exit: Sheet?,
-	enter: Sheet?,
-	name: string,
-	exitName: string,
-	grid: boolean,
-	blocks: { string }
-): { string }
+-- Position values for a prop host, measured from the corner's edges of the cat's host. `grid`
+-- subtracts the host's offset from the cat's host as a CSS variable (the grid layer); Tern's
+-- full-view layer needs nothing. Returns the horizontal and vertical values and the prop's size.
+local function propPlace(g: Geometry, p: PropSpec, grid: boolean): (string, string, number, number)
 	local s = g.scale
 	local pw = p.w * s
 	local ph = p.h * s
-	-- The prop's edges, measured from the corner's edges of the cat's host.
 	local centre = g.h + g.boxW / 2
 	local hEdge = if g.side.h == "right" then centre - (p.w - p.ax) * s else centre - p.ax * s
 	local feet = g.v + g.boxH
@@ -379,6 +395,22 @@ local function propRules(
 			vValue = `calc({px(vEdge)} - var(--tv-py, 0px))`
 		end
 	end
+	return hValue, vValue, pw, ph
+end
+
+local function propRules(
+	g: Geometry,
+	p: PropSpec,
+	every: string,
+	on: string,
+	exit: Sheet?,
+	enter: Sheet?,
+	name: string,
+	exitName: string,
+	grid: boolean,
+	blocks: { string }
+): { string }
+	local hValue, vValue, pw, ph = propPlace(g, p, grid)
 	local enterTotal = if enter then totalMs(enter.durations) else 0
 	local rules = {
 		`{every} \{`,
@@ -430,7 +462,73 @@ local function propRules(
 	return rules
 end
 
-local function css(params: Params): string
+-- The entrance sheet's prop: the walk sheet draws no prop, so this rule is the whole layer, on the
+-- focused pane only, for as long as the entrance sheet stays installed.
+local function propEntrance(
+	g: Geometry,
+	p: PropSpec,
+	on: string,
+	enter: Sheet,
+	name: string,
+	grid: boolean,
+	blocks: { string }
+): { string }
+	local hValue, vValue, pw, ph = propPlace(g, p, grid)
+	table.insert(
+		blocks,
+		stripKeyframes(name, enter.durations, pw, `background-size: {px(pw * #enter.durations)} {px(ph)}; `)
+	)
+	return {
+		`{on} \{`,
+		'\tcontent: "";',
+		"\tposition: absolute;",
+		`\t{g.side.h}: {hValue};`,
+		`\t{g.side.v}: {vValue};`,
+		`\twidth: {px(pw)};`,
+		`\theight: {px(ph)};`,
+		"\tpointer-events: none;",
+		"\tvisibility: visible;",
+		"\timage-rendering: pixelated;",
+		"\tbackground-repeat: no-repeat;",
+		`\tbackground-image: url("{enter.url}");`,
+		"\tbackground-size: 0px 0px;",
+		"\tbackground-position: 0px 0px;",
+		`\topacity: {g.opacity};`,
+		`\tanimation: {name} {ms(totalMs(enter.durations))} step-end 1;`,
+		"}",
+	}
+end
+
+-- The emerge: the pack's own sheet, else a rise through a height clip after the prop opens.
+local function emergeKeyframes(rise: Sheet?, opacity: string, boxW: number, boxH: number, frameH: number): string
+	if rise then
+		return stripKeyframes(
+			EMERGE,
+			rise.durations,
+			boxW,
+			`opacity: {opacity}; background-image: url("{rise.url}"); background-size: {px(boxW * #rise.durations)} {px(
+				boxH
+			)}; `
+		)
+	end
+	local steps = clipSteps(frameH)
+	local lines = { `@keyframes {EMERGE} \{`, `\t0% \{ opacity: {opacity}; height: 0px; }` }
+	for i = 1, steps do
+		local pct = RISE_START_PCT + (i - 1) * RISE_PCT / steps
+		table.insert(lines, `\t{num(pct)}% \{ height: {px(boxH * i / steps)}; }`)
+	end
+	append(lines, { `\t100% \{ opacity: {opacity}; height: {px(boxH)}; }`, "}" })
+	return table.concat(lines, "\n")
+end
+
+local EMERGE_RING_KEYFRAMES = table.concat({
+	`@keyframes {EMERGE_RING} \{`,
+	"\t0% { background-size: 0px 0px; }",
+	"\t100% { background-size: 0px 0px; }",
+	"}",
+}, "\n")
+
+local function css(params: Params): (string, Info?)
 	if type(params) ~= "table" or params.hidden == true then
 		return HIDDEN_SHEET
 	end
@@ -460,6 +558,7 @@ local function css(params: Params): string
 	local still = params.still == true
 	local transition = if type(params.transition) == "table" and not still then params.transition else nil
 	local prop = if transition then safeProp(transition.prop) else nil
+	local travel = params.travel == true and not still
 	-- Gaps from the corner's horizontal and vertical edges. A transition lifts the cat off the
 	-- edges far enough for its prop to fit inside the pane (Tern clips the view).
 	local gapH, gapV = gap, gap
@@ -510,11 +609,52 @@ local function css(params: Params): string
 		end
 	end
 
+	-- Travel mode: the newly focused cat waits for the travel sheet (constant name, so a decision
+	-- change, hover or press does not wait again).
+	local arrive: string? = nil
+	if travel then
+		arrive = `{ARRIVE} {ms(ARRIVE_MS)} step-end 1 backwards`
+		table.insert(animations, arrive :: string)
+		table.insert(
+			blocks,
+			table.concat({ `@keyframes {ARRIVE} \{`, "\t0% { opacity: 0; }", "\t100% { opacity: 0; }", "}" }, "\n")
+		)
+	end
+
 	-- The emerge goes last: while it runs it wins over the decision for the properties it sets.
 	local emerge: string? = nil
 	local emergeRing: string? = nil
 	local rule = { "/* tern-cat overlay */" }
-	if prop then
+	if travel then
+		-- Every pane's cat, gone after a delayed zero-duration transition: the pane that just
+		-- lost focus keeps its cat until the travel sheet's traveler takes over. The gate is
+		-- `height`, like the dive's: Tern 0.8.3 does not delay a `visibility` transition, and
+		-- `opacity` would clash with the focused rule's press-hold transition.
+		append(rule, {
+			`{EVERY} \{`,
+			'\tcontent: "";',
+			"\tposition: absolute;",
+			`\t{side.h}: {px(gapH)};`,
+			`\t{vertical}`,
+			`\twidth: {px(boxW)};`,
+			"\theight: 0px;",
+			"\tpointer-events: none;",
+			"\tvisibility: visible;",
+			`\tz-index: {num(z)};`,
+			"\timage-rendering: pixelated;",
+			`\tbackground-image: url("{url}");`,
+			"\tbackground-repeat: no-repeat;",
+			`\tbackground-size: {px(boxW * #durations)} {px(boxH)};`,
+			"\tbackground-position: 0px 0px;",
+		})
+		if translucent then
+			table.insert(rule, `\topacity: {opacity};`)
+		end
+		if params.facing == "left" then
+			table.insert(rule, "\ttransform: scaleX(-1);")
+		end
+		append(rule, { `\ttransition: height 0s step-end {ms(LINGER_MS)};`, "}" })
+	elseif prop then
 		local tr = transition :: Transition
 		local dive = safeReaction(tr.dive)
 		local rise = safeReaction(tr.emerge)
@@ -574,39 +714,10 @@ local function css(params: Params): string
 
 		-- The emerge also holds the cat visible (`opacity`) so a press during it does not swap
 		-- in the full-height swat frame; the ring's emerge hides that frame meanwhile.
-		if rise then
-			table.insert(
-				blocks,
-				stripKeyframes(
-					EMERGE,
-					rise.durations,
-					boxW,
-					`opacity: {opacity}; background-image: url("{rise.url}"); background-size: {px(
-						boxW * #rise.durations
-					)} {px(boxH)}; `
-				)
-			)
-		else
-			local steps = clipSteps(frameH)
-			local lines = { `@keyframes {EMERGE} \{`, `\t0% \{ opacity: {opacity}; height: 0px; }` }
-			for i = 1, steps do
-				local pct = RISE_START_PCT + (i - 1) * RISE_PCT / steps
-				table.insert(lines, `\t{num(pct)}% \{ height: {px(boxH * i / steps)}; }`)
-			end
-			append(lines, { `\t100% \{ opacity: {opacity}; height: {px(boxH)}; }`, "}" })
-			table.insert(blocks, table.concat(lines, "\n"))
-		end
+		table.insert(blocks, emergeKeyframes(rise, opacity, boxW, boxH, frameH))
 		if press then
 			emergeRing = `{EMERGE_RING} {ms(emergeMs)} step-end 1 backwards`
-			table.insert(
-				blocks,
-				table.concat({
-					`@keyframes {EMERGE_RING} \{`,
-					"\t0% { background-size: 0px 0px; }",
-					"\t100% { background-size: 0px 0px; }",
-					"}",
-				}, "\n")
-			)
+			table.insert(blocks, EMERGE_RING_KEYFRAMES)
 		end
 	end
 
@@ -639,8 +750,8 @@ local function css(params: Params): string
 	end
 	if press then
 		table.insert(rule, `\ttransition: opacity 0s linear {PRESS_HOLD_MS}ms;`)
-	elseif prop then
-		-- Replaces the every-pane dive transitions while focused.
+	elseif prop or travel then
+		-- Replaces the every-pane dive (or linger) transitions while focused.
 		table.insert(rule, "\ttransition: none;")
 	end
 	table.insert(rule, "}")
@@ -706,16 +817,20 @@ local function css(params: Params): string
 		table.insert(rule, "}")
 		table.insert(reduced, RING)
 	end
+	local hoverBase: { string } = {}
 	if hover then
-		local list: { string } = {}
 		if #hover.durations > 1 and not still then
 			local iteration = if hover.loop then "infinite" else "1 forwards"
-			table.insert(list, `tern-cat-hover {totalMs(hover.durations)}ms step-end {iteration}`)
+			table.insert(hoverBase, `tern-cat-hover {totalMs(hover.durations)}ms step-end {iteration}`)
 			table.insert(blocks, frameKeyframes("tern-cat-hover", hover.durations, boxW))
 		end
 		if pace then
-			table.insert(list, pace :: string)
+			table.insert(hoverBase, pace :: string)
 		end
+		if arrive then
+			table.insert(hoverBase, arrive :: string)
+		end
+		local list = table.clone(hoverBase)
 		if emerge then
 			table.insert(list, emerge :: string)
 		end
@@ -729,15 +844,16 @@ local function css(params: Params): string
 		})
 		table.insert(reduced, HOVER)
 	end
+	local pressBase: { string } = {}
 	if press then
-		local list: { string } = {}
 		if #press.durations > 1 and not still then
-			table.insert(list, `tern-cat-press {totalMs(press.durations)}ms step-end 1 forwards`)
+			table.insert(pressBase, `tern-cat-press {totalMs(press.durations)}ms step-end 1 forwards`)
 			table.insert(blocks, frameKeyframes("tern-cat-press", press.durations, boxW))
 		end
 		if ringPace then
-			table.insert(list, ringPace :: string)
+			table.insert(pressBase, ringPace :: string)
 		end
+		local list = table.clone(pressBase)
 		if emergeRing then
 			table.insert(list, emergeRing :: string)
 		end
@@ -756,10 +872,12 @@ local function css(params: Params): string
 	end
 
 	local settled: { string } = {}
-	if prop then
+	local g: Geometry = { side = side, boxW = boxW, boxH = boxH, h = gapH, v = gapV, scale = scale, opacity = opacity }
+	if travel then
+		table.insert(settled, EVERY)
+		table.insert(reduced, EVERY)
+	elseif prop then
 		local p = prop :: PropSpec
-		local g: Geometry =
-			{ side = side, boxW = boxW, boxH = boxH, h = gapH, v = gapV, scale = scale, opacity = opacity }
 		append(rule, propRules(g, p, BACK, BACK_ON, p.exit_back, p.enter_back, PROP_BACK, PROP_BACK_EXIT, true, blocks))
 		table.insert(settled, EVERY)
 		table.insert(settled, BACK)
@@ -802,7 +920,77 @@ local function css(params: Params): string
 	table.insert(media, "}")
 	table.insert(blocks, table.concat(media, "\n"))
 
-	return table.concat(rule, "\n") .. "\n" .. table.concat(blocks, "\n") .. "\n"
+	-- Travel mode's portal entrance, installed by the controller as the travel sheet for a switch
+	-- the cat cannot walk: the main sheet's focused-pane rules again, more specific (`div.tn-stage
+	-- > `) and with the emerge last, plus the enter props. Removing it after `entrance_ms` restarts
+	-- nothing: the emerge and props have ended and every other name stays.
+	local entrance: string? = nil
+	local entranceMs = 0
+	if travel and prop then
+		local p = prop :: PropSpec
+		local rise = safeReaction((transition :: Transition).emerge)
+		local emergeMs = if rise then totalMs(rise.durations) else animationDefaults.defaultDurationMs("emerge")
+		local rising = `{EMERGE} {ms(emergeMs)} step-end 1 backwards`
+		local ringRising = if press then `{EMERGE_RING} {ms(emergeMs)} step-end 1 backwards` else nil
+		local eblocks = { emergeKeyframes(rise, opacity, boxW, boxH, frameH) }
+		local list = table.clone(animations)
+		table.insert(list, rising)
+		local erules = {
+			"/* tern-cat entrance */",
+			`{STAGE}{SELECTOR} \{ animation: {table.concat(list, ", ")}; }`,
+		}
+		local ereduced = { STAGE .. SELECTOR }
+		if ringRising then
+			local ringList: { string } = {}
+			if ringPace then
+				table.insert(ringList, ringPace :: string)
+			end
+			table.insert(ringList, ringRising)
+			table.insert(erules, `{STAGE}{RING} \{ animation: {table.concat(ringList, ", ")}; }`)
+			table.insert(eblocks, EMERGE_RING_KEYFRAMES)
+			table.insert(ereduced, STAGE .. RING)
+			local pressList = table.clone(pressBase)
+			table.insert(pressList, ringRising)
+			table.insert(erules, `{STAGE}{PRESS_RING} \{ animation: {table.concat(pressList, ", ")}; }`)
+			table.insert(ereduced, STAGE .. PRESS_RING)
+		end
+		if hover then
+			local hoverList = table.clone(hoverBase)
+			table.insert(hoverList, rising)
+			table.insert(erules, `{STAGE}{HOVER} \{ animation: {table.concat(hoverList, ", ")}; }`)
+			table.insert(ereduced, STAGE .. HOVER)
+		end
+		append(erules, propEntrance(g, p, STAGE .. BACK_ON, p.enter_back, PROP_BACK, true, eblocks))
+		table.insert(ereduced, STAGE .. BACK_ON)
+		entranceMs = math.max(emergeMs, totalMs(p.enter_back.durations))
+		local front = p.enter_front
+		if front then
+			append(erules, propEntrance(g, p, STAGE .. FRONT_ON, front, PROP_FRONT, false, eblocks))
+			table.insert(ereduced, STAGE .. FRONT_ON)
+			entranceMs = math.max(entranceMs, totalMs(front.durations))
+		end
+		append(eblocks, {
+			"@media (prefers-reduced-motion: reduce) {",
+			`\t{table.concat(ereduced, ", ")} \{`,
+			"\t\tanimation: none !important;",
+			"\t\tbackground-position: 0px 0px;",
+			"\t}",
+			"}",
+		})
+		entrance = table.concat(erules, "\n") .. "\n" .. table.concat(eblocks, "\n") .. "\n"
+	end
+
+	local info: Info = {
+		hold = animations,
+		box_w = boxW,
+		box_h = boxH,
+		gap_h = gapH,
+		gap_v = gapV,
+		z = z,
+		entrance = entrance,
+		entrance_ms = entranceMs,
+	}
+	return table.concat(rule, "\n") .. "\n" .. table.concat(blocks, "\n") .. "\n", info
 end
 
 local function dataUrl(bytes: string, base64Encode: (string) -> string): string
@@ -815,4 +1003,5 @@ return {
 	dataUrl = dataUrl,
 	HOST = HOST,
 	SELECTOR = SELECTOR,
+	ARRIVE = ARRIVE,
 }

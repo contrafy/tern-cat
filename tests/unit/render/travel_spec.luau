@@ -10,6 +10,7 @@ local CLIMB_URL = "data:image/png;base64,Q0xJTUI="
 local LEAP_URL = "data:image/png;base64,TEVBUA=="
 local HIDE = "div.tn-stage > section.tn-pane:not(.on) > div.tn-body > div.tv > div.tv-fx.top::after"
 local HOLD = "div.tn-stage > section.tn-pane.on:not(.off) > div.tn-body > div.tv > div.tv-fx.top::after"
+local RING = "div.tn-stage > section.tn-pane.on:not(.off) > div.tn-body > div.tv > div.tv-fx.top::before"
 
 -- A split node as `cx.session:layout` returns it ([1] left/top, [2] right/bottom).
 local function split(dir: string, ratio: number?, first: any, second: any?): travel.Tree
@@ -460,10 +461,12 @@ describe("render.travel", function()
 			local trip = plan(TWO, 1, 2)
 			local out = css(trip, { hold = { "tern-cat-idle-1 1560ms step-end infinite" } })
 			expect(string.sub(out, 1, 22)).toBe("/* tern-cat travel 7 *")
-			expect(out).toContain(`{HIDE} \{ opacity: 0 !important; transition: none !important; }`)
+			expect(out).toContain(`{HIDE} \{ visibility: hidden !important; transition: none !important; }`)
 			expect(out).toContain(
-				`{HOLD} \{ animation: tern-cat-idle-1 1560ms step-end infinite, tern-cat-travel-hold-7 893ms step-end 1 backwards; }`
+				`{HOLD} \{ animation: tern-cat-idle-1 1560ms step-end infinite, tern-cat-travel-hold-7 893ms step-end 1 backwards; pointer-events: none; }`
 			)
+			-- No pointer reactions on the waiting cat or its proximity ring until the sheet goes.
+			expect(out).toContain(`{RING} \{ pointer-events: none; }`)
 			local traveler = block(out, "div.tn-stage::after")
 			assert(traveler, "missing traveler")
 			expect(traveler).toContain("position: absolute;")
@@ -611,6 +614,41 @@ describe("render.travel", function()
 			expect(css(still)).toBe(travel.EMPTY)
 			expect(travel.css(nil :: any)).toBe(travel.EMPTY)
 			expect(travel.EMPTY).toBe("/* tern-cat travel */\n")
+		end)
+	end)
+
+	describe("insets", function()
+		it("pads tiles by 3 px, islands by 4 px and other flush layouts not at all", function()
+			local function pad(layout: string, density: string): number
+				return travel.insets({ layout = layout, density = density, pane_headers = "Never", ui_size = 13 }).pad
+			end
+			expect(pad("Tiles", "Compact")).toBe(3)
+			for _, layout in { "Rail", "Float", "Studio" } do
+				expect(pad(layout, "Compact")).toBe(0)
+			end
+			for _, layout in { "Tiles", "Rail", "Float", "Studio" } do
+				expect(pad(layout, "Islands")).toBe(4)
+			end
+		end)
+
+		it("adds a 30 px header scaled by the interface size when split panes wear one", function()
+			local function header(headers: string, size: number?): number
+				return travel.insets({ layout = "Tiles", density = "Compact", pane_headers = headers, ui_size = size }).header
+			end
+			expect(header("Never", 13)).toBe(0)
+			expect(header("Split", 13)).toBe(30)
+			expect(header("Always", 13)).toBe(30)
+			expect(math.abs(header("Split", 16) - 36.923)).toBeLessThan(0.001)
+			expect(header("Split", nil)).toBe(30)
+		end)
+
+		it("falls back to Tern's defaults for unknown or missing settings", function()
+			local i = travel.insets({} :: any)
+			expect(i.pad).toBe(3)
+			expect(i.header).toBe(0)
+			local odd = travel.insets({ layout = 7, density = "Puffy", pane_headers = {}, ui_size = 900 } :: any)
+			expect(odd.pad).toBe(3)
+			expect(odd.header).toBe(0)
 		end)
 	end)
 end)
