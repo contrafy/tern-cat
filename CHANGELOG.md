@@ -7,6 +7,8 @@ All notable changes to tern-cat are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-11
+
 Tested against Tern 0.9.16 (macOS, Apple silicon). Tern 0.6.2 or later is still required; none of
 the plugin APIs tern-cat uses changed, and the overlay's Tern DOM and CSS hooks still match; three
 0.9 behavior changes are fixed below (see the Tern 0.8.3 and 0.9.16 deltas in
@@ -238,6 +240,7 @@ pack validation also run on Linux x86_64 in CI.
   the focused pane, and otherwise a new card floats there. The decision is logged at debug level;
   when floating fails, the warning is logged and toasted.
 
-[Unreleased]: https://github.com/contrafy/tern-cat/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/contrafy/tern-cat/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/contrafy/tern-cat/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/contrafy/tern-cat/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/contrafy/tern-cat/releases/tag/v0.1.0
