@@ -14,6 +14,7 @@ local budget = require("./cat/window/budget")
 
 type ControllerModule = typeof(require("./cat/window/controller"))
 type CarlyModule = typeof(require("./cat/integrations/carly"))
+type MenuModule = typeof(require("./cat/window/menu"))
 
 local BLOCK_KIND = "tern-cat.cat"
 local GROUP = "Tern Cat"
@@ -47,6 +48,7 @@ local BOOT_MODULES = {
 	"sprite/png",
 	"sprite/manifest",
 	"sprite/loader",
+	"sprite/catalog",
 	"render/travel",
 	"render/overlay",
 	"config/schema",
@@ -69,11 +71,13 @@ local BOOT_MODULES = {
 	"window/portals",
 	"window/intents",
 	"window/mirror",
+	"window/menu",
 	"window/controller",
 }
 
 local controllerMod: ControllerModule = nil :: any
 local carly: CarlyModule = nil :: any
+local menuMod: MenuModule = nil :: any
 local ctl: any = nil
 local exportsDir = ""
 local keysChecked = false
@@ -292,7 +296,7 @@ intentCommand("pet", "Pet the cat", "pet")
 intentCommand("poke", "Poke the cat", "poke")
 intentCommand("feed", "Feed the cat", "feed")
 intentCommand("play", "Play with the cat", "play")
-command(TOGGLE_ID, "Hide or show the overlay cat", function(cx: WindowCx)
+local function toggleOverlay(cx: WindowCx)
 	local result, visible = controllerMod.toggleOverlay(ctl, "window")
 	reportFailure(cx, result)
 	if not visible then
@@ -303,7 +307,8 @@ command(TOGGLE_ID, "Hide or show the overlay cat", function(cx: WindowCx)
 			`Press {TOGGLE_CHORD} or run "Hide or show the overlay cat" to bring it back.`
 		)
 	end
-end, { TOGGLE_CHORD })
+end
+command(TOGGLE_ID, "Hide or show the overlay cat", toggleOverlay, { TOGGLE_CHORD })
 intentCommand(
 	"snooze",
 	`Snooze the cat ({SNOOZE_MINUTES} min)`,
@@ -343,6 +348,64 @@ command("reset-identity", "Reset cat identity", function(cx: WindowCx)
 	end
 end)
 intentCommand("clear-ai-state", "Clear AI state", "clear_ai_state", nil, "AI-related journal entries cleared.")
+
+-- Cat menu: quick actions in Tern's inline picker (cx:pick; older Tern opens the block instead).
+-- Every choice goes through the same intents and helpers as the commands above.
+
+local openMenu: (cx: WindowCx, name: any) -> ()
+
+local function runMenuAction(cx: WindowCx?, action: any)
+	if action.kind == "intent" then
+		local result = controllerMod.request(ctl, action.intent, action.args, "window")
+		if cx then
+			reportFailure(cx, result)
+			if result.ok and action.done then
+				toast(cx, "info", TITLE, action.done)
+			end
+		end
+	elseif cx == nil then
+		tern.log.warn(`tern-cat: Cat menu: no window context for {action.kind}`)
+	elseif action.kind == "toggle_overlay" then
+		toggleOverlay(cx)
+	elseif action.kind == "open" then
+		openBlock(cx, action.settings)
+	elseif action.kind == "menu" then
+		openMenu(cx, action.menu)
+	end
+end
+
+openMenu = function(cx: WindowCx, name: any)
+	local t0 = tern.now()
+	local opts = menuMod.options(name, controllerMod.menuState(ctl))
+	cx:pick(opts :: any):next(function(item: PickItem?, err: string?, nextCx: WindowCx?)
+		local t1 = tern.now()
+		local ok, failure = pcall(function()
+			local action = menuMod.choose(item)
+			if action then
+				runMenuAction(nextCx, action)
+			elseif err then
+				tern.log.debug(`tern-cat: Cat menu: {err}`)
+			end
+		end)
+		if not ok then
+			tern.log.warn(`tern-cat: Cat menu failed: {failure}`)
+			if nextCx then
+				toast(nextCx, "error", TITLE, "Cat menu failed")
+			end
+		end
+		tern.log.debug(string.format("tern-cat: Cat menu %s choice handled in %.1f ms", name, tern.now() - t1))
+	end)
+	tern.log.debug(string.format("tern-cat: Cat menu %s opened in %.1f ms", name, tern.now() - t0))
+end
+
+command("menu", "Cat menu", function(cx: WindowCx)
+	if not menuMod.canPick(cx) then
+		toast(cx, "info", TITLE, "The Cat menu needs Tern 0.7.1 or later; opening the cat instead.")
+		openBlock(cx, false)
+		return
+	end
+	openMenu(cx, "top")
+end)
 
 for _, name in WINDOW_EVENTS do
 	tern.on(name, function(ev: any, cx: WindowCx)
@@ -444,6 +507,7 @@ end
 -- step Tern cut off).
 local function controllerStep(): { budget.Step }?
 	controllerMod = load("./cat/window/controller")
+	menuMod = load("./cat/window/menu")
 	carly = load("./cat/integrations/carly")
 	local clockAdapter = load("./cat/adapters/clock")
 	local pathsAdapter = load("./cat/adapters/paths")

@@ -20,7 +20,7 @@ The design follows from the M0 findings in [sdk-capability-matrix.md](sdk-capabi
  │  store (single writer) ◄── inbox/*.json ◄────────┼───┼── intents (commands, chord, Carly)       │
  │   profile, needs, stats, journal, seen ids       │   │        ▼                                 │
  │        │ tern.kv "state" (rev)  ─────────────────┼───┼─► poll kv 2 s ─► presenter (behavior    │
- │        ▼                                         │   │      engine per window) + mirror         │
+ │  pack validation ─► tern.kv "packs" (catalog) ───┼───┼─►   engine per window) + mirror         │
  │  behavior engine ─► block renderer               │   │                    │                     │
  │   (interactive home: sprite, buttons, settings)  │   │                    ▼                     │
  │  config.json writer (settings, intents)          │   │  overlay: tern.css sheet "overlay"       │
@@ -44,8 +44,8 @@ The design follows from the M0 findings in [sdk-capability-matrix.md](sdk-capabi
    Window `command_*` events fire once per window and are used only for that window's
    presentation. This is what prevents double counting across windows.
 4. **Config** (`<tern.plugin.data>/config.json`) is human-editable. The host is the only
-   plugin-side writer (settings page, overlay toggle, Carly `configure`/`set_personality` via
-   intents). Both halves re-read it every 3 s (content comparison) and on "Reload config".
+   plugin-side writer (settings page, overlay toggle, Cat menu, Carly `configure`/`set_personality`
+   via intents). Both halves re-read it every 3 s (content comparison) and on "Reload config".
 5. **Per-window presentation is ephemeral.** Each window VM keeps its own presenter state, seed
    and overlay CSS in memory. Window VMs lose state on plugin reload and `window_start` does not
    refire, so the window entry re-creates presentation at load time.
@@ -68,6 +68,17 @@ The design follows from the M0 findings in [sdk-capability-matrix.md](sdk-capabi
    overlay shows it within about a second. No statistic is kept for agents; the spec "reacts
    once, with one meow, to the copies two windows send for one agent signal" in
    `tests/unit/host/brain_spec.luau` writes two windows' intents into one inbox and checks this.
+8. **Packs are validated by the host only.** The host validates every pack folder (time-boxed,
+   500 ms per pass) and publishes the catalog under `tern.kv` key `packs`
+   (`cat/sprite/catalog.luau`: schema version, `rev`, `complete`, one entry per folder with
+   `folder`, `source`, `valid`, `id`, `name`, `author` and a path-free `problem`) after load, when
+   the appearance changes, after a pack removal and on a 10 s poll of the pack folders. Windows
+   read it with the kv poll and never validate a pack: the Cat menu lists its valid packs, and
+   the selected pack is read from its `pack.json` (fields and paths checked, images not) and only
+   the sheets it shows. An entry names a folder, not a path; a window joins it to its own bundled
+   or user root and drops names the loader would not scan, so a tampered catalog cannot point
+   elsewhere. Until the host has written a catalog (or when none of its packs loads), windows fall
+   back to validating the wanted and default packs themselves, one folder per tick for a full scan.
 
 ### Window entry boot
 
@@ -99,6 +110,7 @@ Measured on Tern 0.9.16 cold starts: 6-7 slices (31 once), slowest 18-36 ms, rea
 |---|---|---|---|
 | Block | host, `tern.block.define("cat")` (kind `tern-cat.cat`) | yes: click (pet), double-click (play), right-click menu, buttons, keys when focused | Opened from the palette ("Open cat" from the window half, or Tern's "New Tern Cat block"). "Open cat" focuses a cat block already in the focused pane's tab; otherwise, with `rendering.block_placement = "float"`, it moves a cat card floating in another tab or parked with `cx.layout:float(pane, owner, "br")`, else opens one with `cx:new_block` beside and floats it, staying a split if floating fails; a floated card is then focused with `cx.layout:focus` (Tern 0.8 rests an unfocused card as a tilted "glance" card that takes no clicks); cat blocks tiled in other tabs are left alone (`cat/window/blocks.luau`, decisions logged at debug). One APNG per animation, every animation's image node kept in the view and toggled by `role` so late-attaching windows never show a missing blob; one-shot animations get a fresh key per play so they restart. Settings page uses the `prefs` node (7 pages). |
 | Overlay | window, `tern.css("overlay", css)` | visual only: CSS `:hover`/`:active` reactions (`behavior.allow_pointer_reactions`); no input reaches the plugin | On by default. Anchored to one corner of the focused visible pane (`rendering.overlay_position`, default top-right, `rendering.overlay_offset_px` from both edges) via `section.tn-pane.on:not(.off) > div.tn-body > div.tv > div.tv-fx.top::after` (Tern's top effects layer, `pointer-events: none`, so its `:hover` is local to its pseudo-elements; `:not(.off)` because panes of hidden tabs and sessions keep `.on`); sprite-sheet `@keyframes` with `steps()` timing from the pack's `durations_ms`; pacing is a stepped `translateX` along the corner's horizontal edge, into the pane. With reactions on, the cat and an invisible 48 px proximity ring (`::before`, shrunk to the gap on the corner's two edges) are `pointer-events: auto`: pointer near or on the cat plays `look`, pressing plays `swat` in the ring's content box while the cat hides, held 0.7 s after release by a delayed 0 s transition; both sheets resolve through the pack's fallbacks, still first frame under reduced motion, and the walk animation is repeated by name so pacing continues. Pane-switch transition: see below. The sheet is reinstalled only when the CSS text changes. Hidden (empty sheet) when toggled off, and while the focused pane is a cat block or a cat block floats over it, so it never covers the card's buttons. Still frame when `rendering.reduced_motion = "on"` or Tern's `reduce_motion` is `on`; Tern's own reduced-motion CSS also stops it. Never changes terminal content, input, selection or layout. |
+| Cat menu | window, `cx:pick` (Tern 0.7.1+) from the `menu` palette command | yes: Tern's inline picker over the focused pane | Quick actions without the block. Items come from `cat/window/menu.luau` (pure); a choice runs in the awaitable's `:next` callback with a fresh `cx` and becomes the same `controller.request(..., "window")` intent, overlay toggle or block open as the palette commands; Feed, Play, Appearance, Pane switch and Overlay corner open a second `cx:pick`. The callbacks take about 1-6 ms; the Appearance list is the host's pack catalog (rule 8), so nothing is validated in the window. Without `cx.pick` the command toasts and opens the block |
 
 The overlay is a decoration, not a compositor: it cannot read or locate terminal text, so the
 "knock a character off `ls` output" gag is a parody inside the block (a fixed fake listing). The
@@ -307,14 +319,15 @@ All modules are `--!strict` and return a table of functions. Only the entries an
 | `cat/render/overlay.luau` | Overlay CSS generator (sanitized string output; corner placement; optional `still`; optional hover/press reaction sheets with the proximity ring; optional pane-switch transition; walk mode with the linger, the arrive wait and the portal entrance as a separate sheet). Also returns `Info`: the focused cat's animation entries, its box and gaps | `css(params)`, `SELECTOR`, `HOST`, `ARRIVE` |
 | `cat/render/travel.luau` | Pane travel planner for the `walk`/`auto` pane switch: pane rectangles in stage fractions from `cx.session:layout(tab)` ratios, shared-edge test, corner-to-corner legs (walk/run along the row, leap over vertical dividers, climb across horizontal ones) stepped at 10 fps, the traveler's position at any time (interrupts), insets from Tern's layout settings, and the per-switch sanitized `div.tn-stage::after` sheet with the hide and hold rules and main-sheet timing (linger 150 ms, arrive 80 ms) | `plan(input)`, `css(params)`, `positionAt(trip, ms)`, `neighbors(layout, a, b)`, `insets(settings)`, `timing(trip)` |
 | `cat/sprite/png.luau` | PNG/APNG header parsing without decoding pixels | `inspect(bytes)` |
-| `cat/sprite/manifest.luau` | `pack.json` validation: limits, path segment rules, animation set | `validate(table, fs, root)`, `checkPath` |
-| `cat/sprite/loader.luau` | Discover bundled and user packs, validate, fall back to the default pack; the only folder a pack removal may delete | `loadAll(fs, roots)`, `select`, `removableDir(pack, user_root)` |
+| `cat/sprite/manifest.luau` | `pack.json` validation: limits, path segment rules, animation set; `files = false` skips the image checks (windows, for host-validated packs) | `validate(table, fs, root, opts)`, `checkPath`, `isPackId` |
+| `cat/sprite/loader.luau` | Discover bundled and user packs, validate, fall back to the default pack; the only folder a pack removal may delete | `loadAll(fs, roots)`, `loadDir(fs, decode, root, name, opts)`, `select`, `removableDir(pack, user_root)` |
+| `cat/sprite/catalog.luau` | The pack catalog in `tern.kv` `packs`: built by the host from validated folders (first valid folder per id wins, path-free problems), decoded by windows (valid, well-formed entries only; folders joined to the window's own roots) | `build`, `equal`, `encode`, `decode`, `dirOf`, `KEY` |
 
 ### Host half (`host.luau`)
 
 | Module | Responsibility | Key functions |
 |---|---|---|
-| `cat/host/brain.luau` | The single writer: owns the store, ticks the engine (next delay clamped to 0.5-5 s), applies inbox intents (one copy per agent signal, see ownership rule 7), polls config, writes config changes (pretty JSON in example key order; backs up an unreadable file first), persists kv only when `rev` changes, moves a corrupt `kv.json` aside and starts a fresh cat, tracks running commands in every local pane (focus mode), plays sounds, removes user packs (switching the appearance back to the default when the removed pack was selected) | `load(deps)`, `tick`, `onCommandStarted/Finished`, `onPaneEvent`, `applyIntent`, `pollInbox`, `pollConfig`, `setConfig`, `availablePacks`, `removePack`, `subscribe` |
+| `cat/host/brain.luau` | The single writer: owns the store, ticks the engine (next delay clamped to 0.5-5 s), applies inbox intents (one copy per agent signal, see ownership rule 7), polls config, writes config changes (pretty JSON in example key order; backs up an unreadable file first), persists kv only when `rev` changes, moves a corrupt `kv.json` aside and starts a fresh cat, tracks running commands in every local pane (focus mode), plays sounds, validates every pack folder once (cached per folder) and publishes the pack catalog (ownership rule 8), removes user packs (switching the appearance back to the default when the removed pack was selected) | `load(deps)`, `tick`, `onCommandStarted/Finished`, `onPaneEvent`, `applyIntent`, `pollInbox`, `pollConfig`, `setConfig`, `availablePacks`, `refreshCatalog`, `pollCatalog`, `removePack`, `subscribe` |
 | `cat/host/inbox.luau` | Inbox poll: name pattern `<ms>-<8hex>.json`, 5 s grace for bad files, 32 files per poll | `poll(state, fs, json, dir, now)` |
 | `cat/host/controls.luau` | Block input mapping: actions, menu, focused-block keys (`p o f space s h z`, Escape), settings-row changes, two-step confirmation for Reset identity and Remove pack (10 s), test mode (`test`, `frozen`, `seed=N`, or `TERN_CAT_TEST`) | `resolveAction`, `menuActions`, `keyAction`, `settingsChange`, `armConfirm`, `isArmed`, `parseTestMode` |
 | `cat/integrations/hooks.luau` | Registers `command_started`, `command_finished`, `cwd`, `pane_exited`; classifies the line inside the handler and drops it (no `title` hook: shells retitle on every prompt) | `register(on, sink)` |
@@ -327,9 +340,10 @@ passes it to `sound.detect` and `sound.play`.
 
 | Module | Responsibility | Key functions |
 |---|---|---|
-| `cat/window/controller.luau` | The window loop behind injected ports: one self-rescheduling timer (next decision, kv poll every 2 s, config poll every 3 s), requests to intents, agent signals to `agent` intents (then a kv poll after 700 ms), overlay toggle, reset confirmation (second run within 10 s), cover state, pane-transition assets (prop plus the pack's exact `dive`/`emerge`, one warning when unavailable; the portal's for `walk`/`auto`), the pane travel per focus event (trip or entrance in the `travel` sheet, its clear timer, interrupts, switch cost metrics), Carly snapshot and context. Never writes kv | `new`, `start`, `onWindowEvent`, `onAgentEvent`, `request`, `toggleOverlay`, `reloadConfig`, `confirmReset`, `setCovered`, `setFocus`, `snapshot`, `context` |
+| `cat/window/controller.luau` | The window loop behind injected ports: one self-rescheduling timer (next decision, kv and pack catalog poll every 2 s, config poll every 3 s), requests to intents, agent signals to `agent` intents (then a kv poll after 700 ms), overlay toggle, reset confirmation (second run within 10 s), cover state, pane-transition assets (prop plus the pack's exact `dive`/`emerge`, one warning when unavailable; the portal's for `walk`/`auto`), the pane travel per focus event (trip or entrance in the `travel` sheet, its clear timer, interrupts, switch cost metrics), the Cat menu's state (catalog packs; without a catalog it queues unvalidated pack folders for the timer instead of validating them in the picker callback), Carly snapshot and context. Reads the catalog in the first boot step, before selecting the pack. Never writes kv | `new`, `startSteps`, `start`, `onWindowEvent`, `onAgentEvent`, `request`, `toggleOverlay`, `menuState`, `reloadConfig`, `confirmReset`, `setCovered`, `setFocus`, `snapshot`, `context` |
 | `cat/window/presenter.luau` | One read-only behavior engine per window; command lines reduced to a category immediately; this window's running commands (focus mode, tracked even while the overlay is hidden; host `react.*` mirrors are skipped while busy); overlay parameters, including the pointer reaction sheets (`HOVER_ANIMATION` look, `PRESS_ANIMATION` swat) when shown and allowed; local override until config agrees | `new`, `view`, `params`, `tick`, `react`, `observe`, `gesture`, `mirror`, `eventFor`, `setConfig`, `setCovered`, `visible` |
-| `cat/window/packs.luau` | Validates only the wanted and default packs (full scan only if both miss), resolves fallbacks, caches each sheet as a data URL; a pack without a built sheet uses its first frame; a cached pack whose `pack.json` is gone (removed) invalidates the cache. The controller reselects on every config poll | `new`, `select`, `asset`, `invalidate` |
+| `cat/window/packs.luau` | With the host's catalog: selects from its valid packs, reads only the selected pack's `pack.json` (no image checks) from the catalog folder under the window's own root, falls back to the default pack when it is gone, and lists the catalog for the Cat menu. Without one (or when no catalog pack loads): validates only the wanted and default packs (full scan only if both miss, or for the Cat menu's Appearance list, one folder per timer tick). Resolves fallbacks, caches each sheet as a data URL; a pack without a built sheet uses its first frame; a cached pack whose `pack.json` is gone (removed) is dropped. The controller reselects on every config poll and catalog change | `new`, `setCatalog`, `select`, `refresh`, `step`, `pending`, `available`, `asset`, `invalidate` |
+| `cat/window/menu.luau` | The Cat menu (Tern's inline picker): items per menu from this window's state (current choices checked), the chosen item mapped to an intent, the overlay toggle, a submenu or opening the block; feature detection of `cx:pick`. Pure | `options`, `choose`, `packChoices`, `canPick` |
 | `cat/window/portals.luau` | Reads and validates `assets/portals/portals.json` once (pack path rules, frame counts and durations, PNG size and format) and turns only the selected style's sheets into cached data URLs | `new`, `prop`, `parse`, `invalidate` |
 | `cat/window/intents.luau` | Builds, validates and writes inbox files | `build`, `fileName`, `write` |
 | `cat/window/mirror.luau` | Decides whether to replay a host reaction | `check`, `key` |
@@ -371,7 +385,8 @@ asleep (startle reactions route through `wake`).
 ### Persistence
 
 - `tern.kv` key `state` holds one `StoreEnvelope` (schema version, `rev`, profile, bounded
-  journal, bounded `seen` ring, last reaction, snooze).
+  journal, bounded `seen` ring, last reaction, snooze). Key `packs` holds the pack catalog
+  (rule 8); its `rev` continues across host reloads.
 - Offline time is simulated on load, capped by `needs.offline_hours_cap`, and can never reduce
   stats or push needs past their non-punishing bounds.
 - Undecodable or unknown-version data is replaced by a fresh profile with a note in the block,

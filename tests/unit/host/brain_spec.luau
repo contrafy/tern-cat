@@ -872,3 +872,117 @@ describe("brain", function()
 		end)
 	end)
 end)
+
+describe("brain pack catalog", function()
+	local function entries(e: Env): { any }
+		return e.kv.data.packs.packs
+	end
+
+	local function find(e: Env, folder: string): any
+		for _, entry in entries(e) do
+			if entry.folder == folder then
+				return entry
+			end
+		end
+		return nil
+	end
+
+	it("publishes every pack folder with validity, without paths, once", function()
+		local files: { [string]: string } = {}
+		copyPack(files, "void", "Calico", "calico")
+		copyPack(files, "tuxedo", "void-again", "void")
+		files[DATA .. "/packs/broken/pack.json"] = "{ not json"
+		local e = setup({ files = files })
+		local b = brain.load(e.deps)
+		local sets = e.kv.sets
+		expect(e.kv.data.packs).toBeNil()
+		expect(brain.refreshCatalog(b)).toBe(true)
+		expect(e.kv.sets).toBe(sets + 1)
+		local c = e.kv.data.packs
+		expect(c.schema_version).toBe(1)
+		expect(c.rev).toBe(1)
+		expect(c.complete).toBe(true)
+		expect(find(e, "orange-menace").valid).toBe(true)
+		expect(find(e, "Calico")).toEqual({
+			folder = "Calico",
+			source = "user",
+			valid = true,
+			id = "calico",
+			name = "Void",
+			author = find(e, "void").author,
+		})
+		expect(find(e, "void-again").valid).toBe(false)
+		expect(find(e, "void-again").problem).toContain("already provided")
+		expect(find(e, "broken").valid).toBe(false)
+		expect(find(e, "broken").problem).toBe("pack.json is not valid JSON")
+		expect(string.find(serde.encode("json", c), DATA, 1, true)).toBeNil()
+		-- Nothing changed: no new rev, no write.
+		expect(brain.refreshCatalog(b)).toBe(false)
+		expect(e.kv.sets).toBe(sets + 1)
+		expect(e.kv.data.packs.rev).toBe(1)
+	end)
+
+	it("picks up a new user pack on the slow poll and continues the rev after a reload", function()
+		local files: { [string]: string } = {}
+		local e = setup({ files = files })
+		local b = brain.load(e.deps)
+		brain.refreshCatalog(b)
+		copyPack(files, "void", "calico", "calico")
+		expect(brain.pollCatalog(b)).toBe(false)
+		expect(find(e, "calico")).toBeNil()
+		e.clock.advance(10000)
+		expect(brain.pollCatalog(b)).toBe(true)
+		expect(find(e, "calico").valid).toBe(true)
+		expect(e.kv.data.packs.rev).toBe(2)
+		local again = brain.load(setup({ files = files, kv = e.kv.data }).deps)
+		brain.refreshCatalog(again)
+		expect(again.catalog and again.catalog.rev).toBe(3)
+	end)
+
+	it("validates new folders within a time budget and finishes on later polls", function()
+		local files: { [string]: string } = {}
+		copyPack(files, "void", "calico", "calico")
+		local e = setup({ files = files })
+		local b = brain.load(e.deps)
+		local now = 0
+		e.deps.clock.now_ms = function()
+			now += 300
+			return now
+		end
+		brain.refreshCatalog(b)
+		expect(e.kv.data.packs.complete).toBe(false)
+		local steps = 0
+		while not e.kv.data.packs.complete do
+			brain.pollCatalog(b)
+			steps += 1
+			assert(steps < 10, "catalog never completed")
+		end
+		expect(find(e, "calico").valid).toBe(true)
+		expect(find(e, "tuxedo").valid).toBe(true)
+	end)
+
+	it("drops a removed pack and offers the same-id pack in another folder", function()
+		local files: { [string]: string } = {}
+		copyPack(files, "void", "calico", "calico")
+		copyPack(files, "tuxedo", "calico-copy", "calico")
+		local e = setup({ files = files })
+		local b = brain.load(e.deps)
+		brain.refreshCatalog(b)
+		expect(find(e, "calico-copy").valid).toBe(false)
+		expect(brain.removePack(b, "calico").ok).toBe(true)
+		expect(find(e, "calico")).toBeNil()
+		expect(find(e, "calico-copy").valid).toBe(true)
+		expect(e.kv.data.packs.rev).toBe(2)
+	end)
+
+	it("does not write over an unreadable kv.json and writes once it can", function()
+		local e = setup()
+		local b = brain.load(e.deps)
+		b.kv_read_failed = true
+		brain.refreshCatalog(b)
+		expect(e.kv.data.packs).toBeNil()
+		b.kv_read_failed = false
+		brain.pollCatalog(b)
+		expect(e.kv.data.packs.rev).toBe(1)
+	end)
+end)

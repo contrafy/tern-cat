@@ -388,7 +388,12 @@ local function checkFiles(
 	end
 end
 
-local function validateInner(raw: any, fs: T.FsAdapter, root: string): T.ValidationResult
+-- A pack id: 1..id_max characters of a-z, 0-9 and '-', starting with a letter.
+local function isPackId(id: any): boolean
+	return type(id) == "string" and #id <= LIMITS.id_max and string.match(id, "^[a-z][a-z0-9%-]*$") ~= nil
+end
+
+local function validateInner(raw: any, fs: T.FsAdapter, root: string, files: boolean): T.ValidationResult
 	local ctx: Ctx = { errors = {}, warnings = {} }
 	local function result(m: T.PackManifest?): T.ValidationResult
 		local ok = #ctx.errors == 0
@@ -405,7 +410,7 @@ local function validateInner(raw: any, fs: T.FsAdapter, root: string): T.Validat
 	end
 
 	local id = raw.id
-	if type(id) ~= "string" or #id > LIMITS.id_max or not string.match(id, "^[a-z][a-z0-9%-]*$") then
+	if not isPackId(id) then
 		err(
 			ctx,
 			"id",
@@ -493,7 +498,9 @@ local function validateInner(raw: any, fs: T.FsAdapter, root: string): T.Validat
 		return result(nil)
 	end
 
-	checkFiles(ctx, fs, root, canvas, refs)
+	if files then
+		checkFiles(ctx, fs, root, canvas, refs)
+	end
 
 	return result({
 		schema_version = LIMITS.schema_version,
@@ -507,8 +514,10 @@ local function validateInner(raw: any, fs: T.FsAdapter, root: string): T.Validat
 	})
 end
 
-local function validate(raw: any, fs: T.FsAdapter, root: string): T.ValidationResult
-	local ok, res = pcall(validateInner, raw, fs, root)
+-- `opts.files = false` skips reading and checking the referenced images (the window half, for a
+-- pack the host half already validated); every field and path rule still applies.
+local function validate(raw: any, fs: T.FsAdapter, root: string, opts: { files: boolean? }?): T.ValidationResult
+	local ok, res = pcall(validateInner, raw, fs, root, not (opts and opts.files == false))
 	if ok then
 		return res
 	end
@@ -519,6 +528,7 @@ return {
 	validate = validate,
 	checkPath = checkPath,
 	isSafePath = isSafePath,
+	isPackId = isPackId,
 	joinPath = joinPath,
 	LIMITS = LIMITS,
 }

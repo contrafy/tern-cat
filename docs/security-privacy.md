@@ -114,10 +114,11 @@ does not ask the user before Carly calls them, so:
 - mutating calls become intents that go through the same allowlist as every other source
   (`cat/core/commands.luau`: allowlisted kinds and per-kind arguments);
 - the `set_config` allowlist is source-aware: intents with source `carly` may not opt into sound
-  (the only feature that starts a process), loosen quiet hours or end focus mode. Carly may set
-  `sound.enabled` only to `false`, `quiet.hours_enabled` and `behavior.focus_mode` only to
-  `true`, and may not change `sound.volume`, `quiet.start` or `quiet.stop`; the block, the window
-  and the keyboard keep the full allowlist;
+  (the only feature that starts a process), loosen quiet hours, end focus mode or change the
+  sprite pack. Carly may set `sound.enabled` only to `false`, `quiet.hours_enabled` and
+  `behavior.focus_mode` only to `true`, and may not change `cat.appearance`, `sound.volume`,
+  `quiet.start` or `quiet.stop`; the block, the window (palette commands and the Cat menu) and
+  the keyboard keep the full allowlist;
 - read-only views (status, explain, AI status, context) return small summaries; nothing returns
   command text, terminal output, file paths or journal summaries.
 
@@ -208,6 +209,7 @@ writes inside its plugin directory. On a default install `tern.kv` lives at
 | Data | Location | Contents | Writer |
 |---|---|---|---|
 | Cat state | `tern.kv`, key `state` | One `StoreEnvelope` (`cat/types.luau`): schema version, `rev`, profile (cat id, needs, mood, counters of pets/pokes/feeds/plays/command reactions, fail streak, timestamps), journal (last 50 entries of time, event id, kind and a short fixed summary), `seen` ring (last 256 event/intent ids), last reaction, snooze time | host half only |
+| Pack catalog | `tern.kv`, key `packs` | Schema version, `rev`, whether the scan finished, and per pack folder: folder name, `bundled` or `user`, valid or not, pack id, name and author from `pack.json`, and why an invalid pack was refused. Folder names only, never paths; windows join them to their own pack roots and drop names the loader would not scan | host half only |
 | Config | `<data>/config.json` | Your settings (`config/example.json` documents every key). Human-editable. A file that exists but cannot be read (symlink, over 256 KiB, read error) is never overwritten; settings changes fail with a note instead | you; the host half for settings changes |
 | Inbox | `<data>/inbox/<ms>-<hex>.json` | One pending intent per file (`kind`, `source`, validated `args`, id, time; an agent signal carries only a pane id and `done`, `failed`, `exited` or `waiting`). The host deletes each file after applying it, and undecodable intent files after 5 s. It only ever deletes readable files with the intent name pattern; foreign names, directories and unreadable entries are logged once and left in place (`cat/host/inbox.luau`) | window halves |
 | Identity export | `<data>/exports/identity-<cat id>-<time>.json` | Written only when you request an export: cat name, appearance, personality and profile | host half |

@@ -4,6 +4,7 @@ local t = require("../../lib/test")
 local support = require("../sprite/support")
 local animations = require("../../../cat/render/animations")
 local packs = require("../../../cat/window/packs")
+local catalog = require("../../../cat/sprite/catalog")
 
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -247,6 +248,160 @@ describe("window/packs full scan", function()
 		packs.invalidate(cache)
 		packs.select(cache, "still-nope")
 		expect(packs.scanning(cache)).toBe(true)
+	end)
+
+	it("refresh queues the unvalidated folders, then only folders added since", function()
+		local files = manyPacks()
+		local cache, log = make(files)
+		packs.select(cache, "orange-menace")
+		expect(packs.scanning(cache)).toBe(false)
+		expect(packs.refresh(cache)).toBe(true)
+		while packs.scanning(cache) do
+			local before = #log
+			packs.step(cache)
+			expect(manifestReads(log, before)).toBeLessThanOrEqual(1)
+		end
+		local n = #log
+		expect(packs.refresh(cache)).toBe(false)
+		expect(manifestReads(log, n)).toBe(0)
+		addPack(files, USER .. "/new-one", "new-one")
+		expect(packs.refresh(cache)).toBe(true)
+		packs.step(cache)
+		expect(packs.scanning(cache)).toBe(false)
+		expect(manifestReads(log, n)).toBe(1)
+		expect(cache.packs["new-one"]).notToBeNil()
+	end)
+
+	it("available lists the validated packs whose pack.json is still there", function()
+		local files = manyPacks()
+		local cache = make(files)
+		packs.select(cache, "orange-menace")
+		packs.refresh(cache)
+		while packs.scanning(cache) do
+			packs.step(cache)
+		end
+		files[USER .. "/folder-2/pack.json"] = nil
+		local ids = {}
+		for _, p in packs.available(cache) do
+			table.insert(ids, p.id)
+		end
+		table.sort(ids)
+		expect(ids).toEqual({ "orange-menace", "user-1", "user-3", "user-4", "user-5", "void" })
+	end)
+end)
+
+-- With the host's catalog the window never validates a pack: it reads only the selected pack's
+-- pack.json and the sheets it shows.
+describe("window/packs with the host catalog", function()
+	local function entry(folder: string, source: string, id: string): any
+		return { folder = folder, source = source, valid = true, id = id, name = id }
+	end
+
+	local function withCatalog(files: { [string]: string }, entries: { any }, complete: boolean?)
+		local cache, log = make(files)
+		local decoded = catalog.decode(
+			{ schema_version = 1, rev = 1, complete = complete ~= false, packs = entries },
+			cache.deps.roots
+		)
+		packs.setCatalog(cache, decoded)
+		return cache, log
+	end
+
+	local function imageReads(log: { string }): number
+		local n = 0
+		for _, p in log do
+			if string.sub(p, -4) == ".png" then
+				n += 1
+			end
+		end
+		return n
+	end
+
+	local function catalogFiles(): { [string]: string }
+		local files = {}
+		addPack(files, BUNDLED .. "/orange-menace", "orange-menace")
+		addPack(files, BUNDLED .. "/void", "void")
+		addPack(files, USER .. "/My.Cat", "calico")
+		return files
+	end
+
+	local ENTRIES = {
+		entry("orange-menace", "bundled", "orange-menace"),
+		entry("void", "bundled", "void"),
+		entry("My.Cat", "user", "calico"),
+	}
+
+	it("reads only the selected pack's pack.json and no images", function()
+		local cache, log = withCatalog(catalogFiles(), ENTRIES)
+		local pack, warning = packs.select(cache, "calico")
+		assert(pack, "pack")
+		expect(pack.manifest.id).toBe("calico")
+		expect(pack.root).toBe(USER .. "/My.Cat")
+		expect(warning).toBeNil()
+		expect(manifestReads(log, 0)).toBe(1)
+		expect(imageReads(log)).toBe(0)
+		expect(packs.scanning(cache)).toBe(false)
+		-- Only the sheet it shows is read.
+		expect(packs.asset(cache, pack, "idle")).notToBeNil()
+		expect(imageReads(log)).toBe(1)
+		-- Cached afterwards: only checks that its pack.json is still there.
+		local n = #log
+		packs.select(cache, "calico")
+		expect(#log - n).toBe(1)
+		expect(log[#log]).toBe(USER .. "/My.Cat/pack.json")
+	end)
+
+	it("lists the catalog's packs, never scans and reports an incomplete catalog as pending", function()
+		local cache, log = withCatalog(catalogFiles(), ENTRIES, false)
+		local ids = {}
+		for _, p in packs.available(cache) do
+			table.insert(ids, p.id)
+		end
+		expect(ids).toEqual({ "orange-menace", "void", "calico" })
+		expect(packs.refresh(cache)).toBe(false)
+		expect(packs.pending(cache)).toBe(true)
+		expect(#log).toBe(0)
+	end)
+
+	it("falls back to the default pack when the wanted one is gone or names another id", function()
+		local files = catalogFiles()
+		files[USER .. "/My.Cat/pack.json"] = nil
+		local cache = withCatalog(files, ENTRIES)
+		local pack, warning = packs.select(cache, "calico")
+		expect(pack and pack.manifest.id).toBe("orange-menace")
+		expect(warning).toContain("calico")
+		local swapped = withCatalog(catalogFiles(), { entry("void", "bundled", "calico"), ENTRIES[1] })
+		local other = packs.select(swapped, "calico")
+		expect(other and other.manifest.id).toBe("orange-menace")
+	end)
+
+	it("drops a pack whose pack.json disappears after it was selected", function()
+		local files = catalogFiles()
+		local cache = withCatalog(files, ENTRIES)
+		packs.select(cache, "calico")
+		files[USER .. "/My.Cat/pack.json"] = nil
+		local pack = packs.select(cache, "calico")
+		expect(pack and pack.manifest.id).toBe("orange-menace")
+	end)
+
+	it("validates like before when no catalog pack loads", function()
+		local cache = withCatalog(catalogFiles(), { entry("missing", "user", "ghost") })
+		local pack, warning = packs.select(cache, "void")
+		expect(pack and pack.manifest.id).toBe("void")
+		expect(warning).toBeNil()
+	end)
+
+	it("stops a window-side scan once the catalog arrives", function()
+		local files = catalogFiles()
+		local cache = make(files)
+		packs.select(cache, "orange-menace")
+		expect(packs.refresh(cache)).toBe(true)
+		packs.setCatalog(
+			cache,
+			catalog.decode({ schema_version = 1, rev = 1, complete = true, packs = ENTRIES }, cache.deps.roots)
+		)
+		expect(packs.scanning(cache)).toBe(false)
+		expect(packs.pending(cache)).toBe(false)
 	end)
 end)
 

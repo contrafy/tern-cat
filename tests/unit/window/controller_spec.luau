@@ -120,7 +120,7 @@ local function addPortals(files: { [string]: string })
 	})
 end
 
-local function world(opts: { config: any?, kv: any?, portals: boolean?, dive: boolean? }?): World
+local function world(opts: { config: any?, kv: any?, catalog: any?, portals: boolean?, dive: boolean? }?): World
 	local o = opts or {}
 	local files: { [string]: string } = {}
 	local dirs: { [string]: boolean } = {}
@@ -132,7 +132,7 @@ local function world(opts: { config: any?, kv: any?, portals: boolean?, dive: bo
 	if o.config then
 		files[DATA .. "/config.json"] = encodeJson(o.config)
 	end
-	local kvStore: { [string]: any } = { state = o.kv }
+	local kvStore: { [string]: any } = { state = o.kv, packs = o.catalog }
 	local reads: { string } = {}
 	local w: any = {
 		files = files,
@@ -1192,5 +1192,130 @@ describe("window/controller.confirmReset", function()
 		expect(controller.confirmReset(c)).toBe(false)
 		w.clock.advance(10001)
 		expect(controller.confirmReset(c)).toBe(false)
+	end)
+end)
+
+describe("window/controller.menuState", function()
+	local function ids(state: any): { string }
+		local out = {}
+		for _, p in state.packs do
+			table.insert(out, p.id)
+		end
+		return out
+	end
+
+	it("reflects this window's overlay, snooze and config", function()
+		local w = world({ config = { rendering = { pane_transition = "box", overlay_position = "bottom-left" } } })
+		local c = controller.new(w.ports)
+		controller.start(c)
+		local s = controller.menuState(c)
+		expect(s.overlay_visible).toBe(true)
+		expect(s.snoozed).toBe(false)
+		expect(s.appearance).toBe("orange-menace")
+		expect(s.pane_transition).toBe("box")
+		expect(s.overlay_position).toBe("bottom-left")
+		controller.toggleOverlay(c, "window")
+		controller.request(c, "snooze", { minutes = 30 }, "window")
+		local after = controller.menuState(c)
+		expect(after.overlay_visible).toBe(false)
+		expect(after.snoozed).toBe(true)
+	end)
+
+	it("queues the unvalidated pack folders for the timer, one per tick", function()
+		local w = world()
+		local c = controller.new(w.ports)
+		controller.start(c)
+		fire(w)
+		local queued = controller.menuState(c)
+		expect(queued.packs_pending).toBe(true)
+		expect(ids(queued)).toEqual({ "orange-menace" })
+		-- The overlay timer comes back at once to validate the rest.
+		local live = pending(w)
+		expect(#live).toBe(1)
+		expect(live[1].ms).toBeLessThanOrEqual(100)
+		fire(w)
+		local s = controller.menuState(c)
+		expect(s.packs_pending).toBe(false)
+		expect(ids(s)).toEqual({ "orange-menace", "void" })
+		expect(s.packs[2]).toEqual({ id = "void", name = "void", detail = "bundled" })
+	end)
+
+	it("checks the pack the cat shows when the configured one is unavailable", function()
+		local w = world({ config = { cat = { appearance = "nope" } } })
+		local c = controller.new(w.ports)
+		controller.start(c)
+		for _ = 1, 3 do
+			fire(w)
+		end
+		local s = controller.menuState(c)
+		expect(s.packs_pending).toBe(false)
+		expect(s.appearance).toBe("orange-menace")
+	end)
+end)
+
+describe("window/controller with the host's pack catalog", function()
+	local function entry(folder: string, source: string, id: string): any
+		return { folder = folder, source = source, valid = true, id = id, name = id }
+	end
+
+	local function catalogOf(rev: number, entries: { any }): any
+		return { schema_version = 1, rev = rev, complete = true, packs = entries }
+	end
+
+	local BUNDLED = { entry("orange-menace", "bundled", "orange-menace"), entry("void", "bundled", "void") }
+
+	local function frameReads(w: World): number
+		local n = 0
+		for _, p in w.reads do
+			if string.find(p, "_%d%.png$") then
+				n += 1
+			end
+		end
+		return n
+	end
+
+	it("starts without validating packs and lists the catalog's packs without a scan", function()
+		local w = world({ catalog = catalogOf(1, BUNDLED), config = { cat = { appearance = "void" } } })
+		local c = controller.new(w.ports)
+		controller.start(c)
+		expect(c.pack and c.pack.manifest.id).toBe("void")
+		expect(frameReads(w)).toBe(0)
+		fire(w)
+		local s = controller.menuState(c)
+		expect(s.packs_pending).toBe(false)
+		local ids = {}
+		for _, p in s.packs do
+			table.insert(ids, p.id)
+		end
+		expect(ids).toEqual({ "orange-menace", "void" })
+		expect(c.packs.queue).toBeNil()
+		expect(frameReads(w)).toBe(0)
+	end)
+
+	it("switches to a pack the host lists in a new catalog rev", function()
+		local w = world({ catalog = catalogOf(1, BUNDLED), config = { cat = { appearance = "calico" } } })
+		local c = controller.new(w.ports)
+		controller.start(c)
+		expect(c.pack and c.pack.manifest.id).toBe("orange-menace")
+		addPack(w.files, DATA .. "/packs/calico", "calico")
+		local entries = table.clone(BUNDLED)
+		table.insert(entries, entry("calico", "user", "calico"))
+		w.kv.packs = catalogOf(2, entries)
+		for _ = 1, 30 do
+			fire(w)
+			if c.pack and c.pack.manifest.id == "calico" then
+				break
+			end
+		end
+		expect(c.pack and c.pack.manifest.id).toBe("calico")
+		expect(frameReads(w)).toBe(0)
+	end)
+
+	it("validates packs itself until the host has written a catalog", function()
+		local w = world({ config = { cat = { appearance = "void" } } })
+		local c = controller.new(w.ports)
+		controller.start(c)
+		expect(c.pack and c.pack.manifest.id).toBe("void")
+		expect(frameReads(w)).toBeGreaterThan(0)
 	end)
 end)

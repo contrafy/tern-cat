@@ -105,12 +105,47 @@ you can move or remove it in Tern's `settings.json` (`<config>/settings.json`; m
 If the chord is ever not bound to the action, the window logs a warning; the palette command
 still works.
 
+### Cat menu
+
+**Cat menu** in the palette opens a picker over the focused pane, so you can look after the cat
+without opening the block. Type to filter, arrows and Enter to choose, Escape to close (closing
+does nothing).
+
+| Group | Items |
+|---|---|
+| Cat | Pet, Poke, Feed... (treat, kibble, fish), Play... (ball, string, feather), Snooze 30 min or Wake |
+| Overlay | Hide or Show overlay; Appearance... (every valid sprite pack, bundled and your own, with its author or source; the one shown is checked); Pane switch... (`rendering.pane_transition`); Overlay corner... (`rendering.overlay_position`) |
+| Block | Open cat, Cat settings |
+
+Each choice is the same request the palette commands and the block make: it is validated, rate
+limited and applied by the host half, and the overlay in this window reacts at once to gestures,
+snoozes and the overlay toggle. Appearance, pane switch and corner changes are written to
+`config.json` and reach every window within about 3 seconds. Appearance... lists the packs the
+host half has validated; a pack you copy into `<tern.plugin.data>/packs/` shows up within about
+10 seconds. While the host is still checking packs (right after a reload, or many new packs) it
+ends with **More packs are loading...**, which opens it again.
+
+The menu needs Tern 0.7.1 or later (the inline picker); on an older Tern the command says so and
+opens the cat block instead. It has no default key. To bind one, add a `keybinds` entry for
+`plugin.tern-cat.menu` to Tern's `settings.json` (where it lives: see
+[Global hide chord](#global-hide-chord)). `ctrl+alt+cmd+m` does nothing by default in Tern
+0.9.16; any chord you do not use otherwise works:
+
+```json
+{
+  "keybinds": {
+    "ctrl+alt+cmd+m": "plugin.tern-cat.menu"
+  }
+}
+```
+
 ### Palette commands
 
 All are in the group **Tern Cat**; their action names are `plugin.tern-cat.<id>`.
 
 | Title | Id | What it does |
 |---|---|---|
+| Cat menu | `menu` | Quick actions in a picker over the focused pane ([Cat menu](#cat-menu)). No default key. |
 | Open cat | `open` | Bring the cat to the focused pane, floated (and focused) or split per `rendering.block_placement`; focus it if this tab already shows one. |
 | Pet the cat | `pet` | Pet. |
 | Poke the cat | `poke` | Poke. |

@@ -289,9 +289,11 @@ uv run tools/validate_packs.py                                      # every bund
 
 Install a pack by copying its folder, with the derived files built, to
 `<tern.plugin.data>/packs/<id>/` (macOS `~/Library/Application Support/Tern/plugin-data/tern-cat/packs/`,
-Linux `~/.local/state/tern/plugin-data/tern-cat/packs/`). Select it by setting `cat.appearance`
-to its `id` in `config.json`; Settings > Appearance lists it after that or after the next plugin
-reload (`tern plugin reload`), since the host scans every pack folder only once per load.
+Linux `~/.local/state/tern/plugin-data/tern-cat/packs/`). The host half lists the pack folders
+every 10 seconds and validates new ones once, so within about 10 seconds the pack appears in the
+Cat menu's Appearance list and Settings > Appearance (an invalid pack is logged instead). Select
+it there or by setting `cat.appearance` to its `id` in `config.json`. Changes to a pack folder
+that was already validated are picked up after `tern plugin reload`.
 
 Remove a user pack in the block: Settings > Appearance > **Remove <name>**, then **Confirm**
 within 10 seconds. The host (`removePack` in `cat/host/brain.luau`):

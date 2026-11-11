@@ -31,9 +31,10 @@ local FOODS = { "treat", "kibble", "fish" }
 local TOYS = { "ball", "string", "feather" }
 local PERSONALITY_KEYS = { "curiosity", "affection", "mischief", "energy", "talkativeness" }
 
--- Config paths an intent may change. Everything else (AI, appearance, personality via
--- set_config, sharing) is reachable only by editing config.json or dedicated intents.
+-- Config paths an intent may change. Everything else (AI, personality via set_config, sharing)
+-- is reachable only by editing config.json or dedicated intents.
 local SET_CONFIG_KEYS = {
+	"cat.appearance",
 	"behavior.activity",
 	"behavior.allow_visual_obscuring",
 	"behavior.allow_swats",
@@ -61,10 +62,11 @@ local SET_CONFIG_KEYS = {
 local MAX_SET_CONFIG_ENTRIES = #SET_CONFIG_KEYS
 
 -- Carly calls exports without asking the user, so it may not opt into sound (the only feature
--- that starts a process), loosen quiet hours, end focus mode or turn pointer or agent reactions
--- on. For these keys Carly may only set the listed less-intrusive value; keys mapped to nil are
--- refused outright.
+-- that starts a process), loosen quiet hours, end focus mode, turn pointer or agent reactions on
+-- or change the cat's appearance. For these keys Carly may only set the listed less-intrusive
+-- value; keys mapped to nil are refused outright.
 local CARLY_RESTRICTED: { [string]: { value: any? } } = {
+	["cat.appearance"] = {},
 	["sound.enabled"] = { value = false },
 	["sound.volume"] = {},
 	["quiet.hours_enabled"] = { value = true },

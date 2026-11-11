@@ -18,12 +18,32 @@ All notable changes to tern-cat are documented here. The format follows
   host, which drops the copies other windows send, decides once (one sound) and every window
   mirrors the reaction. New `behavior.allow_agent_reactions` (default `true` in every preset),
   settings row "React to coding agents"; Carly may only turn it off.
+- **Cat menu** palette command (`plugin.tern-cat.menu`): Tern's inline picker over the focused
+  pane with Pet, Poke, Feed... (treat, kibble, fish), Play... (ball, string, feather), Snooze 30
+  min or Wake, Hide or Show overlay, Appearance... (every valid bundled and user sprite pack),
+  Pane switch..., Overlay corner..., Open cat and Cat settings; the current choice is checked.
+  Every choice is a validated, rate-limited window intent applied by the host. No default key
+  (bind it in `settings.json`, see docs/usage.md). Needs Tern 0.7.1 or later (`cx:pick`); on an
+  older Tern the command says so and opens the block.
 - Development: `scripts/sandbox-window.sh` opens every sandboxed test window (smoke, compat
   probe, soak, perf baseline). With the copy `scripts/sandbox-app.sh` builds (an ad-hoc signed
   Tern.app clone with bundle id `so.stencil.tern.sandbox`) it launches in the background, gets
   past the sign-in card with a stand-in account and logs where the window landed, so a window
   manager rule can keep test windows off your workspaces; without it, a plain `tern --control`
   window as before (docs/develop-with-omp-tern.md).
+
+### Changed
+
+- `set_config` intents may set `cat.appearance` from the block, the window (Cat menu) and the
+  keyboard; Carly still may not change the appearance.
+- Sprite packs are validated only by the host half, which publishes a pack catalog under
+  `tern.kv` key `packs` (folder names, ids, names, authors, validity; no paths) after load, when
+  the appearance changes, after a pack removal and on a 10 s poll of the pack folders. Windows
+  read it instead of validating packs in their timer ticks (5-43 ms per pack before): the
+  selected pack's `pack.json` is read with field and path checks only, and the Cat menu lists
+  the catalog. A pack copied into the user packs folder now appears within about 10 seconds
+  instead of after a reload. Windows still validate packs themselves until the host has written
+  a catalog.
 
 ## [0.3.0] - 2026-11-11
 
@@ -89,6 +109,7 @@ the plugin APIs tern-cat uses changed, and the overlay's Tern DOM and CSS hooks 
   timer has a backup, so a stopped tick no longer ends its timer chain.
 
 ### Changed
+
 
 - CI type-checks against a pinned `stencil-hq/tern-sdk` commit whose `tern.d.luau` matches Tern
   0.9.16 (`ba85dce`), instead of the moving `main` branch (`TERN_SDK_REF` still overrides it).
