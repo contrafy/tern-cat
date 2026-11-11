@@ -87,8 +87,9 @@ omp agent shells live in a Tern pane, so they carry the variables above. Every a
 invokes `tern` must run in a shell that has sourced `scripts/sandbox-env.sh` in the same command
 (for example `bash -c 'source scripts/sandbox-env.sh && tern plugin list'`), because each tool
 call may start a fresh shell. Unit tests, linters and the pack tools do not need the sandbox. An
-agent should not open real windows (`tern --control`) unless asked: they appear on the user's
-desktop.
+agent should not open real windows (`scripts/sandbox-window.sh`, `tern --control`) unless asked:
+they appear on the user's desktop unless a window manager rule moves them
+([Keeping test windows off your workspaces](#keeping-test-windows-off-your-workspaces-omniwm--other-wms)).
 
 ## Linking and reloading (needs Tern)
 
@@ -115,13 +116,16 @@ window; headless shots load no window halves.
 
 ```sh
 source scripts/sandbox-env.sh
-tern --control "$SB/ctl.sock" &           # a window on the sandbox daemon, with a control endpoint
+bash scripts/sandbox-window.sh "$SB/ctl.sock" "$SB/work"   # a window on the sandbox daemon; prints its pid
 tern ctl --control "$SB/ctl.sock" stats   # then drive it: shot, pick X Y, click, css, perf, tree, ...
 ```
 
-`tern help dev` lists every control command. A window started with `TERN_DAEMON_SOCKET` set
-spawns its own daemon on that socket. `ctl shot` writes relative to the window's working
-directory.
+`tern help dev` lists every control command. `scripts/sandbox-window.sh` starts
+`tern --control <socket> --out "$SB/target/shots" <workdir>` (from the sandbox app when it exists,
+see the next section), waits for the control socket and logs where the window landed. A window
+started with `TERN_DAEMON_SOCKET` set spawns its own daemon on that socket. `ctl shot` answers
+with the PNG's path; with `--out` it is absolute (`$SB/target/shots/live/<name>.png`), without it
+relative to the window's working directory.
 
 Carly exports can be exercised in such a window with the Carly script commands documented at
 <https://docs.stencil.so/tern/scripts/carly.html> (for example
@@ -147,6 +151,94 @@ While an agent block animates, scenario commands (`block agent`, `agent-command`
 "timed out after 20s" but still apply, and the control endpoint takes one command at a time, so
 the script waits before its first status. Watch `last_reaction` in
 `$SB/config/plugin-data/tern-cat/kv.json` and take `ctl shot`s once `block agent` has returned.
+
+## Keeping test windows off your workspaces (OmniWM / other WMs)
+
+Every script that opens a real window (`scripts/smoke-window.sh`, the `scripts/compat.sh` probe,
+`scripts/soak.sh`, `scripts/perf-baseline.sh`) starts it through `scripts/sandbox-window.sh`. By
+default that is a plain `tern --control` window: a tiling window manager cannot tell it from your
+own Tern and tiles it into the workspace you are working in. Give test windows their own app
+identity, then route that identity elsewhere:
+
+```sh
+bash scripts/sandbox-app.sh    # macOS; once, prints /tmp/tern-cat-dev/TernSandbox.app
+```
+
+This builds `TernSandbox.app`, an APFS clone of the Tern.app around `tern` on `PATH` (else
+`/Applications/Tern.app`; override with `TERN_CAT_TERN_APP`) with bundle id
+`so.stencil.tern.sandbox` (its daemon helper `so.stencil.tern.sandbox.daemon`) and the name "Tern
+Sandbox". It drops the URL scheme, document types, Services entry and launch agents, so the copy
+never claims `tern://` links or login items, re-signs everything ad hoc and clears quarantine. It
+takes about 330 MB in `/tmp` (signing rewrites the executables; the rest stays cloned). It is
+idempotent and records the source version, so it rebuilds after a Tern update; the launcher runs
+it before every window, and it refuses to rebuild while windows of the copy are open.
+`TERN_CAT_SANDBOX_APP` moves the copy. When the copy is missing (or off macOS) the launcher falls
+back to `tern --control`, so nothing else changes. `tern ctl` and `tern plugin` keep using `tern`
+on `PATH` with the same sandbox variables.
+
+With the copy, `scripts/sandbox-window.sh`:
+
+- launches it with `open -g -n -a TernSandbox.app --env ... --args --control ...`: in the
+  background, without activating it, passing `TERN_CONFIG_DIR`, `TERN_DAEMON_SOCKET`,
+  `STENCIL_LOG_DIR`, `STENCIL_LOG`, `TERN_CAT_TEST` and `PATH` (nothing else of your shell
+  reaches it). A macOS whose `open` lacks `--env` runs the copy's executable directly instead; the
+  window may then take the focus;
+- leaves the daemon to the window as before: it starts the copy's helper (`Tern Daemon.app`) on
+  `TERN_DAEMON_SOCKET`;
+- gets past the closed-beta sign-in card: the ad-hoc signed copy cannot read your Tern account
+  from the keychain, so the launcher sets the harness's stand-in account
+  (`tern ctl ... account signed-in`). No credentials are used, and test windows and their shots
+  do not show your account;
+- logs placement per window on stderr, measured with CoreGraphics
+  (`tools/window_placement.swift`, needs `swift`) rather than asked of the window manager, for
+  example `sandbox-window: pid 53843 winB.sock: window 110394 onscreen=1 frame=-1279,30 1280x800
+  visible=0%`. Window managers that hide workspaces park their windows off screen, so
+  `visible=0%` means the window is on a workspace you are not looking at.
+
+Then add one rule for `so.stencil.tern.sandbox` to your window manager; your real Tern
+(`so.stencil.tern`) never matches it.
+
+**OmniWM** (tested with 0.7.6): add one entry to `~/.config/omniwm/settings.toml` after the last
+`[[appRules]]` entry (back the file up first). OmniWM live-reloads the file when it is saved; no
+restart or IPC is needed. A file it cannot parse is left alone and reported on screen, and the
+running settings stay.
+
+```toml
+[[appRules]]
+assignToWorkspace = "7"
+bundleId = "so.stencil.tern.sandbox"
+id = "B4838E7D-7EA9-47C2-AC55-59A4A02012E8"
+layout = "float"
+```
+
+- `assignToWorkspace` names an existing workspace you do not usually look at. OmniWM applies it
+  to a window whose process has no other tracked windows; every test window is its own process,
+  so each one lands there.
+- `layout = "float"` keeps Tern's own 1280x800 frame, as without a window manager, and leaves the
+  windows tiled on that workspace alone. `tile` would add a column and resize them.
+- `id` is any UUID (`uuidgen`). Keys are sorted as OmniWM writes them. The App Rules editor's
+  "Assign to Workspace" toggle is not a file key: the rule is on while `assignToWorkspace` is
+  set.
+- To remove the rule, delete those five lines (or the rule in Settings > App Rules) and save.
+
+**AeroSpace** (untested): `~/.aerospace.toml`, then `aerospace reload-config`:
+
+```toml
+[[on-window-detected]]
+if.app-id = 'so.stencil.tern.sandbox'
+run = ['layout floating', 'move-node-to-workspace 7']
+```
+
+**yabai** (untested; it matches the app name): `yabai -m rule --add app='^Tern Sandbox$'
+space=7 manage=off`.
+
+**No window manager**: build the copy anyway if you like; its windows open behind the active app
+without taking the focus.
+
+Parked windows still run, and every check reads them through the control socket and `ctl shot`,
+which renders the window's own document. macOS may throttle drawing for a window it considers
+hidden, so for `scripts/perf-baseline.sh` frame and CPU figures, look at that workspace while it
+runs or compare runs made the same way.
 
 ## Headless golden shots (needs Tern)
 
@@ -217,8 +309,10 @@ your prompt and clock. Only the host half runs headless, so the overlay never ap
 SB=/tmp/tern-cat-dev/smoke bash scripts/smoke-window.sh
 ```
 
-Opens **two visible windows** on your desktop (`tern --control $SB/winA.sock` and `winB.sock`) on
-a sandboxed daemon, so run it only when that is acceptable. It links a snapshot copy of the
+Opens **two windows** (`$SB/winA.sock` and `winB.sock`, through `scripts/sandbox-window.sh`) on
+a sandboxed daemon. They appear on your desktop unless a window manager rule moves them
+([Keeping test windows off your workspaces](#keeping-test-windows-off-your-workspaces-omniwm--other-wms)),
+so run it only when that is acceptable. It links a snapshot copy of the
 package (`plugin.toml`, entries, CSS, `cat`, `assets`, `config`) rather than the working tree,
 so edits made during the run do not reload the plugin mid-test. It needs `python3` for reading
 `kv.json` and `ctl` output.
@@ -237,9 +331,10 @@ Checks (each prints `PASS` or `FAIL`; exit code non-zero if any fail):
   characters;
 - a screenshot is saved to `$SB/shots/`.
 
-On exit (including failure) it quits both windows and stops the sandbox daemon. The windows show
-your real signed-in Tern account (sign-in is not isolated by `TERN_CONFIG_DIR`), so crop
-screenshots before sharing them.
+On exit (including failure) it quits both windows and stops the sandbox daemon. Plain
+`tern --control` windows show your real signed-in Tern account (sign-in is not isolated by
+`TERN_CONFIG_DIR`), so crop screenshots before sharing them; sandbox app windows show the
+harness's stand-in account.
 
 ## Tern compatibility: `scripts/compat.sh` (needs Tern and a desktop)
 
@@ -248,8 +343,9 @@ bash scripts/compat.sh      # SB defaults to /tmp/tern-cat-dev/compat-<tern vers
 ```
 
 Run it after every Tern update and before every release ([release.md](release.md)). Everything
-runs in sandboxes under `$SB`; it opens visible windows (the smoke test's two, then one probe
-window) and, on exit, quits them and stops the sandbox daemon. Re-running is safe. Steps:
+runs in sandboxes under `$SB`; it opens windows (the smoke test's two, then one probe window at a
+time, all through `scripts/sandbox-window.sh`) and, on exit, quits them and stops the sandbox
+daemon. Re-running is safe. Steps:
 
 1. Records `tern --version` in `$SB/compat/version.txt`.
 2. Writes `tern plugin types` to `$SB/compat/types/` and compares it with the pinned tern-sdk
@@ -291,8 +387,9 @@ SB=/tmp/tern-cat-dev/soak bash scripts/soak.sh          # 30 minutes
 SB=/tmp/tern-cat-dev/soak bash scripts/soak.sh 300      # duration in seconds
 ```
 
-Like the window smoke test it opens **two visible windows** on a sandboxed daemon and links a
-snapshot of the package. It resets the sandbox's `kv.json` and inbox, writes
+Like the window smoke test it opens **two windows** through `scripts/sandbox-window.sh` on a
+sandboxed daemon and links a snapshot of the package. It resets the sandbox's `kv.json` and
+inbox, writes
 `{ "behavior": { "activity": "chaos" } }` as `config.json` (the most activity), and opens the cat
 block in window A. `tools/soak.py` (run with `uv run --with psutil`) then alternates every 20 s
 between typing `true`, `false` or `ls` + Enter in window A and running **Pet the cat** in window
@@ -361,3 +458,5 @@ View every frame before committing it.
 
 `rm -rf .sandbox` removes the sandbox config, daemon socket, logs and shots. Stop any sandbox
 window first; an idle daemon with no clients exits on its own after about 10 s.
+`rm -rf /tmp/tern-cat-dev/TernSandbox.app` (or `$TERN_CAT_SANDBOX_APP`) removes the sandbox app;
+remove its window manager rule with it.

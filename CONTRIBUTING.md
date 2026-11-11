@@ -48,7 +48,7 @@ otherwise:
 export SB=/tmp/tern-cat-dev/me
 source scripts/sandbox-env.sh
 bash scripts/dev-link.sh          # tern plugin link . (saving a file reloads it)
-tern --control "$SB/win.sock" &   # a sandboxed window you can drive with `tern ctl`
+bash scripts/sandbox-window.sh "$SB/win.sock" "$SB/work"   # a sandboxed window for `tern ctl`
 ```
 
 Logs land in `$SB/logs`. Block goldens (`scripts/visual.sh`), the real-window smoke test
