@@ -220,19 +220,23 @@ Risks and limits:
 ### Full-screen programs
 
 At a top corner the cat covers the end of the first rows, where full-screen programs (vim, less,
-htop) draw title and status bars. Tern 0.8.3 exposes no alternate-screen state: `PaneInfo` and
-the window events have no such field, and the pane's DOM (`ctl dump`/`ctl tree`) is identical at
-the prompt and in `less`, `vim` or `top` apart from the cursor shape class. So the overlay steps
-aside from window-side state (`rendering.fullscreen_behavior`: `hide`, `shrink`, `stay`):
+htop) draw title and status bars. Tern (0.8.3 to 0.9.16) exposes no alternate-screen state:
+`PaneInfo` and the window events have no such field, and the pane's DOM (`ctl dump`/`ctl tree`)
+is identical at the prompt and in `less`, `vim` or `top` apart from the cursor shape class. So the
+overlay steps aside from window-side state (`rendering.fullscreen_behavior`: `hide`, `shrink`,
+`stay`):
 
 - `command_started` lines go through `events.fullscreen` (terminal editors, pagers, monitors,
   tmux; past `sudo`/`env` wrappers and in any pipe stage), which marks the pane at once;
   `command_finished` and `pane_closed` clear it.
 - After every window event and on every timer tick the glue reads the focused pane's
-  `PaneInfo.program` and `at_prompt`. `program` is the running command's program as typed (`vim`,
-  `top`, but `v` for an alias and `git` for `git log | less`), so it adds nothing for new
-  commands; it catches a full-screen program already running when the window (re)loads, and a
-  pane at its prompt clears a mark whose finish event was missed.
+  `PaneInfo.program`, `at_prompt` and whether `running` is set (not its line). `program` is the
+  running command's program as typed (`vim`, `top`, but `v` for an alias and `git` for
+  `git log | less`), so it adds nothing for new commands; it catches a full-screen program
+  already running when the window (re)loads, and a pane at its prompt clears a mark whose finish
+  event was missed. A pane counts as at its prompt only when `at_prompt` is true and nothing
+  runs: Tern 0.9 also reports `at_prompt` while `less` waits for a key (`vim` and `top` report
+  `false`).
 - `focus` events move the check to the newly focused pane. The sheet change lags the DOM focus
   change by one event round trip (about 10 ms from Enter to the hidden sheet in a sandbox), so
   the emerge may start in the full-screen pane for a moment before the hidden sheet replaces it.

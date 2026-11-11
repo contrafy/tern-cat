@@ -196,6 +196,23 @@ describe("window/presenter full-screen programs", function()
 		expect(p.fullscreen_panes[4]).toBeNil()
 	end)
 
+	it("keeps a pager that reports its prompt as running (Tern 0.9)", function()
+		-- Tern 0.9 reports `at_prompt` while `less` waits for a key; `running` still names it.
+		local p = make()
+		presenter.observe(p, "focus", { pane = 4, tab = 1 })
+		started(p, 4, "less notes.md")
+		presenter.setFocus(p, { pane = 4, program = "less", at_prompt = true, running = true })
+		expect(presenter.fullscreen(p)).toBe(true)
+		expect(presenter.view(p).hidden).toBe(true)
+		-- Read while the window (re)loaded, without the start event.
+		local q = make()
+		presenter.setFocus(q, { pane = 4, program = "less", at_prompt = true, running = true })
+		expect(presenter.fullscreen(q)).toBe(true)
+		presenter.setFocus(p, { pane = 4, program = "zsh", at_prompt = true, running = false })
+		expect(presenter.fullscreen(p)).toBe(false)
+		expect(p.fullscreen_panes[4]).toBeNil()
+	end)
+
 	it("shrinks and fades instead with shrink, and stays with stay", function()
 		local p = make({ rendering = { fullscreen_behavior = "shrink", overlay_scale = 3 } })
 		presenter.observe(p, "focus", { pane = 4, tab = 1 })

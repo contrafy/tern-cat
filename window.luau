@@ -132,9 +132,10 @@ local function cardCovers(cx: WindowCx): boolean?
 	return if ok then covered else nil
 end
 
-type FocusInfo = { pane: number?, program: string?, at_prompt: boolean? }
+type FocusInfo = { pane: number?, program: string?, at_prompt: boolean?, running: boolean? }
 
--- The focused pane's id, program name and prompt state (full-screen programs).
+-- The focused pane's id, program name, prompt state and whether a command runs (full-screen
+-- programs; the command line is not read).
 local function focusInfo(cx: WindowCx): FocusInfo?
 	local ok, info = pcall(function(): FocusInfo?
 		local focused = cx.session:focused()
@@ -142,7 +143,7 @@ local function focusInfo(cx: WindowCx): FocusInfo?
 		if pane == nil then
 			return nil
 		end
-		return { pane = pane.pane, program = pane.program, at_prompt = pane.at_prompt }
+		return { pane = pane.pane, program = pane.program, at_prompt = pane.at_prompt, running = pane.running ~= nil }
 	end)
 	return if ok then info else nil
 end

@@ -46,6 +46,10 @@ the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matr
 - The overlay cat faces right while swatting, so the knocked-off letter no longer reads
   backwards when the cat faced left: the swat decision and the press reaction (including the pose
   held after release, and while pacing) are drawn unmirrored; everything else keeps its facing.
+- With Tern 0.9 the overlay cat stays aside in `less` again. Tern 0.9 reports a pager waiting for
+  a key as at its prompt (`PaneInfo.at_prompt`), which cleared the full-screen mark within a
+  second; a pane now counts as at its prompt only while no command runs (`PaneInfo.running`
+  unset; its line is never read).
 
 ### Changed
 
