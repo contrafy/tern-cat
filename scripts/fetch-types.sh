@@ -3,9 +3,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p types
-# tern-sdk commit whose plugins/tern.d.luau is byte-identical to `tern plugin types` of Tern 0.8.3
-# (e2b8656); CI has no tern CLI and type-checks against it. Bump it with the tested Tern version.
-SDK_REF="${TERN_SDK_REF:-ccdb4b8266c638ed53736aa813d0a1dd2f81b1ec}"
+# tern-sdk commit whose plugins/tern.d.luau is byte-identical to `tern plugin types` of Tern 0.9.16
+# (41a10a5); CI has no tern CLI and type-checks against it. Bump it with the tested Tern version.
+SDK_REF="${TERN_SDK_REF:-ba85dce9974c00321eea0bd0b644219c37e21b59}"
 URL="https://raw.githubusercontent.com/stencil-hq/tern-sdk/${SDK_REF}/plugins/tern.d.luau"
 if command -v tern >/dev/null 2>&1 && tern plugin types types/ >/dev/null 2>&1; then
   echo "fetch-types: wrote types/tern.d.luau via 'tern plugin types'"
