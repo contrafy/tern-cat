@@ -53,6 +53,13 @@ the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matr
 - The walk between panes scales the pane padding with Tern's interface size, as Tern 0.9.6 and
   later do, so the traveler hands off to the in-pane cat without a sub-pixel to 2 px jump at
   interface sizes other than 13 px.
+- The window half keeps booting after Tern stops one of its boot callbacks for running over the
+  50 ms budget. On a cold Tern 0.9.16 start a slice could pass 50 ms; Tern paused the timer and
+  the boot never resumed, so commands kept answering "still starting" until a plugin reload.
+  Each slice now schedules the next before it works and retries a cut-off step (alone in its
+  slice, at most five times); slices stop early when the slowest step so far would push them
+  past 20 ms; the overlay setup runs in four steps instead of one call; and the overlay's tick
+  timer has a backup, so a stopped tick no longer ends its timer chain.
 
 ### Changed
 

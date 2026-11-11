@@ -3,12 +3,14 @@
 -- Everything is set up from entry load (window_start does not re-fire on reload); the logic lives
 -- in cat/window/*.luau and cat/integrations/carly.luau.
 --
--- Compiling every module takes 30-45 ms, too close to the 50 ms window budget for one call, so
--- the entry only registers commands and events and then loads the modules in time-boxed timer
--- slices before starting the overlay.
+-- Compiling every module takes 30-45 ms, and a cold start's overlay setup up to 48 ms (Tern
+-- 0.9.16), too close to the 50 ms window budget for one call. So the entry only registers
+-- commands and events, then cat/window/budget.luau loads the modules and runs the setup in
+-- time-boxed timer slices that survive a callback Tern stops for running over its budget.
 
 local entryStart = tern.now()
 local blocks = require("./cat/window/blocks")
+local budget = require("./cat/window/budget")
 
 type ControllerModule = typeof(require("./cat/window/controller"))
 type CarlyModule = typeof(require("./cat/integrations/carly"))
@@ -67,7 +69,6 @@ local BOOT_MODULES = {
 	"window/mirror",
 	"window/controller",
 }
-local SLICE_MS = 15
 
 local controllerMod: ControllerModule = nil :: any
 local carly: CarlyModule = nil :: any
@@ -415,9 +416,19 @@ end
 -- Boot ------------------------------------------------------------------------------------
 
 local load = require :: any
-local boot = { index = 1, slices = 0, max_slice_ms = 0 }
+local carlyRegistered = false
 
-local function start()
+local function timerPort(ms: number, fn: (cx: any) -> ()): budget.Handle
+	local handle: any = tern.timer(ms, fn)
+	return handle
+end
+
+-- Builds the controller once its modules are loaded; returns its setup steps and the final one
+-- that publishes it to commands, events and Carly. Every step is idempotent (budget.run reruns a
+-- step Tern cut off).
+local function controllerStep(): { budget.Step }?
+	controllerMod = load("./cat/window/controller")
+	carly = load("./cat/integrations/carly")
 	local clockAdapter = load("./cat/adapters/clock")
 	local pathsAdapter = load("./cat/adapters/paths")
 	local clock = clockAdapter.real()
@@ -435,8 +446,10 @@ local function start()
 		css = function(name: string, source: string)
 			tern.css(name, source)
 		end,
+		-- Guarded: a tick Tern stops for running over its budget runs again after the pause
+		-- instead of ending the overlay's timer chain.
 		timer = function(ms: number, fn: (any) -> ()): any
-			return tern.timer(ms, function(cx: WindowCx?)
+			return budget.guard(timerPort, ms, function(cx: WindowCx?)
 				local info = nil
 				if cx then
 					if not keysChecked then
@@ -455,48 +468,58 @@ local function start()
 		end,
 		seed = math.floor(tern.now() * 1000) + os.time(),
 	})
-	local setupMs = controllerMod.start(instance)
-	ctl = instance
-	registerCarly()
-	tern.log.info(
-		string.format(
-			"tern-cat window ready in %.1f ms (%d load slices, slowest %.1f ms; overlay setup %.1f ms)",
-			tern.now() - entryStart,
-			boot.slices,
-			boot.max_slice_ms,
-			setupMs
+	local steps: { budget.Step } = {}
+	for _, step in controllerMod.startSteps(instance) do
+		table.insert(steps, {
+			name = step.name,
+			run = function(): { budget.Step }?
+				step.run()
+				return nil
+			end,
+		})
+	end
+	table.insert(steps, {
+		name = "publish",
+		run = function(): { budget.Step }?
+			ctl = instance
+			if not carlyRegistered then
+				registerCarly()
+				carlyRegistered = true
+			end
+			return nil
+		end,
+	})
+	return steps
+end
+
+local bootSteps: { budget.Step } = {}
+for _, name in BOOT_MODULES do
+	table.insert(bootSteps, {
+		name = name,
+		run = function(): { budget.Step }?
+			load("./cat/" .. name)
+			return nil
+		end,
+	})
+end
+table.insert(bootSteps, { name = "controller", run = controllerStep })
+
+budget.run({
+	steps = bootSteps,
+	timer = timerPort,
+	now = tern.now,
+	log = function(level: "info" | "warn" | "error", message: string)
+		tern.log[level](message)
+	end,
+	done = function(b: budget.Runner)
+		tern.log.info(
+			string.format(
+				"tern-cat window ready in %.1f ms (%d load slices, slowest %.1f ms; overlay setup %.1f ms)",
+				tern.now() - entryStart,
+				b.slices,
+				b.max_slice_ms,
+				if ctl then ctl.metrics.load_ms else 0
+			)
 		)
-	)
-end
-
-local function bootSlice()
-	local t0 = tern.now()
-	local ok, err = pcall(function()
-		while boot.index <= #BOOT_MODULES and tern.now() - t0 < SLICE_MS do
-			load("./cat/" .. BOOT_MODULES[boot.index])
-			boot.index += 1
-		end
-	end)
-	boot.slices += 1
-	boot.max_slice_ms = math.max(boot.max_slice_ms, tern.now() - t0)
-	if not ok then
-		tern.log.error(`tern-cat: loading failed: {err}`)
-		return
-	end
-	if boot.index <= #BOOT_MODULES then
-		tern.timer(0, bootSlice)
-		return
-	end
-	tern.timer(0, function()
-		controllerMod = load("./cat/window/controller")
-		carly = load("./cat/integrations/carly")
-		local started, startErr = pcall(function()
-			start()
-		end)
-		if not started then
-			tern.log.error(`tern-cat: overlay start failed: {startErr}`)
-		end
-	end)
-end
-
-tern.timer(0, bootSlice)
+	end,
+})

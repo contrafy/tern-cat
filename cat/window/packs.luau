@@ -2,8 +2,8 @@
 -- Window-side sprite pack access for the overlay: validates only the packs it needs (the wanted
 -- and the default directory first) and turns each animation's sheet into a cached data URL.
 -- When those miss, the full scan runs one pack directory per `step` call (one per timer tick) so a
--- window timer callback never validates every pack at once: a tripped 50 ms budget would disable
--- every timer of that window.
+-- window timer callback never validates every pack at once: a tripped 50 ms budget pauses every
+-- timer of that window (Tern 0.9.6 and later; earlier versions disabled them until reload).
 
 local T = require("../types")
 local loader = require("../sprite/loader")

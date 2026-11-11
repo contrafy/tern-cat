@@ -55,12 +55,27 @@ The design follows from the M0 findings in [sdk-capability-matrix.md](sdk-capabi
 
 ### Window entry boot
 
-Tern disables a window hook that runs longer than 50 ms. Compiling every module in one call took
-26-45 ms and once exceeded the budget, so `window.luau` only registers commands, window events
-and the chord at top level, then `require`s the modules in dependency order in `tern.timer(0)`
-slices of at most about 15 ms (`SLICE_MS`), and finally starts the controller and registers the
-Carly exports. Until then, commands toast "Tern Cat is still starting; try again in a moment."
-Measured: 2-3 slices of 15-17 ms; see [performance.md](performance.md).
+A window hook that runs longer than 50 ms is stopped with `tern: <hook> exceeded 50 ms`, which
+`pcall` cannot catch. Tern up to 0.8.3 then disabled the hook until reload; 0.9.6 and later
+pause it (every timer callback, 5 s and doubling) and run timers that came due once the pause
+ends, on the window's next event. Compiling every module in one call took 26-45 ms and a cold
+start's overlay setup up to 48 ms, so `window.luau` only registers commands, window events and
+the chord at top level, then `cat/window/budget.luau` runs the boot as steps (each `require` in
+dependency order, the controller, its setup steps from `controller.startSteps`: config, assets,
+sheet, then publishing it and the Carly exports) in `tern.timer(0)` slices:
+
+- a slice starts another step only while its elapsed time plus the slowest step so far stays
+  within 20 ms (`budget.SLICE_MS`); its first step always runs;
+- each slice schedules the next one before it works, so when Tern stops a slice the next one
+  runs after the pause and retries the cut-off step in a slice of its own; a step that keeps
+  failing is given up after 5 attempts with an error in the log (every step is idempotent);
+- the overlay's tick timers are guarded the same way (`budget.guard`: a backup timer, cancelled
+  when the callback returns, reruns a stopped tick 1 s later), so a stopped tick no longer ends
+  the timer chain.
+
+Until the boot finishes, commands toast "Tern Cat is still starting; try again in a moment."
+Measured on Tern 0.9.16 cold starts: 6-7 slices (31 once), slowest 18-36 ms, ready in
+0.7-1.5 s; see [performance.md](performance.md).
 
 ### Renderers
 

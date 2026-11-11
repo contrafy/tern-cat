@@ -164,9 +164,11 @@ The sandbox sets `STENCIL_LOG=warn,stencil=info,tern::plugin=debug` and writes d
 logs to `$SB/logs` (`STENCIL_LOG_DIR`). Plugin load errors, budget trips and plugin log lines
 appear there. `tern plugin list --json` and `tern plugin reload` also report load problems.
 
-Tern disables a hook that exceeds its budget (host 2 s, window 50 ms per call) until the next
-reload ([sdk-capability-matrix.md](sdk-capability-matrix.md#1-host-hooks)); look for that in the
-logs when the cat stops reacting.
+Tern stops a hook that exceeds its budget (host 2 s, window 50 ms per call). Up to 0.8.3 the hook
+then stays off until the next reload; 0.9.6 and later pause it (5 s, doubling for repeated trips)
+and log `plugin hook exceeded its budget; paused` and `resumed after its pause`
+([sdk-capability-matrix.md](sdk-capability-matrix.md#1-host-hooks)); look for those in the logs
+when the cat stops reacting.
 
 ## Block goldens: `scripts/visual.sh` (needs Tern)
 

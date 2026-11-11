@@ -80,10 +80,19 @@ from Carly's animation, not tern-cat.
 | Window half load | 2-3 timer slices of 15-17 ms each; overlay setup 2.5-12.6 ms |
 | Overlay visible after a plugin reload | about 40-60 ms (up to about 800 ms while the app is still starting) |
 
-Why the window half loads in slices: Tern disables a window hook that takes longer than 50 ms.
-Compiling every module in one call took 26-45 ms and once exceeded 50 ms, which disabled the
-plugin. The entry now registers commands and events first, then loads modules in timer slices of
-about 15 ms.
+Why the window half loads in slices: Tern stops a window hook that takes longer than 50 ms (and
+until 0.8.3 disabled it until reload). Compiling every module in one call took 26-45 ms and once
+exceeded 50 ms, which disabled the plugin. The entry now registers commands and events first, then
+loads modules in timer slices of about 15 ms.
+
+Tern 0.9.16 cold starts (eight alternating window launches on an otherwise idle machine, same
+sandbox): the old fixed 15 ms slices took 4-6 slices and 0.7-2.1 s to ready, with the overlay
+setup in one callback taking up to 44.1 ms. The step runner (`cat/window/budget.luau`, 20 ms
+planner, setup split into steps) took 6-7 slices (31 once: a single 35.9 ms step raised the
+planner's estimate past 20 ms, so every later slice ran one step) and 0.7-1.5 s, slowest slice
+17.9-35.9 ms. Most of the boot time is the wait between slices while the app draws its first
+frames. A slice that an 80 ms step made Tern stop (injected in a sandbox copy) resumed after the
+5 s pause (on the window's next event) and finished the boot; the old boot never became ready.
 
 ### Idle CPU baseline (zen, 10 minutes, no input)
 
