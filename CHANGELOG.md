@@ -7,9 +7,10 @@ All notable changes to tern-cat are documented here. The format follows
 
 ## [Unreleased]
 
-Tested against Tern 0.8.3 (macOS, Apple silicon). Tern 0.6.2 or later is still required; none of
-the plugin APIs tern-cat uses changed, and the overlay's Tern DOM and CSS hooks still match (see
-the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matrix.md#tern-083-delta)).
+Tested against Tern 0.9.16 (macOS, Apple silicon). Tern 0.6.2 or later is still required; none of
+the plugin APIs tern-cat uses changed, and the overlay's Tern DOM and CSS hooks still match; three
+0.9 behavior changes are fixed below (see the Tern 0.8.3 and 0.9.16 deltas in
+[docs/sdk-capability-matrix.md](docs/sdk-capability-matrix.md#tern-0916-delta)).
 
 ### Added
 
@@ -31,6 +32,12 @@ the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matr
   set it. Tern exposes no alternate-screen state, so the window half recognizes the program from
   the command line (reduced to a boolean, never kept) and, for a program already running when the
   window loads, from the focused pane's program name.
+- `scripts/compat.sh`: one sandboxed command, run after every Tern update and before every
+  release, that records the Tern version, diffs `tern plugin types` against the pinned types,
+  runs the checks, block goldens and window smoke test, and probes a real 2-pane window for every
+  undocumented Tern selector, CSS variable, inset and setting the overlay and the walk rely on
+  (plus corners, pass-through, walk, portal, full-screen hide, the floated card and reduced
+  motion), listing any missing hook ([docs/develop-with-omp-tern.md](docs/develop-with-omp-tern.md)).
 - README: a GIF of the `walk` pane transition (`docs/images/pane-walk.gif`) beside the portal one.
 
 ### Fixed
@@ -46,12 +53,26 @@ the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matr
 - The overlay cat faces right while swatting, so the knocked-off letter no longer reads
   backwards when the cat faced left: the swat decision and the press reaction (including the pose
   held after release, and while pacing) are drawn unmirrored; everything else keeps its facing.
+- With Tern 0.9 the overlay cat stays aside in `less` again. Tern 0.9 reports a pager waiting for
+  a key as at its prompt (`PaneInfo.at_prompt`), which cleared the full-screen mark within a
+  second; a pane now counts as at its prompt only while no command runs (`PaneInfo.running`
+  unset; its line is never read).
+- The walk between panes scales the pane padding with Tern's interface size, as Tern 0.9.6 and
+  later do, so the traveler hands off to the in-pane cat without a sub-pixel to 2 px jump at
+  interface sizes other than 13 px.
+- The window half keeps booting after Tern stops one of its boot callbacks for running over the
+  50 ms budget. On a cold Tern 0.9.16 start a slice could pass 50 ms; Tern paused the timer and
+  the boot never resumed, so commands kept answering "still starting" until a plugin reload.
+  Each slice now schedules the next before it works and retries a cut-off step (alone in its
+  slice, at most five times); slices stop early when the slowest step so far would push them
+  past 20 ms; the overlay setup runs in four steps instead of one call; and the overlay's tick
+  timer has a backup, so a stopped tick no longer ends its timer chain.
 
 ### Changed
 
 - CI type-checks against a pinned `stencil-hq/tern-sdk` commit whose `tern.d.luau` matches Tern
-  0.8.3, instead of the moving `main` branch (`TERN_SDK_REF` still overrides it).
-- The disabled Carly provider's reason now says Tern (through 0.8.3) offers no constrained or
+  0.9.16 (`ba85dce`), instead of the moving `main` branch (`TERN_SDK_REF` still overrides it).
+- The disabled Carly provider's reason now says Tern (through 0.9.16) offers no constrained or
   hidden completion route.
 - Pane-switch exits (the cat's dive and the props closing) play as keyframe animations at the
   pack's own frame times instead of stepped transitions, which Tern redraws at display rate:

@@ -631,6 +631,16 @@ describe("render.travel", function()
 			end
 		end)
 
+		it("scales the padding with the interface size (Tern 0.9.6 and later)", function()
+			local function pad(layout: string, density: string, size: number): number
+				return travel.insets({ layout = layout, density = density, pane_headers = "Never", ui_size = size }).pad
+			end
+			-- Measured on Tern 0.9.16 with `ctl dump` at a 16 px interface: 3.69 and 4.92 px.
+			expect(math.abs(pad("Tiles", "Compact", 16) - 3.692)).toBeLessThan(0.001)
+			expect(math.abs(pad("Tiles", "Islands", 16) - 4.923)).toBeLessThan(0.001)
+			expect(pad("Studio", "Compact", 16)).toBe(0)
+		end)
+
 		it("adds a 30 px header scaled by the interface size when split panes wear one", function()
 			local function header(headers: string, size: number?): number
 				return travel.insets({ layout = "Tiles", density = "Compact", pane_headers = headers, ui_size = size }).header

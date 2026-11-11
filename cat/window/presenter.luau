@@ -28,12 +28,14 @@ export type View = {
 	seq: number,
 }
 
--- What the Tern glue reads about the focused pane: its id, program name and whether
--- its shell sits at the prompt. Only the derived booleans are kept.
+-- What the Tern glue reads about the focused pane: its id, program name, whether its shell
+-- reports the prompt and whether a command runs (`PaneInfo.running` present; the line itself is
+-- not read). Only the derived booleans are kept.
 export type FocusInfo = {
 	pane: number?,
 	program: string?,
 	at_prompt: boolean?,
+	running: boolean?,
 }
 
 export type Asset = {
@@ -197,18 +199,20 @@ local function observe(p: Presenter, name: string, payload: any)
 end
 
 -- Takes what the glue read about the focused pane. A pane back at its prompt runs nothing, which
--- also clears a full-screen mark whose finish event was missed.
+-- also clears a full-screen mark whose finish event was missed. Tern 0.9 also reports `at_prompt`
+-- while a pager such as `less` waits for a key, so a running command overrides it.
 local function setFocus(p: Presenter, info: FocusInfo)
 	local pane = info.pane
 	if pane == nil then
 		return
 	end
 	p.focused_pane = pane
-	if info.at_prompt == true then
+	local idle = info.at_prompt == true and info.running ~= true
+	if idle then
 		p.fullscreen_panes[pane] = nil
 	end
 	p.program_pane = pane
-	p.program_fullscreen = info.at_prompt ~= true and events.fullscreenProgram(info.program)
+	p.program_fullscreen = not idle and events.fullscreenProgram(info.program)
 end
 
 -- True while the focused pane runs a full-screen program: its command line started one, or its

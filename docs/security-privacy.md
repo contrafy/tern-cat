@@ -51,8 +51,8 @@ continues. The line is not stored, logged, put in an event, or returned. Focus m
 each running command. The window half also passes the line to `fullscreen(line)` (same file),
 which returns only whether it starts a full-screen program such as vim or less; the overlay
 keeps, in memory only, the ids of panes running one. For the focused pane it also reads
-`PaneInfo.program` (the running command's program name, for example `less`) and `at_prompt`, and
-keeps only the derived booleans.
+`PaneInfo.program` (the running command's program name, for example `less`), `at_prompt` and
+whether `PaneInfo.running` is set (never its `line`), and keeps only the derived booleans.
 
 Every event's attributes then pass through `sanitizeAttributes` (same file), which keeps only
 allowlisted keys per event type and only values of the declared kind: booleans, finite numbers,
@@ -69,7 +69,7 @@ or remote asset loading. Pack paths cannot be URLs (`:` is rejected).
 ### Autonomous AI is disabled
 
 The PRD asked for opt-in autonomous AI reactions. M0 found that Tern 0.6.2 has no hidden or
-constrained completion API (still true in 0.8.3): a scheduled Carly turn is a full Carly turn
+constrained completion API (still true in 0.9.16): a scheduled Carly turn is a full Carly turn
 with access to Lua, `run_command` and `send_input`, and "there is no separate Carly approval or
 per-turn access tier" ([sdk-capability-matrix.md](sdk-capability-matrix.md#7-carly)). Prompt
 wording cannot make that safe, so the `carly_schedule` provider in `cat/integrations/ai.luau` is

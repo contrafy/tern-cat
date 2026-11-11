@@ -59,6 +59,8 @@ export type Metrics = {
 	last_switch_ms: number,
 	max_switch_ms: number,
 	travel_installs: number,
+	-- Duration of each entry-load setup step (ms), by name.
+	setup_steps: { [string]: number },
 }
 
 export type Controller = {
@@ -186,6 +188,7 @@ local function new(ports: Ports): Controller
 			last_switch_ms = 0,
 			max_switch_ms = 0,
 			travel_installs = 0,
+			setup_steps = {},
 		},
 		focus_pane = nil,
 		overlay_info = nil,
@@ -405,23 +408,30 @@ local function switchPane(c: Controller, from: number?, to: number, scene: Scene
 	end
 end
 
+-- The pack assets a view needs (decoded and cached by packs/portals on first use).
+local function viewAssets(
+	c: Controller,
+	v: presenterMod.View
+): (packsMod.Asset?, presenterMod.ReactionAssets?, overlay.Transition?)
+	if v.hidden or c.pack == nil then
+		return nil, nil, nil
+	end
+	local pack = c.pack :: T.LoadedPack
+	local asset = packsMod.asset(c.packs, pack, v.animation)
+	local reactions: presenterMod.ReactionAssets? = nil
+	if v.reactions then
+		reactions = {
+			hover = packsMod.asset(c.packs, pack, presenterMod.HOVER_ANIMATION),
+			press = packsMod.asset(c.packs, pack, presenterMod.PRESS_ANIMATION),
+		}
+	end
+	return asset, reactions, transition(c, pack, v.transition)
+end
+
 local function render(c: Controller)
 	local p = c.presenter
 	local v = presenterMod.view(p)
-	local asset: packsMod.Asset? = nil
-	local reactions: presenterMod.ReactionAssets? = nil
-	local switch: overlay.Transition? = nil
-	if not v.hidden and c.pack then
-		local pack = c.pack :: T.LoadedPack
-		asset = packsMod.asset(c.packs, pack, v.animation)
-		if v.reactions then
-			reactions = {
-				hover = packsMod.asset(c.packs, pack, presenterMod.HOVER_ANIMATION),
-				press = packsMod.asset(c.packs, pack, presenterMod.PRESS_ANIMATION),
-			}
-		end
-		switch = transition(c, pack, v.transition)
-	end
+	local asset, reactions, switch = viewAssets(c, v)
 	local css, info = overlay.css(presenterMod.params(p, v, asset, reactions, switch))
 	if css ~= c.css_last then
 		c.ports.css(SHEET, css)
@@ -579,29 +589,70 @@ armTimer = function(c: Controller, ms: number?)
 	end)
 end
 
--- Entry-load setup; returns the measured duration in ms.
-local function start(c: Controller): number
+export type StartStep = { name: string, run: () -> () }
+
+-- Entry-load setup as idempotent steps the window runs in separate timer callbacks (see
+-- cat/window/budget.luau): read config.json and the shared state, decode the assets the first
+-- view needs, then install the sheet and start the tick. A cold start took up to 48 ms in one
+-- callback on Tern 0.9.16. The last step logs the total and the slowest step.
+local function startSteps(c: Controller): { StartStep }
 	local clock = c.ports.clock
-	local t0 = clock.now_ms()
-	c.ports.fs.mkdir(c.ports.paths.inbox)
-	loadConfig(c, true)
-	pollKv(c)
-	render(c)
-	local now = clock.now_ms()
-	c.next_cfg_ms = now + CONFIG_POLL_MS
-	c.next_kv_ms = now + KV_POLL_MS
-	armTimer(c, 0)
-	local dt = clock.now_ms() - t0
-	c.metrics.load_ms = dt
-	c.ports.log(
-		if dt > SLOW_MS then "warn" else "info",
-		string.format(
-			"tern-cat overlay setup took %.1f ms (pack %s)",
-			dt,
-			if c.pack then c.pack.manifest.id else "none"
-		)
-	)
-	return dt
+	local function timed(name: string, fn: () -> ()): StartStep
+		return {
+			name = name,
+			run = function()
+				local t0 = clock.now_ms()
+				fn()
+				local dt = clock.now_ms() - t0
+				c.metrics.setup_steps[name] = dt
+			end,
+		}
+	end
+	return {
+		timed("overlay config", function()
+			c.ports.fs.mkdir(c.ports.paths.inbox)
+			loadConfig(c, true)
+			pollKv(c)
+		end),
+		timed("overlay assets", function()
+			viewAssets(c, presenterMod.view(c.presenter))
+		end),
+		timed("overlay sheet", function()
+			render(c)
+			local now = clock.now_ms()
+			c.next_cfg_ms = now + CONFIG_POLL_MS
+			c.next_kv_ms = now + KV_POLL_MS
+			armTimer(c, 0)
+		end),
+		{
+			name = "overlay ready",
+			run = function()
+				local total, slowest = 0, 0
+				for _, dt in c.metrics.setup_steps do
+					total += dt
+					slowest = math.max(slowest, dt)
+				end
+				c.metrics.load_ms = total
+				c.ports.log(
+					if slowest > SLOW_MS then "warn" else "info",
+					string.format(
+						"tern-cat overlay setup took %.1f ms (slowest step %.1f ms, pack %s)",
+						total,
+						slowest,
+						if c.pack then c.pack.manifest.id else "none"
+					)
+				)
+			end,
+		},
+	}
+end
+
+-- Entry-load setup in one call (tests and hosts without a budget); returns the duration in ms.
+local function start(c: Controller): number
+	for _, step in startSteps(c) do
+		step.run()
+	end
+	return c.metrics.load_ms
 end
 
 local function rerender(c: Controller)
@@ -808,6 +859,7 @@ return {
 	MAX_INBOX_FILES = MAX_INBOX_FILES,
 	new = new,
 	start = start,
+	startSteps = startSteps,
 	onWindowEvent = onWindowEvent,
 	request = request,
 	toggleOverlay = toggleOverlay,

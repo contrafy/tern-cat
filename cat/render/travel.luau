@@ -606,15 +606,17 @@ local function plan(input: PlanInput): Trip?
 	}
 end
 
--- What Tern's settings say about the in-pane cat's host (Tern 0.8.3, measured with `ctl dump`):
--- `layout`, `density`, `pane_headers` and the interface size (`ui_font_size`, else `font_size`).
+-- What Tern's settings say about the in-pane cat's host (measured with `ctl dump` on Tern 0.8.3
+-- and 0.9.16): `layout`, `density`, `pane_headers` and the interface size (`ui_font_size`, else
+-- `font_size`).
 export type InsetSettings = { layout: string?, density: string?, pane_headers: string?, ui_size: number? }
 
 local TERN_UI_PX = 13
 local HEADER_PX = 30
 
 -- The pane padding (Islands 4 px, Compact tiles 3 px, other Compact layouts 0) and the header a
--- split pane wears unless `pane_headers` is Never (30 px at a 13 px interface, scaled with it).
+-- split pane wears unless `pane_headers` is Never (30 px), both at a 13 px interface and scaled
+-- with it (Tern 0.9.6 scales the padding; 0.8.3 kept it fixed, a sub-pixel to 2 px difference).
 -- Unknown values take Tern's defaults (Tiles, Compact, Never, 13 px).
 local function insets(s: InsetSettings): Insets
 	local layout = if type(s) == "table" and type(s.layout) == "string" then s.layout else "Tiles"
@@ -624,12 +626,13 @@ local function insets(s: InsetSettings): Insets
 	if type(size) ~= "number" or not (size >= 8 and size <= 32) then
 		size = TERN_UI_PX
 	end
+	local scale = (size :: number) / TERN_UI_PX
 	local pad = if density == "Islands"
 		then 4
 		elseif layout == "Rail" or layout == "Float" or layout == "Studio" then 0
 		else 3
-	local header = if headers == "Split" or headers == "Always" then HEADER_PX * (size :: number) / TERN_UI_PX else 0
-	return { pad = pad, header = header }
+	local header = if headers == "Split" or headers == "Always" then HEADER_PX else 0
+	return { pad = pad * scale, header = header * scale }
 end
 
 local function timing(trip: Trip?): Timing

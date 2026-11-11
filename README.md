@@ -30,7 +30,7 @@ tern plugin install github.com/contrafy/tern-cat --force   # update
 tern plugin remove tern-cat                                # uninstall
 ```
 
-Requires Tern 0.6.2 or later; tested with Tern 0.8.3. Removing the plugin keeps the cat's data
+Requires Tern 0.6.2 or later; tested with Tern 0.9.16. Removing the plugin keeps the cat's data
 folder (state, config, user packs); [docs/usage.md](docs/usage.md#uninstall) says where it is if
 you want it gone too.
 
@@ -100,8 +100,8 @@ Public beta (0.x). Known limits:
   [docs/overlay-upstream-rfc.md](docs/overlay-upstream-rfc.md).
 - Overlay reactions are visual only and need the pointer over or near the cat; the overlay cat
   cannot be dragged or petted.
-- Autonomous AI behavior is disabled: Tern (through 0.8.3) offers no constrained model route.
-- Tested on macOS (Apple silicon) with Tern 0.8.3 (0.2.0 with Tern 0.6.2); Linux runs unit tests
+- Autonomous AI behavior is disabled: Tern (through 0.9.16) offers no constrained model route.
+- Tested on macOS (Apple silicon) with Tern 0.9.16 (0.2.0 with Tern 0.6.2); Linux runs unit tests
   in CI. A real Linux Tern run is blocked on closed-beta access (Linux builds exist behind
   build.stencil.so sign-in).
 

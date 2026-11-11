@@ -27,7 +27,7 @@ bash scripts/fetch-types.sh
 
 Writes `types/tern.d.luau` (gitignored) with `tern plugin types` when the `tern` CLI is present,
 else downloads it from `stencil-hq/tern-sdk` (`TERN_SDK_REF`, default a pinned commit whose types
-match Tern 0.8.3, the tested version). The type checker and editor tooling read it. Tern has no
+match Tern 0.9.16, the tested version). The type checker and editor tooling read it. Tern has no
 plugin API version, so regenerate after upgrading Tern.
 
 ## Checks
@@ -164,9 +164,11 @@ The sandbox sets `STENCIL_LOG=warn,stencil=info,tern::plugin=debug` and writes d
 logs to `$SB/logs` (`STENCIL_LOG_DIR`). Plugin load errors, budget trips and plugin log lines
 appear there. `tern plugin list --json` and `tern plugin reload` also report load problems.
 
-Tern disables a hook that exceeds its budget (host 2 s, window 50 ms per call) until the next
-reload ([sdk-capability-matrix.md](sdk-capability-matrix.md#1-host-hooks)); look for that in the
-logs when the cat stops reacting.
+Tern stops a hook that exceeds its budget (host 2 s, window 50 ms per call). Up to 0.8.3 the hook
+then stays off until the next reload; 0.9.6 and later pause it (5 s, doubling for repeated trips)
+and log `plugin hook exceeded its budget; paused` and `resumed after its pause`
+([sdk-capability-matrix.md](sdk-capability-matrix.md#1-host-hooks)); look for those in the logs
+when the cat stops reacting.
 
 ## Block goldens: `scripts/visual.sh` (needs Tern)
 
@@ -218,6 +220,49 @@ Checks (each prints `PASS` or `FAIL`; exit code non-zero if any fail):
 On exit (including failure) it quits both windows and stops the sandbox daemon. The windows show
 your real signed-in Tern account (sign-in is not isolated by `TERN_CONFIG_DIR`), so crop
 screenshots before sharing them.
+
+## Tern compatibility: `scripts/compat.sh` (needs Tern and a desktop)
+
+```sh
+bash scripts/compat.sh      # SB defaults to /tmp/tern-cat-dev/compat-<tern version>
+```
+
+Run it after every Tern update and before every release ([release.md](release.md)). Everything
+runs in sandboxes under `$SB`; it opens visible windows (the smoke test's two, then one probe
+window) and, on exit, quits them and stops the sandbox daemon. Re-running is safe. Steps:
+
+1. Records `tern --version` in `$SB/compat/version.txt`.
+2. Writes `tern plugin types` to `$SB/compat/types/` and compares it with the pinned tern-sdk
+   types (`SDK_REF` in `scripts/fetch-types.sh`; needs network): identical, or a `+N -M` count,
+   the changed declarations and the full diff in `$SB/compat/types.diff`. A difference is
+   reported, not a failure: classify it in [sdk-capability-matrix.md](sdk-capability-matrix.md)
+   and re-pin.
+3. Runs `scripts/check.sh`, `scripts/visual.sh` (`$SB/visual`; view the shots) and
+   `scripts/smoke-window.sh` (`$SB/smoke`), logging to `$SB/compat/`.
+4. The DOM-hook probe (`tests/compat/dom_probe.py`, Python standard library): links snapshots of
+   tern-cat and of `tests/compat/probe` (a sandbox-only plugin whose **Report** command writes
+   what `window.luau` reads from Tern: the inset settings and `reduce_motion`, the focused
+   `PaneInfo`, the tab layout, the chord's binding), opens a control window, splits it and checks
+   with `ctl dump`, `ctl pick`, `ctl css` and `ctl stats`:
+   - `div.tn-stage > section.tn-pane` (two, ratio-exact), `.on:not(.off)` on the focused pane
+     only, and in each `div.tn-body > div.tv` with `div.tv-fx.top` (covering the view),
+     `div.tv-grid > div.tv-fx` and `div.tv-layer`;
+   - the view's inset against `travel.insets`, at Tern's defaults and again in a second window
+     with `pane_headers` Split, Islands and a 16 px interface;
+   - `--tv-px`/`--tv-py` (a probe sheet's pseudo-element must land on the grid's origin) and,
+     statically in the Tern executable, `var(--tv-aside)`;
+   - the overlay cat (`div.tv-fx.top::after`, picked) at all four corners, a click on it keeping
+     the terminal focused and typing running; `walk` (travel sheet installed and cleared, one
+     cat) and `portal` switches; the cat stepping aside in `less`; **Open cat** floating a
+     focused `section.tn-pane.pip.pip-focus.pip-r.pip-b` whose block renders in
+     `div.tv-cover > div.sf-region.sf-main` with `.sf-img-frame`, whose Pet and Settings buttons
+     work and which closes; system Reduce Motion stopping the cat's animation.
+
+   It exits non-zero with the missing or changed hooks listed; results and shots are in
+   `$SB/compat/dom-probe.txt` and `$SB/compat/shots/`. Pointer reactions and transition frames
+   still need a look: shoot frames as in [README screenshots](#readme-screenshots-needs-tern-and-a-desktop).
+
+The summary is in `$SB/compat/summary.txt`.
 
 ## Soak test: `scripts/soak.sh` (needs Tern, a desktop and `uv`)
 

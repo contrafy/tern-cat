@@ -12,7 +12,7 @@
   `sounds.json`). Changing a format bumps its schema version and adds a migration; a release
   never silently drops user state.
 - Tern has no plugin API version. Each release notes the Tern version it was tested against
-  (currently 0.8.3) in the changelog entry. Bump the pinned `tern-sdk` commit in
+  (currently 0.9.16) in the changelog entry. Bump the pinned `tern-sdk` commit in
   `scripts/fetch-types.sh` (CI's types) to one whose `plugins/tern.d.luau` matches that version's
   `tern plugin types`.
 
@@ -35,7 +35,12 @@ Work through this on a clean checkout of the release commit.
      `git status` clean.
 5. **Credits.** Every new asset is listed in `assets/CREDITS.md` with author and license, and
    each pack has `LICENSE.txt`.
-6. **Sandbox smoke** (needs Tern; see [develop-with-omp-tern.md](develop-with-omp-tern.md)). In a
+6. **Tern compatibility** (needs Tern and a desktop): `bash scripts/compat.sh` passes on the
+   Tern version the release names (types, checks, goldens, window smoke and the DOM-hook probe;
+   see [develop-with-omp-tern.md](develop-with-omp-tern.md#tern-compatibility-scriptscompatsh-needs-tern-and-a-desktop)).
+   Run it after every Tern update too, and record what changed in
+   [sdk-capability-matrix.md](sdk-capability-matrix.md).
+7. **Sandbox smoke** (needs Tern; see [develop-with-omp-tern.md](develop-with-omp-tern.md)). In a
    shell that sourced `scripts/sandbox-env.sh`:
    - `bash scripts/dev-link.sh`, then `tern plugin list` shows tern-cat without problems;
    - in a sandbox window: the overlay cat appears, clicks and typing pass through it, the block
@@ -43,16 +48,16 @@ Work through this on a clean checkout of the release commit.
      until enabled;
    - `tern plugin reload` keeps the cat's identity and stats; two windows do not double count;
    - `$SB/logs` shows no plugin errors or budget trips.
-7. **Install test** (needs Tern). In a fresh sandbox (`SB=/tmp/tern-cat-release source
+8. **Install test** (needs Tern). In a fresh sandbox (`SB=/tmp/tern-cat-release source
    scripts/sandbox-env.sh`), after pushing the tag:
    `tern plugin install github.com/contrafy/tern-cat`, then `tern plugin list`.
-8. **Screenshots.** Retake any screenshot whose content changed
+9. **Screenshots.** Retake any screenshot whose content changed
    ([recipe](develop-with-omp-tern.md#readme-screenshots-needs-tern-and-a-desktop)). Shots must
    not show personal paths, user names, hostnames, avatars, prompts or account details: use the
    sandbox, a neutral working directory and a plain prompt, crop the window chrome, and redact
    anything left.
-9. **Tag.** `git tag -a vX.Y.Z -m "tern-cat X.Y.Z"` and `git push origin vX.Y.Z`.
-10. **GitHub release.** Create a release from the tag titled `vX.Y.Z`, paste the changelog
+10. **Tag.** `git tag -a vX.Y.Z -m "tern-cat X.Y.Z"` and `git push origin vX.Y.Z`.
+11. **GitHub release.** Create a release from the tag titled `vX.Y.Z`, paste the changelog
     section, attach updated screenshots, and include the install command:
 
     ```sh

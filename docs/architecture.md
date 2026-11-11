@@ -55,12 +55,27 @@ The design follows from the M0 findings in [sdk-capability-matrix.md](sdk-capabi
 
 ### Window entry boot
 
-Tern disables a window hook that runs longer than 50 ms. Compiling every module in one call took
-26-45 ms and once exceeded the budget, so `window.luau` only registers commands, window events
-and the chord at top level, then `require`s the modules in dependency order in `tern.timer(0)`
-slices of at most about 15 ms (`SLICE_MS`), and finally starts the controller and registers the
-Carly exports. Until then, commands toast "Tern Cat is still starting; try again in a moment."
-Measured: 2-3 slices of 15-17 ms; see [performance.md](performance.md).
+A window hook that runs longer than 50 ms is stopped with `tern: <hook> exceeded 50 ms`, which
+`pcall` cannot catch. Tern up to 0.8.3 then disabled the hook until reload; 0.9.6 and later
+pause it (every timer callback, 5 s and doubling) and run timers that came due once the pause
+ends, on the window's next event. Compiling every module in one call took 26-45 ms and a cold
+start's overlay setup up to 48 ms, so `window.luau` only registers commands, window events and
+the chord at top level, then `cat/window/budget.luau` runs the boot as steps (each `require` in
+dependency order, the controller, its setup steps from `controller.startSteps`: config, assets,
+sheet, then publishing it and the Carly exports) in `tern.timer(0)` slices:
+
+- a slice starts another step only while its elapsed time plus the slowest step so far stays
+  within 20 ms (`budget.SLICE_MS`); its first step always runs;
+- each slice schedules the next one before it works, so when Tern stops a slice the next one
+  runs after the pause and retries the cut-off step in a slice of its own; a step that keeps
+  failing is given up after 5 attempts with an error in the log (every step is idempotent);
+- the overlay's tick timers are guarded the same way (`budget.guard`: a backup timer, cancelled
+  when the callback returns, reruns a stopped tick 1 s later), so a stopped tick no longer ends
+  the timer chain.
+
+Until the boot finishes, commands toast "Tern Cat is still starting; try again in a moment."
+Measured on Tern 0.9.16 cold starts: 6-7 slices (31 once), slowest 18-36 ms, ready in
+0.7-1.5 s; see [performance.md](performance.md).
 
 ### Renderers
 
@@ -145,12 +160,13 @@ share an edge. Every other switch (tab or session switch, a zoomed tab, a floati
 old pane, `auto` between panes that only meet at a corner) plays the `portal` prop's entrance
 (the old pane's cat lingers briefly, then the cat climbs out of a portal in the new pane).
 
-Hosts. Tern 0.8.3 tiles `div.tn-stage` exactly by the ratios of `cx.session:layout(tab)` (pane
-rectangles are ratio products of the stage in every layout), the stage is `position: absolute`
-and holds a `section.tn-pane` for every pane of every tab and session, and its `::after` spans
-all panes, draws above dividers and is clipped only by the panel. The traveler is drawn there,
-placed with `calc(X% ± Npx)` in stage percentages, so no pixel size is read. None of this is
-documented Tern API; it was measured with `tern ctl dump` (see the risks below).
+Hosts. Tern (0.8.3 to 0.9.16) tiles `div.tn-stage` exactly by the ratios of
+`cx.session:layout(tab)` (pane rectangles are ratio products of the stage in every layout), the
+stage is `position: absolute` and holds a `section.tn-pane` for every pane of every tab and
+session, and its `::after` spans all panes, draws above dividers and is clipped only by the
+panel. The traveler is drawn there, placed with `calc(X% ± Npx)` in stage percentages, so no
+pixel size is read. None of this is documented Tern API; it was measured with `tern ctl dump`
+(see the risks below) and `scripts/compat.sh` checks it.
 
 Per switch (`cat/window/controller.luau`, `cat/render/travel.luau`):
 
@@ -192,11 +208,12 @@ sheet (`overlay.Info.entrance`): the focused-pane rules again with a `div.tn-sta
 controller installs it as the `travel` sheet for a switch it cannot walk and removes it 200 ms
 after the entrance; removing it restarts nothing (the emerge has ended, every other name stays).
 
-Insets (Tern 0.8.3, measured per layout): the in-pane cat's host is inset from its pane by the
-pane padding (Compact density: 3 px in Tiles, 0 in Rail, Float and Studio; Islands: 4 px) and,
-when split panes wear headers (`pane_headers` Split or Always), a 30 px header scaled by the
-interface size (`ui_font_size`, else `font_size`, over 13 px). `travel.insets` maps the settings
-to these numbers.
+Insets (measured per layout on Tern 0.8.3 and 0.9.16): the in-pane cat's host is inset from its
+pane by the pane padding (Compact density: 3 px in Tiles, 0 in Rail, Float and Studio; Islands:
+4 px) and, when split panes wear headers (`pane_headers` Split or Always), a 30 px header; both
+are for a 13 px interface and scale with it (`ui_font_size`, else `font_size`, over 13 px; Tern
+0.8.3 did not scale the padding). `travel.insets` maps the settings to these numbers;
+`scripts/compat.sh` checks them against the live DOM.
 
 Cost: the focus handler (layout and settings read, plan, CSS) took 0.1-1.0 ms in a sandbox
 window (logged at debug level with each switch); the sheet is a few KB plus the walk, run,
@@ -220,19 +237,23 @@ Risks and limits:
 ### Full-screen programs
 
 At a top corner the cat covers the end of the first rows, where full-screen programs (vim, less,
-htop) draw title and status bars. Tern 0.8.3 exposes no alternate-screen state: `PaneInfo` and
-the window events have no such field, and the pane's DOM (`ctl dump`/`ctl tree`) is identical at
-the prompt and in `less`, `vim` or `top` apart from the cursor shape class. So the overlay steps
-aside from window-side state (`rendering.fullscreen_behavior`: `hide`, `shrink`, `stay`):
+htop) draw title and status bars. Tern (0.8.3 to 0.9.16) exposes no alternate-screen state:
+`PaneInfo` and the window events have no such field, and the pane's DOM (`ctl dump`/`ctl tree`)
+is identical at the prompt and in `less`, `vim` or `top` apart from the cursor shape class. So the
+overlay steps aside from window-side state (`rendering.fullscreen_behavior`: `hide`, `shrink`,
+`stay`):
 
 - `command_started` lines go through `events.fullscreen` (terminal editors, pagers, monitors,
   tmux; past `sudo`/`env` wrappers and in any pipe stage), which marks the pane at once;
   `command_finished` and `pane_closed` clear it.
 - After every window event and on every timer tick the glue reads the focused pane's
-  `PaneInfo.program` and `at_prompt`. `program` is the running command's program as typed (`vim`,
-  `top`, but `v` for an alias and `git` for `git log | less`), so it adds nothing for new
-  commands; it catches a full-screen program already running when the window (re)loads, and a
-  pane at its prompt clears a mark whose finish event was missed.
+  `PaneInfo.program`, `at_prompt` and whether `running` is set (not its line). `program` is the
+  running command's program as typed (`vim`, `top`, but `v` for an alias and `git` for
+  `git log | less`), so it adds nothing for new commands; it catches a full-screen program
+  already running when the window (re)loads, and a pane at its prompt clears a mark whose finish
+  event was missed. A pane counts as at its prompt only when `at_prompt` is true and nothing
+  runs: Tern 0.9 also reports `at_prompt` while `less` waits for a key (`vim` and `top` report
+  `false`).
 - `focus` events move the check to the newly focused pane. The sheet change lags the DOM focus
   change by one event round trip (about 10 ms from Enter to the hidden sheet in a sandbox), so
   the emerge may start in the full-screen pane for a moment before the hidden sheet replaces it.

@@ -89,7 +89,7 @@ Detailed reference. Settings: [configuration.md](configuration.md). Privacy: [se
 ### Global hide chord
 
 `ctrl+alt+cmd+c` runs **Hide or show the overlay cat** in any window. It is free in Tern's
-default keymap (checked on 0.6.2 and 0.8.3). Your own keybinds always win over plugin binds, so
+default keymap (checked on 0.6.2, 0.8.3 and 0.9.16). Your own keybinds always win over plugin binds, so
 you can move or remove it in Tern's `settings.json` (`<config>/settings.json`; macOS
 `~/Library/Application Support/Tern/`, Linux `~/.config/tern/`):
 
@@ -203,7 +203,7 @@ journal text or reasons. tern-cat never starts Carly turns (`ask_carly`, `carly.
 ## AI status
 
 Autonomous AI behavior is disabled. `ai_status()` reports `enabled = false` and the
-`carly_schedule` provider reports: "Disabled: Tern (through 0.8.3) offers no constrained or hidden
+`carly_schedule` provider reports: "Disabled: Tern (through 0.9.16) offers no constrained or hidden
 completion route. Scheduled Carly turns run with full tool access (commands, input), so tern-cat
 will not start them." Ordinary behavior needs no AI. The AI policy code (turn budget, redaction,
 response allowlist, mock provider) exists and is tested so a constrained route can be adopted
@@ -258,7 +258,7 @@ command runs, and at volume 0; at most one sound every 2 seconds.
   the overlay ([sprite-pack-spec.md](sprite-pack-spec.md)).
 - `ai.share_command_output` is accepted but has no effect in this version.
 - Recovery notes (for example after a corrupt save file) are shown until the next plugin reload.
-- Tested on macOS (Apple silicon) with Tern 0.8.3 (0.2.0 with Tern 0.6.2). Linux: unit tests in CI
+- Tested on macOS (Apple silicon) with Tern 0.9.16 (0.2.0 with Tern 0.6.2). Linux: unit tests in CI
   only. A real Linux Tern run is blocked on closed-beta access: Linux builds exist behind
   build.stencil.so sign-in. The Linux sound probe was checked in Docker (Ubuntu dash, Alpine
   busybox), not inside Tern.
