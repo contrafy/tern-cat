@@ -50,6 +50,9 @@ the Tern 0.8.3 delta in [docs/sdk-capability-matrix.md](docs/sdk-capability-matr
   a key as at its prompt (`PaneInfo.at_prompt`), which cleared the full-screen mark within a
   second; a pane now counts as at its prompt only while no command runs (`PaneInfo.running`
   unset; its line is never read).
+- The walk between panes scales the pane padding with Tern's interface size, as Tern 0.9.6 and
+  later do, so the traveler hands off to the in-pane cat without a sub-pixel to 2 px jump at
+  interface sizes other than 13 px.
 
 ### Changed
 

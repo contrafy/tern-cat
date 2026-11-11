@@ -145,12 +145,13 @@ share an edge. Every other switch (tab or session switch, a zoomed tab, a floati
 old pane, `auto` between panes that only meet at a corner) plays the `portal` prop's entrance
 (the old pane's cat lingers briefly, then the cat climbs out of a portal in the new pane).
 
-Hosts. Tern 0.8.3 tiles `div.tn-stage` exactly by the ratios of `cx.session:layout(tab)` (pane
-rectangles are ratio products of the stage in every layout), the stage is `position: absolute`
-and holds a `section.tn-pane` for every pane of every tab and session, and its `::after` spans
-all panes, draws above dividers and is clipped only by the panel. The traveler is drawn there,
-placed with `calc(X% ± Npx)` in stage percentages, so no pixel size is read. None of this is
-documented Tern API; it was measured with `tern ctl dump` (see the risks below).
+Hosts. Tern (0.8.3 to 0.9.16) tiles `div.tn-stage` exactly by the ratios of
+`cx.session:layout(tab)` (pane rectangles are ratio products of the stage in every layout), the
+stage is `position: absolute` and holds a `section.tn-pane` for every pane of every tab and
+session, and its `::after` spans all panes, draws above dividers and is clipped only by the
+panel. The traveler is drawn there, placed with `calc(X% ± Npx)` in stage percentages, so no
+pixel size is read. None of this is documented Tern API; it was measured with `tern ctl dump`
+(see the risks below) and `scripts/compat.sh` checks it.
 
 Per switch (`cat/window/controller.luau`, `cat/render/travel.luau`):
 
@@ -192,11 +193,12 @@ sheet (`overlay.Info.entrance`): the focused-pane rules again with a `div.tn-sta
 controller installs it as the `travel` sheet for a switch it cannot walk and removes it 200 ms
 after the entrance; removing it restarts nothing (the emerge has ended, every other name stays).
 
-Insets (Tern 0.8.3, measured per layout): the in-pane cat's host is inset from its pane by the
-pane padding (Compact density: 3 px in Tiles, 0 in Rail, Float and Studio; Islands: 4 px) and,
-when split panes wear headers (`pane_headers` Split or Always), a 30 px header scaled by the
-interface size (`ui_font_size`, else `font_size`, over 13 px). `travel.insets` maps the settings
-to these numbers.
+Insets (measured per layout on Tern 0.8.3 and 0.9.16): the in-pane cat's host is inset from its
+pane by the pane padding (Compact density: 3 px in Tiles, 0 in Rail, Float and Studio; Islands:
+4 px) and, when split panes wear headers (`pane_headers` Split or Always), a 30 px header; both
+are for a 13 px interface and scale with it (`ui_font_size`, else `font_size`, over 13 px; Tern
+0.8.3 did not scale the padding). `travel.insets` maps the settings to these numbers;
+`scripts/compat.sh` checks them against the live DOM.
 
 Cost: the focus handler (layout and settings read, plan, CSS) took 0.1-1.0 ms in a sandbox
 window (logged at debug level with each switch); the sheet is a few KB plus the walk, run,
