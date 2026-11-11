@@ -82,6 +82,10 @@ local function gestureEv(gesture: string, animation: string?): any
 	})
 end
 
+local function agentEv(signal: string): any
+	return events.agent({ id = nextId(), time = factories.WALL_S, scope = "window", pane = 3, signal = signal :: any })
+end
+
 -- Runs ambient ticks back to back while the user stays active, returning animation counts.
 local function ambient(n: number, opts: CtxOpts?): ({ [string]: number }, { any })
 	local o: CtxOpts = opts or {}
@@ -773,6 +777,143 @@ describe("core.behavior", function()
 		end)
 	end)
 
+	describe("agent reactions", function()
+		it("celebrates a finished turn, droops at a failed one and looks up when an agent exits", function()
+			local want = {
+				done = { id = "react.agent_done", anims = { happy = true, hop = true } },
+				failed = { id = "react.agent_failed", anims = { disappointed = true } },
+				exited = { id = "react.agent_exited", anims = { look = true } },
+			}
+			for signal, w in want do
+				for seed = 1, 20 do
+					local _, d = behavior.react(
+						behavior.newState(0),
+						agentEv(signal),
+						makeCtx({ now_ms = 10, seed = seed, config = eagerConfig() })
+					)
+					expect(d.id).toBe(w.id)
+					expect(w.anims[d.animation]).toBe(true)
+					expect(d.sound).toBeNil()
+					expect(d.reason).toContain("agent")
+				end
+			end
+		end)
+
+		it("stares or looks with a meow when an agent waits for input, even at a zero sample rate", function()
+			local seen: { [string]: boolean } = {}
+			for seed = 1, 30 do
+				local _, d = behavior.react(
+					behavior.newState(0),
+					agentEv("waiting"),
+					makeCtx({ now_ms = 10, seed = seed, config = eagerConfig({ reaction_sample_rate = 0 }) })
+				)
+				expect(d.id).toBe("react.agent_waiting")
+				expect(d.animation == "stare" or d.animation == "look").toBeTruthy()
+				expect(d.sound).toBe("meow")
+				seen[d.animation] = true
+			end
+			expect(seen.stare).toBe(true)
+			expect(seen.look).toBe(true)
+		end)
+
+		it("samples finished turns like commands", function()
+			local _, none = behavior.react(
+				behavior.newState(0),
+				agentEv("done"),
+				makeCtx({ now_ms = 10, config = eagerConfig({ reaction_sample_rate = 0 }) })
+			)
+			expect(none).toBeNil()
+			local reacted = 0
+			local s = behavior.newState(0)
+			local r = rng.new(5)
+			local config = eagerConfig({ reaction_sample_rate = 0.3 })
+			for i = 1, 1000 do
+				local d
+				s, d = behavior.react(s, agentEv("done"), makeCtx({ now_ms = i * 2000, rng = r, config = config }))
+				if d then
+					reacted += 1
+				end
+			end
+			expect(reacted).toBeGreaterThan(200)
+			expect(reacted).toBeLessThan(400)
+		end)
+
+		it("rate-limits each outcome and the waiting cue by the configured cooldown", function()
+			local config = eagerConfig({ reaction_cooldown_s = 30 })
+			local s = behavior.newState(0)
+			local d
+			s, d = behavior.react(s, agentEv("done"), makeCtx({ now_ms = 1000, config = config }))
+			expect(d).notToBeNil()
+			s, d = behavior.react(s, agentEv("done"), makeCtx({ now_ms = 30999, config = config }))
+			expect(d).toBeNil()
+			s, d = behavior.react(s, agentEv("failed"), makeCtx({ now_ms = 30999, config = config }))
+			expect(d).notToBeNil()
+			s, d = behavior.react(s, agentEv("waiting"), makeCtx({ now_ms = 31000, config = config }))
+			expect(d.id).toBe("react.agent_waiting")
+			s, d = behavior.react(s, agentEv("waiting"), makeCtx({ now_ms = 60999, config = config }))
+			expect(d).toBeNil()
+			s, d = behavior.react(s, agentEv("waiting"), makeCtx({ now_ms = 61000, config = config }))
+			expect(d).notToBeNil()
+		end)
+
+		it("stays quiet while allow_agent_reactions is off, without touching the other toggles", function()
+			local config = eagerConfig({ allow_agent_reactions = false })
+			for _, signal in { "done", "failed", "exited", "waiting" } do
+				local _, d =
+					behavior.react(behavior.newState(0), agentEv(signal), makeCtx({ now_ms = 10, config = config }))
+				expect(d).toBeNil()
+			end
+			local _, cmd =
+				behavior.react(behavior.newState(0), finished("build", 1), makeCtx({ now_ms = 10, config = config }))
+			expect(cmd).notToBeNil()
+			local quiet = eagerConfig({ allow_command_reactions = false, allow_pane_reactions = false })
+			local _, agent =
+				behavior.react(behavior.newState(0), agentEv("waiting"), makeCtx({ now_ms = 10, config = quiet }))
+			expect(agent).notToBeNil()
+		end)
+
+		it("follows the precedence: snooze, quiet hours and focus mode silence it, reduced motion stills it", function()
+			for _, env in { { snoozed = true }, { quiet_hours = true }, { busy = true } } do
+				for _, signal in { "done", "failed", "waiting" } do
+					local _, d = behavior.react(
+						behavior.newState(0),
+						agentEv(signal),
+						makeCtx({ now_ms = 10, config = eagerConfig(), env = env })
+					)
+					expect(d).toBeNil()
+				end
+			end
+			local config = eagerConfig()
+			config.personality.energy = 1
+			for seed = 1, 30 do
+				local _, d = behavior.react(
+					behavior.newState(0),
+					agentEv("done"),
+					makeCtx({ now_ms = 10, seed = seed, config = config, env = { reduced_motion = true } })
+				)
+				expect(d.animation ~= "hop").toBeTruthy()
+				expect(d.intensity).toBe(0)
+			end
+		end)
+
+		it("may wake a napping cat but is not user activity (no 'you're back' look)", function()
+			local wakeful = eagerConfig()
+			wakeful.personality.curiosity = 1
+			local s = asleepState(0)
+			local d
+			s, d = behavior.react(s, agentEv("waiting"), makeCtx({ now_ms = 5000, config = wakeful }))
+			expect(d.animation).toBe("wake")
+			expect(s.last_activity_ms).toBe(0)
+			s, d = behavior.tick(s, makeCtx({ now_ms = s.until_ms, config = wakeful }))
+			expect(d.id).toBe("react.agent_waiting")
+			local off = eagerConfig({ allow_agent_reactions = false })
+			off.personality.curiosity = 1
+			local s2, d2 = behavior.react(asleepState(0), agentEv("waiting"), makeCtx({ now_ms = 5000, config = off }))
+			expect(d2).toBeNil()
+			expect(s2.posture).toBe("asleep")
+		end)
+	end)
+
 	describe("activity and waking", function()
 		it("records user activity from focus and commands", function()
 			local s = behavior.newState(0)
@@ -882,6 +1023,7 @@ describe("core.behavior", function()
 						allow_pacing = false,
 						allow_command_reactions = false,
 						allow_pane_reactions = false,
+						allow_agent_reactions = false,
 						allow_idle_sleep = false,
 					},
 				}),
@@ -921,7 +1063,7 @@ describe("core.behavior", function()
 					state, d = behavior.tick(state, ctx)
 				else
 					local ev
-					local kind = driver:int(1, 6)
+					local kind = driver:int(1, 7)
 					if kind == 1 then
 						ev = finished(cats[driver:int(1, #cats)], driver:int(0, 2))
 					elseif kind == 2 then
@@ -930,6 +1072,9 @@ describe("core.behavior", function()
 						ev = paneEv(if driver:chance(0.5) then "created" else "closed")
 					elseif kind == 4 then
 						ev = focusEv()
+					elseif kind == 5 then
+						local signals = { "done", "failed", "exited", "waiting" }
+						ev = agentEv(signals[driver:int(1, #signals)])
 					else
 						ev = gestureEv(gestures[driver:int(1, #gestures)], performs[driver:int(1, #performs)])
 					end
@@ -993,6 +1138,9 @@ describe("core.behavior", function()
 					end
 					if not b.allow_pane_reactions then
 						expect(string.find(d.id, "react.pane", 1, true)).toBeNil()
+					end
+					if not b.allow_agent_reactions then
+						expect(string.find(d.id, "react.agent", 1, true)).toBeNil()
 					end
 				end
 			end

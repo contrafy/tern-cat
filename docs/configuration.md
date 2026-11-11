@@ -72,6 +72,11 @@ weights ([architecture.md](architecture.md#behavior-engine)).
 | `chaos` | `personality`: curiosity 1, mischief 1, energy 0.95, talkativeness 0.4. Every `allow_*` toggle on, `reaction_sample_rate` 0.8, `reaction_cooldown_s` 10. About three times as many swats and hops, twice as much walking. |
 | `zen` | `personality`: curiosity 0.4, mischief 0.1, energy 0.15, talkativeness 0.05. `allow_visual_obscuring`, `allow_swats` and `allow_pacing` off, `allow_idle_sleep` on, `reaction_sample_rate` 0.05, `reaction_cooldown_s` 600. No overlay over terminal panes; mostly sitting and sleeping. |
 
+No preset turns `allow_agent_reactions` off: an agent waiting for you is worth a glance even in
+`quiet_office`, where finished turns rarely get a reaction (sample rate 0.1, cooldown 180 s), the
+waiting cue is a `stare` or `look` at most every 180 s, the meow needs sound to be on, and focus
+mode holds every reaction while a command runs. Set `"allow_agent_reactions": false` to stop them.
+
 ## Keys
 
 `schema_version` (integer, default `1`) is the file format version. Leave it as is; older
@@ -128,15 +133,16 @@ All numbers from 0 to 1. The settings page shows them as percentages.
 | `allow_command_reactions` | boolean | `true` | React to commands finishing (and `stare` at `sudo`). |
 | `allow_development_reactions` | boolean | `true` | Development-specific reactions: `flop` after 3 failed test runs in a row, the `ls` swat. |
 | `allow_pane_reactions` | boolean | `true` | `look`/`hop` when a pane opens or closes. |
+| `allow_agent_reactions` | boolean | `true` (every preset) | React to coding agents (omp, Claude Code, any agent that reports its status to Tern): `happy` or `hop` when a turn finishes, `disappointed` when it fails, `look` when the agent exits, and `stare` or `look` with a meow (when sound is on) when it waits for your input. Uses only the agent's pane id and that state, never what it said. Settings label "React to coding agents". |
 | `allow_idle_sleep` | boolean | `true` | Naps when tired or when you are away. |
 | `allow_pacing` | boolean | `true` | `walk` (the overlay cat paces along the pane's bottom edge). |
 | `allow_pointer_reactions` | boolean | `true` (`false` in `quiet_office`) | The overlay cat looks at the pointer when it is near and swats when you press on it; visual only: clicks, selection and typing still go to the terminal, and it does not count as a pet. Settings label "React to the pointer (overlay)". |
 | `focus_mode` | boolean | `false` (`true` in `quiet_office`) | Keep still while a command runs (see below). |
-| `reaction_sample_rate` | number 0-1 | `0.35` | Chance that a finished command gets a reaction. |
-| `reaction_cooldown_s` | integer 0-3600 | `45` | Minimum seconds between reactions of the same kind. |
+| `reaction_sample_rate` | number 0-1 | `0.35` | Chance that a finished command or agent turn gets a reaction (an agent waiting for input is never sampled away). |
+| `reaction_cooldown_s` | integer 0-3600 | `45` | Minimum seconds between reactions of the same kind (each agent outcome and the waiting cue count separately). |
 
 With `focus_mode` on, while any command runs the cat only idles, sits, blinks, grooms or sleeps:
-no pacing, hops, swats, stares or command and pane reactions, and no sound. A moving animation
+no pacing, hops, swats, stares or command, pane and agent reactions, and no sound. A moving animation
 already playing stops when the command starts. Your own pets, pokes, treats, play and `perform`
 requests (block, keys, palette, Carly) still play, silently. When the last command finishes,
 normal behavior resumes and that command's reaction is eligible as usual (sampling and cooldowns
@@ -196,18 +202,18 @@ every 2 seconds.
 - The overlay toggle and Carly's `configure` / `set_personality` exports. `configure` accepts
   only these keys: `behavior.activity`, `behavior.allow_visual_obscuring`, `behavior.allow_swats`,
   `behavior.allow_command_reactions`, `behavior.allow_development_reactions`,
-  `behavior.allow_pane_reactions`, `behavior.allow_idle_sleep`, `behavior.allow_pacing`,
-  `behavior.allow_pointer_reactions`,
+  `behavior.allow_pane_reactions`, `behavior.allow_agent_reactions`, `behavior.allow_idle_sleep`,
+  `behavior.allow_pacing`, `behavior.allow_pointer_reactions`,
   `behavior.focus_mode`, `sound.enabled`, `sound.volume`, `rendering.overlay`,
   `rendering.overlay_position`, `rendering.overlay_offset_px`, `rendering.reduced_motion`,
   `rendering.pane_transition`, `rendering.fullscreen_behavior`, `quiet.hours_enabled`,
   `quiet.start`, `quiet.stop`, `needs.enabled`.
 - Carly is held to less than that, because it calls exports without asking you: it may set
-  `sound.enabled` and `behavior.allow_pointer_reactions` only to `false`, and
-  `quiet.hours_enabled` and `behavior.focus_mode` only to `true`, and may not change
-  `sound.volume`, `quiet.start` or `quiet.stop`. Turning sound or pointer reactions on,
-  loosening quiet hours or turning focus mode off takes the block's settings page or an edit to
-  `config.json`.
+  `sound.enabled`, `behavior.allow_pointer_reactions` and `behavior.allow_agent_reactions` only
+  to `false`, and `quiet.hours_enabled` and `behavior.focus_mode` only to `true`, and may not
+  change `sound.volume`, `quiet.start` or `quiet.stop`. Turning sound, pointer or agent reactions
+  on, loosening quiet hours or turning focus mode off takes the block's settings page or an edit
+  to `config.json`.
 
 Only the host half writes the file. AI settings, appearance and sharing are never changeable
 through Carly.

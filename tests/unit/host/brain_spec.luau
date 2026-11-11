@@ -8,6 +8,9 @@ local paths = require("../../../cat/adapters/paths")
 local configFile = require("../../../cat/adapters/config")
 local brain = require("../../../cat/host/brain")
 local running = require("../../../cat/core/running")
+local rngMod = require("../../../cat/core/rng")
+local events = require("../../../cat/core/events")
+local intents = require("../../../cat/window/intents")
 
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -123,6 +126,17 @@ local function savedCat(): ({ [string]: any }, string)
 	brain.localIntent(b1, "pet")
 	return first.kv.data, first.m.files[DATA .. "/config.json"]
 end
+
+-- One window's half of an agent event: what window.luau and the controller do with Tern's
+-- payload (reduce it to a signal, build an intent with this window's own random id, write it).
+local function windowReports(e: Env, window: any, name: string, payload: any)
+	local signal, pane = events.agentSignal(name, payload)
+	assert(signal, "no signal")
+	local built = assert(intents.build(window, e.clock.wall_s(), "agent", { pane = pane, signal = signal }, "window"))
+	assert(intents.write(e.m.fs, e.deps.json, DATA .. "/inbox", built, e.clock.wall_precise() * 1000, window))
+end
+
+local AGENT_CONFIG = '{"sound":{"enabled":true},"behavior":{"reaction_sample_rate":1,"reaction_cooldown_s":0}}'
 
 describe("brain", function()
 	describe("load", function()
@@ -780,6 +794,81 @@ describe("brain", function()
 			brain.localIntent(b, "pet")
 			expect(#e.runs).toBe(0)
 			expect(hasLog(e, "no audio player")).toBe(true)
+		end)
+	end)
+
+	describe("agents", function()
+		local function agentSetup(): (Env, any)
+			local e = setup({ files = { [DATA .. "/config.json"] = AGENT_CONFIG, ["/usr/bin/afplay"] = "" } })
+			return e, brain.load(e.deps)
+		end
+
+		it("reacts once, with one meow, to the copies two windows send for one agent signal", function()
+			local e, b = agentSetup()
+			local winA, winB = rngMod.new(101), rngMod.new(202)
+			local seq = b.decision_seq
+			local seen = #b.env.seen
+			local waiting = { pane = 7, old = "working", new = "waiting_input" }
+			windowReports(e, winA, "agent_state", waiting)
+			windowReports(e, winB, "agent_state", waiting)
+			expect(brain.pollInbox(b)).toBe(2)
+			expect(b.decision_seq).toBe(seq + 1)
+			expect((b.engine.current :: any).id).toBe("react.agent_waiting")
+			expect((b.env.last_reaction :: any).id).toBe("react.agent_waiting")
+			expect(#e.runs).toBe(1)
+			expect(e.runs[1][4]).toBe("assets/sounds/default/meow.wav")
+			-- A signal, not a state change: no ids are kept and the inbox is drained.
+			expect(#b.env.seen).toBe(seen)
+			expect(next(e.m.files, nil) ~= nil).toBe(true)
+			for path in e.m.files do
+				expect(string.find(path, "/inbox/", 1, true)).toBeNil()
+			end
+			-- A slow window's copy a poll or two later (past the cooldown floor) is still the same signal.
+			e.clock.advance(1500)
+			local winC = rngMod.new(303)
+			windowReports(e, winC, "agent_state", waiting)
+			brain.pollInbox(b)
+			expect(b.decision_seq).toBe(seq + 1)
+			expect(#e.runs).toBe(1)
+			-- The agent's next wait is a new signal.
+			e.clock.advance(brain.AGENT_DEDUPE_MS)
+			windowReports(e, winA, "agent_state", waiting)
+			windowReports(e, winB, "agent_state", waiting)
+			brain.pollInbox(b)
+			expect(b.decision_seq).toBe(seq + 2)
+			expect(#e.runs).toBe(2)
+		end)
+
+		it("rolls a finished turn once however many windows report it", function()
+			local e, b = agentSetup()
+			local seq = b.decision_seq
+			for seed = 1, 3 do
+				windowReports(e, rngMod.new(seed), "agent_finished", { pane = 4, result = "done" })
+			end
+			brain.pollInbox(b)
+			expect(b.decision_seq).toBe(seq + 1)
+			expect((b.env.last_reaction :: any).id).toBe("react.agent_done")
+		end)
+
+		it("keeps signals of different agents apart", function()
+			local e, b = agentSetup()
+			local seq = b.decision_seq
+			windowReports(e, rngMod.new(1), "agent_state", { pane = 7, new = "waiting_input" })
+			brain.pollInbox(b)
+			e.clock.advance(1500)
+			windowReports(e, rngMod.new(2), "agent_state", { pane = 8, new = "waiting_input" })
+			brain.pollInbox(b)
+			expect(b.decision_seq).toBe(seq + 2)
+		end)
+
+		it("ignores agent signals while allow_agent_reactions is off", function()
+			local e = setup({ files = { [DATA .. "/config.json"] = '{"behavior":{"allow_agent_reactions":false}}' } })
+			local b = brain.load(e.deps)
+			local seq = b.decision_seq
+			windowReports(e, rngMod.new(1), "agent_finished", { pane = 4, result = "failed" })
+			windowReports(e, rngMod.new(2), "agent_state", { pane = 4, new = "waiting_input" })
+			brain.pollInbox(b)
+			expect(b.decision_seq).toBe(seq)
 		end)
 	end)
 end)

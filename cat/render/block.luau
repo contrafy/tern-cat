@@ -484,6 +484,7 @@ local function sections(model: Model, s: SettingsModel): { any }
 					switch(c, base, "behavior.allow_development_reactions", "React to tests and listings"),
 					switch(c, base, "behavior.allow_swats", "Swats and mischief"),
 					switch(c, base, "behavior.allow_pane_reactions", "React to panes opening and closing"),
+					switch(c, base, "behavior.allow_agent_reactions", "React to coding agents"),
 					switch(c, base, "behavior.allow_idle_sleep", "Nap when idle"),
 					switch(c, base, "behavior.allow_pacing", "Pace around (overlay)"),
 					switch(c, base, "behavior.allow_pointer_reactions", "React to the pointer (overlay)"),

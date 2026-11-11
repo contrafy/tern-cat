@@ -6,6 +6,7 @@
 local T = require("../types")
 local store = require("../core/store")
 local commands = require("../core/commands")
+local events = require("../core/events")
 local rngMod = require("../core/rng")
 local overlay = require("../render/overlay")
 local travel = require("../render/travel")
@@ -118,6 +119,9 @@ local SLOW_MS = 20
 local PENDING_CAT_ID = "cat-pending"
 -- Producer cap: the host drains 32 files per poll, so more than this means it is not consuming.
 local MAX_INBOX_FILES = 64
+-- After reporting an agent signal, the next kv poll comes this soon (the host drains the inbox
+-- every 500 ms), so the host's reaction is mirrored within about a second.
+local AGENT_POLL_MS = 700
 -- Token buckets per source: Carly gets a small burst then about ten requests a minute; people at
 -- the keyboard get a generous five a second.
 local RATE_LIMITS: { [T.IntentSource]: RateLimit } = table.freeze({
@@ -791,6 +795,28 @@ local function request(c: Controller, kind: T.IntentKind, args: { [string]: any 
 	return { ok = true }
 end
 
+-- `agent_finished` and `agent_state`: the signal (never what the agent said) goes to the host as
+-- an `agent` intent, whatever this window shows. The host dedupes the copies other windows send,
+-- decides once (sound included) and every window mirrors that reaction; nothing plays locally.
+local function onAgentEvent(c: Controller, name: string, payload: any)
+	if not c.config.behavior.allow_agent_reactions then
+		return
+	end
+	local signal, pane = events.agentSignal(name, payload)
+	if signal == nil then
+		return
+	end
+	local result = request(c, "agent", { pane = pane, signal = signal }, "window")
+	if not result.ok then
+		c.ports.log("debug", `tern-cat: agent signal not sent: {result.error or "unknown error"}`)
+		return
+	end
+	-- Also when a poll is already due: Tern runs a background window's overdue timer right after
+	-- an event, before the host has read the intent, and that poll would push the next one 2 s out.
+	c.next_kv_ms = c.ports.clock.now_ms() + AGENT_POLL_MS
+	armTimer(c, nil)
+end
+
 -- Flips overlay visibility in this window at once and persists it through the host.
 local function toggleOverlay(c: Controller, source: T.IntentSource): (Result, boolean)
 	local show = not presenterMod.visible(c.presenter)
@@ -857,10 +883,12 @@ return {
 	RESET_CONFIRM_MS = RESET_CONFIRM_MS,
 	RATE_LIMITS = RATE_LIMITS,
 	MAX_INBOX_FILES = MAX_INBOX_FILES,
+	AGENT_POLL_MS = AGENT_POLL_MS,
 	new = new,
 	start = start,
 	startSteps = startSteps,
 	onWindowEvent = onWindowEvent,
+	onAgentEvent = onAgentEvent,
 	request = request,
 	toggleOverlay = toggleOverlay,
 	reloadConfig = reloadConfig,

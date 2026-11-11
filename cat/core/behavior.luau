@@ -161,6 +161,9 @@ local function finalize(d: Decision, ctx: Ctx): Decision
 end
 
 local function familyAllowed(id: string, b: any): boolean
+	if string.find(id, "react.agent", 1, true) then
+		return b.allow_agent_reactions
+	end
 	if string.find(id, "react.pane", 1, true) then
 		return b.allow_pane_reactions
 	end
@@ -416,6 +419,47 @@ local function commandFinishDecision(state: T.EngineState, attrs: T.EventAttribu
 	return nil
 end
 
+-- Rate-limit trigger per sampled agent outcome (`waiting` has its own, unsampled).
+local AGENT_TRIGGERS: { [string]: string } = {
+	done = "react.agent_done",
+	failed = "react.agent_failed",
+	exited = "react.agent_exited",
+}
+
+-- Coding agents (omp, Claude Code, ...): a finished turn is sampled and rate limited per outcome
+-- like a command; an agent waiting for input is an attention cue (with a meow when sound is on),
+-- rate limited but never sampled away.
+local function agentDecision(state: T.EngineState, attrs: T.EventAttributes, ctx: Ctx): (Decision?, string?)
+	local b = ctx.config.behavior
+	if not b.allow_agent_reactions then
+		return nil
+	end
+	local rng = ctx.rng
+	local p = ctx.config.personality
+	local signal = attrs.signal
+	if signal == "waiting" then
+		if not ready(state, "react.agent_waiting", ctx) then
+			return nil
+		end
+		local pick: T.Animation = (rng:weighted({ stare = 1 + clamp01(p.curiosity), look = 1 }) or "look") :: any
+		return decide("react.agent_waiting", pick, "An agent is waiting for you.", ctx, { sound = "meow" }),
+			"react.agent_waiting"
+	end
+	local trigger = if type(signal) == "string" then AGENT_TRIGGERS[signal] else nil
+	if trigger == nil or not ready(state, trigger, ctx) or not rng:chance(clamp01(b.reaction_sample_rate)) then
+		return nil
+	end
+	if signal == "done" then
+		local mood = ctx.profile.mood
+		local happy = 2 + (if mood == "happy" or mood == "playful" then 1 else 0)
+		local pick: T.Animation = (rng:weighted({ happy = happy, hop = clamp01(p.energy) }) or "happy") :: any
+		return decide(trigger, pick, "An agent finished its turn.", ctx), trigger
+	elseif signal == "failed" then
+		return decide(trigger, "disappointed", "An agent's turn failed.", ctx), trigger
+	end
+	return decide(trigger, "look", "An agent exited.", ctx), trigger
+end
+
 local function reactiveDecision(state: T.EngineState, event: T.CatEvent, ctx: Ctx): (Decision?, string?)
 	local attrs = event.attributes
 	local b = ctx.config.behavior
@@ -443,6 +487,8 @@ local function reactiveDecision(state: T.EngineState, event: T.CatEvent, ctx: Ct
 		if animations.isPerformable(anim) and anim ~= "sleep" and anim ~= "wake" and ready(state, "react.ai", ctx) then
 			return decide("react.ai", anim :: any, "Suggested by the AI provider.", ctx), "react.ai"
 		end
+	elseif kind == "agent" then
+		return agentDecision(state, attrs, ctx)
 	end
 	return nil
 end
@@ -541,7 +587,8 @@ local function react(state: T.EngineState, event: T.CatEvent, ctx: Ctx): (T.Engi
 	end
 
 	if s.posture == "asleep" then
-		if not is_activity then
+		-- User activity, and an agent turn (not user activity: it keeps the idle timer), may wake it.
+		if not is_activity and kind ~= "agent" then
 			return s, nil
 		end
 		local p = ctx.config.personality
@@ -552,7 +599,7 @@ local function react(state: T.EngineState, event: T.CatEvent, ctx: Ctx): (T.Engi
 	end
 
 	local d, trigger = reactiveDecision(s, event, ctx)
-	if d == nil and s.posture == "asleep" then
+	if d == nil and s.posture == "asleep" and is_activity then
 		d = decide("react.input_resumed", "look", "You're back; looking around.", ctx)
 	end
 	if d == nil then

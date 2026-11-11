@@ -20,6 +20,7 @@ to verify them.
 | Local files | A sprite pack escapes its directory or injects CSS | Path validation before any read; CSS values sanitized |
 | Network | Telemetry or data exfiltration | No network API is used |
 | AI agent (Carly) | The cat triggers a full-power agent turn, or an agent abuses exported functions | Autonomous AI disabled; exports validate arguments and return no private data |
+| Coding agents (omp, Claude Code) | The cat reads what an agent said, or prompts, starts or stops one | Uses only the `agent_finished`/`agent_state` events, reduced to a pane id and a signal; never calls `cx.agents` |
 | Focus and input | The overlay steals clicks, selection or keystrokes | Overlay is CSS only; its pointer reactions are `:hover`/`:active` styles that Tern's terminal ignores for input (verified: clicks, drags, typing and mouse reporting still reach the pane) |
 
 Out of scope: a malicious Tern build, other plugins (which have the same unrestricted access), and
@@ -60,6 +61,20 @@ known categories, or words matching `^[%w_%-]+$` of at most 32 characters. A pat
 sentence cannot survive it.
 
 `tests/unit/core/events_spec.luau` covers the classifier and sanitizer.
+
+### Coding agents: a pane id and a signal, never what they said
+
+The cat reacts to coding agents through two window events only: `agent_finished` (`{pane,
+result}`) and `agent_state` (`{pane, old, new}`). `agentSignal` in `cat/core/events.luau` reduces
+them, inside the handler, to the pane id and one of `done`, `failed`, `exited` or `waiting`
+(the state turned `waiting_input`); nothing else of the payload is read. The window sends that
+pair to the host as an `agent` intent (allowlisted in `cat/core/commands.luau`: exactly `pane`
+and `signal`, source `window` only); the host keeps the pair in memory for 3 s to drop the copies
+other windows send, and stores only the reaction it chose (`last_reaction`), as for commands.
+tern-cat never calls `cx.agents` (`list` would return each agent's last message; `transcript`,
+`wait`, `ask`, `start`, `stop`, `interrupt` and `Agent:tocarly` read, prompt or drive agents),
+and `tests/unit/safety_spec.luau` fails on `cx.agents`, `agents.wait/ask/start`,
+`:transcript(`, `:tocarly(`, `["agents"]` and `last_message`.
 
 ### No network
 
@@ -194,7 +209,7 @@ writes inside its plugin directory. On a default install `tern.kv` lives at
 |---|---|---|---|
 | Cat state | `tern.kv`, key `state` | One `StoreEnvelope` (`cat/types.luau`): schema version, `rev`, profile (cat id, needs, mood, counters of pets/pokes/feeds/plays/command reactions, fail streak, timestamps), journal (last 50 entries of time, event id, kind and a short fixed summary), `seen` ring (last 256 event/intent ids), last reaction, snooze time | host half only |
 | Config | `<data>/config.json` | Your settings (`config/example.json` documents every key). Human-editable. A file that exists but cannot be read (symlink, over 256 KiB, read error) is never overwritten; settings changes fail with a note instead | you; the host half for settings changes |
-| Inbox | `<data>/inbox/<ms>-<hex>.json` | One pending intent per file (`kind`, `source`, validated `args`, id, time). The host deletes each file after applying it, and undecodable intent files after 5 s. It only ever deletes readable files with the intent name pattern; foreign names, directories and unreadable entries are logged once and left in place (`cat/host/inbox.luau`) | window halves |
+| Inbox | `<data>/inbox/<ms>-<hex>.json` | One pending intent per file (`kind`, `source`, validated `args`, id, time; an agent signal carries only a pane id and `done`, `failed`, `exited` or `waiting`). The host deletes each file after applying it, and undecodable intent files after 5 s. It only ever deletes readable files with the intent name pattern; foreign names, directories and unreadable entries are logged once and left in place (`cat/host/inbox.luau`) | window halves |
 | Identity export | `<data>/exports/identity-<cat id>-<time>.json` | Written only when you request an export: cat name, appearance, personality and profile | host half |
 | User packs | `<data>/packs/<id>/`, `<data>/sounds/<id>/` | Packs you install | you; the host half deletes a sprite pack's folder when you remove it in settings |
 

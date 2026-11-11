@@ -961,6 +961,113 @@ describe("window/controller shared state", function()
 	end)
 end)
 
+describe("window/controller agents", function()
+	local function onlyIntent(w: World): any
+		local files = inbox(w)
+		expect(count(files)).toBe(1)
+		local _, body = next(files)
+		local intent = commands.validate(body)
+		assert(intent, "intent")
+		return intent
+	end
+
+	it("sends the host one agent signal and plays nothing itself", function()
+		local w = world()
+		local c = controller.new(w.ports)
+		controller.start(c)
+		local seq = c.presenter.seq
+		controller.onAgentEvent(c, "agent_finished", { pane = 4, result = "done" })
+		local intent = onlyIntent(w)
+		expect(intent.kind).toBe("agent")
+		expect(intent.source).toBe("window")
+		expect(intent.args).toEqual({ pane = 4, signal = "done" })
+		expect(c.presenter.seq).toBe(seq)
+	end)
+
+	it("reports agents while this window's overlay is hidden (the host still reacts and meows)", function()
+		local w = world({ config = { rendering = { overlay = false } } })
+		local c = controller.new(w.ports)
+		controller.start(c)
+		controller.onAgentEvent(c, "agent_state", { pane = 4, old = "working", new = "waiting_input" })
+		expect(onlyIntent(w).args).toEqual({ pane = 4, signal = "waiting" })
+	end)
+
+	it("sends nothing for working or idle agents, closed blocks, or while agent reactions are off", function()
+		local w = world()
+		local c = controller.new(w.ports)
+		controller.start(c)
+		controller.onAgentEvent(c, "agent_state", { pane = 4, old = "idle", new = "working" })
+		controller.onAgentEvent(c, "agent_state", { pane = 4, old = "working", new = "idle" })
+		controller.onAgentEvent(c, "agent_finished", { pane = 4, result = "closed" })
+		expect(count(inbox(w))).toBe(0)
+		local off = world({ config = { behavior = { allow_agent_reactions = false } } })
+		local c2 = controller.new(off.ports)
+		controller.start(c2)
+		controller.onAgentEvent(c2, "agent_finished", { pane = 4, result = "failed" })
+		controller.onAgentEvent(c2, "agent_state", { pane = 4, new = "waiting_input" })
+		expect(count(inbox(off))).toBe(0)
+	end)
+
+	it("polls kv sooner after a signal, so the host's reaction shows within about a second", function()
+		local w = world()
+		local c = controller.new(w.ports)
+		controller.start(c)
+		fire(w)
+		controller.onAgentEvent(c, "agent_state", { pane = 4, new = "waiting_input" })
+		local live = pending(w)
+		expect(#live).toBe(1)
+		expect(live[1].ms).toBeLessThanOrEqual(controller.AGENT_POLL_MS)
+		w.kv.state = f.envelope({
+			rev = 2,
+			last_reaction = {
+				at = f.WALL_S + 0.5,
+				id = "react.agent_waiting",
+				animation = "stare",
+				reason = "An agent is waiting for you.",
+			},
+		})
+		fire(w)
+		expect(lastCss(w)).toContain("tern-cat-stare")
+	end)
+
+	-- Tern delays a background window's timers and runs an overdue one right after the next
+	-- event: that poll comes before the host has read the intent and must not push the next one
+	-- 2 s out.
+	it("still polls after the host had time to react when the regular poll was overdue", function()
+		local w = world()
+		local c = controller.new(w.ports)
+		controller.start(c)
+		fire(w)
+		w.clock.advance(controller.KV_POLL_MS + 500)
+		controller.onAgentEvent(c, "agent_finished", { pane = 4, result = "done" })
+		local elapsed = 0
+		local hostWrote = false
+		while true do
+			local live = pending(w)
+			assert(#live == 1, "one live timer")
+			if elapsed + live[1].ms > 1000 then
+				break
+			end
+			elapsed += live[1].ms
+			fire(w)
+			if not hostWrote then
+				-- The host applies the intent on its next inbox poll (every 500 ms).
+				hostWrote = true
+				w.kv.state = f.envelope({
+					rev = 2,
+					last_reaction = {
+						at = w.clock.wall_s(),
+						id = "react.agent_done",
+						animation = "happy",
+						reason = "An agent finished its turn.",
+					},
+				})
+			end
+		end
+		expect(lastCss(w)).toContain("tern-cat-happy")
+	end)
+end)
+
 describe("window/controller window events", function()
 	it("reacts to this window's events without keeping the command line", function()
 		local w = world({ config = { behavior = { reaction_sample_rate = 1 } } })

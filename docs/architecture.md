@@ -52,6 +52,22 @@ The design follows from the M0 findings in [sdk-capability-matrix.md](sdk-capabi
 6. **Host reactions are mirrored, not recomputed.** `cat/window/mirror.luau` replays the host's
    last reaction in each window if it is new (by `at` and id) and under 5 s old, unless this
    window already played it (an optimistic gesture, or its own reaction to the same command).
+7. **Agent reactions are decided once, by the host.** Tern's `agent_finished` and `agent_state`
+   are window events, delivered to every window that shows the agent's session (in a sandbox
+   with two windows, only the window showing the agent got them; nothing prevents several from
+   showing one session), and the host has no agent hook. So each window reduces the payload to
+   a signal (`events.agentSignal`: `done`, `failed`, `exited`, or `waiting` when `new` turns
+   `waiting_input`; nothing for `working`, `idle`, a closed block or a repeated state) and
+   writes one `agent` intent `{pane, signal}` (`controller.onAgentEvent`), whether or not its
+   overlay shows, and plays nothing itself. The store validates it (source `window` only) and
+   returns an `agent` effect without touching the envelope or `seen` (a signal is not state).
+   The brain passes only the first copy per `(pane, signal)` within `AGENT_DEDUPE_MS` (3 s; copies
+   arrive within an inbox poll or two) to the engine, so N windows give one sampling roll, one
+   reaction, one `last_reaction` and at most one meow; every window then mirrors that reaction
+   (rule 6). The window that reported it polls kv 700 ms later instead of up to 2 s, so the
+   overlay shows it within about a second. No statistic is kept for agents; the spec "reacts
+   once, with one meow, to the copies two windows send for one agent signal" in
+   `tests/unit/host/brain_spec.luau` writes two windows' intents into one inbox and checks this.
 
 ### Window entry boot
 
@@ -276,10 +292,10 @@ All modules are `--!strict` and return a table of functions. Only the entries an
 | `cat/core/model.luau` | Profile defaults, validation, schema migration | `newProfile(cat_id, wall_s)`, `migrate(raw)` |
 | `cat/core/needs.luau` | Needs decay, capped offline catch-up, gesture effects, mood | `decay`, `catchUp`, `applyGesture`, `deriveMood` |
 | `cat/core/store.luau` | `StoreEnvelope` lifecycle: decode/recover, apply event/intent once (dedupe by id), bounded journal, rev bump; config-changing intents become `{kind = "config", changes}` effects | `empty`, `decode`, `applyEvent`, `applyIntent`, `catchUp` |
-| `cat/core/events.luau` | Event construction, command classifier (category only), ids, dedupe ring | `classify(line)`, `commandFinished(...)`, `gesture(...)` |
+| `cat/core/events.luau` | Event construction, command classifier (category only), agent payloads reduced to a signal, ids, dedupe ring | `classify(line)`, `agentSignal(name, payload)`, `commandFinished(...)`, `gesture(...)`, `agent(...)` |
 | `cat/core/behavior.luau` | Weighted FSM: posture, trigger rules, cooldowns, precedence | `newState(now_ms)`, `tick(state, ctx)`, `react(state, event, ctx)` |
 | `cat/core/running.luau` | Commands running per pane for focus mode (pane id and start time only; 6 h safety timeout) | `new`, `started`, `stopped`, `busy` |
-| `cat/core/commands.luau` | Intent allowlist and argument validation for every source (block, keyboard, window, carly); `SET_CONFIG_KEYS` | `validate(raw)`, `toEvent(intent)` |
+| `cat/core/commands.luau` | Intent allowlist and argument validation for every source (block, keyboard, window, carly; `agent` from windows only); `SET_CONFIG_KEYS` | `validate(raw)`, `toEvent(intent)` |
 | `cat/config/schema.luau` | Config defaults, presets, per-field validation and fallback, migrations, precedence merge | `defaults()`, `preset(activity)`, `resolve(raw)`, `checkField(path, v)` |
 
 ### Rendering and sprites (pure)
@@ -298,7 +314,7 @@ All modules are `--!strict` and return a table of functions. Only the entries an
 
 | Module | Responsibility | Key functions |
 |---|---|---|
-| `cat/host/brain.luau` | The single writer: owns the store, ticks the engine (next delay clamped to 0.5-5 s), applies inbox intents, polls config, writes config changes (pretty JSON in example key order; backs up an unreadable file first), persists kv only when `rev` changes, moves a corrupt `kv.json` aside and starts a fresh cat, tracks running commands in every local pane (focus mode), plays sounds, removes user packs (switching the appearance back to the default when the removed pack was selected) | `load(deps)`, `tick`, `onCommandStarted/Finished`, `onPaneEvent`, `applyIntent`, `pollInbox`, `pollConfig`, `setConfig`, `availablePacks`, `removePack`, `subscribe` |
+| `cat/host/brain.luau` | The single writer: owns the store, ticks the engine (next delay clamped to 0.5-5 s), applies inbox intents (one copy per agent signal, see ownership rule 7), polls config, writes config changes (pretty JSON in example key order; backs up an unreadable file first), persists kv only when `rev` changes, moves a corrupt `kv.json` aside and starts a fresh cat, tracks running commands in every local pane (focus mode), plays sounds, removes user packs (switching the appearance back to the default when the removed pack was selected) | `load(deps)`, `tick`, `onCommandStarted/Finished`, `onPaneEvent`, `applyIntent`, `pollInbox`, `pollConfig`, `setConfig`, `availablePacks`, `removePack`, `subscribe` |
 | `cat/host/inbox.luau` | Inbox poll: name pattern `<ms>-<8hex>.json`, 5 s grace for bad files, 32 files per poll | `poll(state, fs, json, dir, now)` |
 | `cat/host/controls.luau` | Block input mapping: actions, menu, focused-block keys (`p o f space s h z`, Escape), settings-row changes, two-step confirmation for Reset identity and Remove pack (10 s), test mode (`test`, `frozen`, `seed=N`, or `TERN_CAT_TEST`) | `resolveAction`, `menuActions`, `keyAction`, `settingsChange`, `armConfirm`, `isArmed`, `parseTestMode` |
 | `cat/integrations/hooks.luau` | Registers `command_started`, `command_finished`, `cwd`, `pane_exited`; classifies the line inside the handler and drops it (no `title` hook: shells retitle on every prompt) | `register(on, sink)` |
@@ -311,7 +327,7 @@ passes it to `sound.detect` and `sound.play`.
 
 | Module | Responsibility | Key functions |
 |---|---|---|
-| `cat/window/controller.luau` | The window loop behind injected ports: one self-rescheduling timer (next decision, kv poll every 2 s, config poll every 3 s), requests to intents, overlay toggle, reset confirmation (second run within 10 s), cover state, pane-transition assets (prop plus the pack's exact `dive`/`emerge`, one warning when unavailable; the portal's for `walk`/`auto`), the pane travel per focus event (trip or entrance in the `travel` sheet, its clear timer, interrupts, switch cost metrics), Carly snapshot and context. Never writes kv | `new`, `start`, `onWindowEvent`, `request`, `toggleOverlay`, `reloadConfig`, `confirmReset`, `setCovered`, `setFocus`, `snapshot`, `context` |
+| `cat/window/controller.luau` | The window loop behind injected ports: one self-rescheduling timer (next decision, kv poll every 2 s, config poll every 3 s), requests to intents, agent signals to `agent` intents (then a kv poll after 700 ms), overlay toggle, reset confirmation (second run within 10 s), cover state, pane-transition assets (prop plus the pack's exact `dive`/`emerge`, one warning when unavailable; the portal's for `walk`/`auto`), the pane travel per focus event (trip or entrance in the `travel` sheet, its clear timer, interrupts, switch cost metrics), Carly snapshot and context. Never writes kv | `new`, `start`, `onWindowEvent`, `onAgentEvent`, `request`, `toggleOverlay`, `reloadConfig`, `confirmReset`, `setCovered`, `setFocus`, `snapshot`, `context` |
 | `cat/window/presenter.luau` | One read-only behavior engine per window; command lines reduced to a category immediately; this window's running commands (focus mode, tracked even while the overlay is hidden; host `react.*` mirrors are skipped while busy); overlay parameters, including the pointer reaction sheets (`HOVER_ANIMATION` look, `PRESS_ANIMATION` swat) when shown and allowed; local override until config agrees | `new`, `view`, `params`, `tick`, `react`, `observe`, `gesture`, `mirror`, `eventFor`, `setConfig`, `setCovered`, `visible` |
 | `cat/window/packs.luau` | Validates only the wanted and default packs (full scan only if both miss), resolves fallbacks, caches each sheet as a data URL; a pack without a built sheet uses its first frame; a cached pack whose `pack.json` is gone (removed) invalidates the cache. The controller reselects on every config poll | `new`, `select`, `asset`, `invalidate` |
 | `cat/window/portals.luau` | Reads and validates `assets/portals/portals.json` once (pack path rules, frame counts and durations, PNG size and format) and turns only the selected style's sheets into cached data URLs | `new`, `prop`, `parse`, `invalidate` |
@@ -375,7 +391,10 @@ Enforced by code review and by `tests/unit/safety_spec.luau`, which scans every 
 - `settings:set`, `settings:set_many`, `settings:bind`, `settings:unbind` (changing Tern
   settings or keybinds), `tern.override` (replacing built-in commands);
 - `on("spawn"` (intercepting shell spawns);
-- `ask_carly`, `carly.schedule`, `cx.agents` (starting Carly turns or agent panes).
+- `ask_carly`, `carly.schedule`, `cx.agents` (starting Carly turns or agent panes);
+- `agents.wait`/`ask`/`start`, `:transcript(`, `:tocarly(`, `["agents"]`, `last_message`
+  (reading, prompting or driving coding agents; agent events are reduced to a pane id and a
+  signal, see ownership rule 7).
 
 It also checks that `process.run` appears only in `host.luau` (the sound player) and
 `session:event` only in `window.luau` (UI events to the cat's own block).

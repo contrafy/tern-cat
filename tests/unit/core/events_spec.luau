@@ -347,4 +347,50 @@ describe("core.events", function()
 			expect(events.sanitizeAttributes("nope", { a = 1 })).toEqual({})
 		end)
 	end)
+
+	describe("agent signals", function()
+		it("reduces agent_finished results to a signal and the pane", function()
+			for _, result in { "done", "failed", "exited" } do
+				local signal, pane = events.agentSignal("agent_finished", { pane = 7, result = result })
+				expect(signal).toBe(result)
+				expect(pane).toBe(7)
+			end
+		end)
+
+		it("leaves a closed block to the pane reactions", function()
+			expect(events.agentSignal("agent_finished", { pane = 7, result = "closed" })).toBeNil()
+		end)
+
+		it("turns only a change into waiting_input into a signal", function()
+			local signal, pane = events.agentSignal("agent_state", { pane = 9, old = "working", new = "waiting_input" })
+			expect(signal).toBe("waiting")
+			expect(pane).toBe(9)
+			expect(events.agentSignal("agent_state", { pane = 9, new = "waiting_input" })).toBe("waiting")
+			expect(events.agentSignal("agent_state", { pane = 9, old = "waiting_input", new = "waiting_input" })).toBeNil()
+			for _, state in { "working", "idle", "exited" } do
+				expect(events.agentSignal("agent_state", { pane = 9, old = "waiting_input", new = state })).toBeNil()
+			end
+		end)
+
+		it("ignores malformed payloads and other events", function()
+			expect(events.agentSignal("agent_finished", nil)).toBeNil()
+			expect(events.agentSignal("agent_finished", { result = "done" })).toBeNil()
+			expect(events.agentSignal("agent_finished", { pane = "7", result = "done" })).toBeNil()
+			expect(events.agentSignal("agent_finished", { pane = 7, result = "DONE" })).toBeNil()
+			expect(events.agentSignal("command_finished", { pane = 7, result = "done" })).toBeNil()
+		end)
+
+		it("builds agent events that carry only the signal", function()
+			local ev = events.agent({ id = "a-1", time = 5, scope = "window", pane = 7, signal = "waiting" })
+			expect(ev.type).toBe("agent")
+			expect(ev.pane_id).toBe(7)
+			expect(ev.attributes).toEqual({ signal = "waiting" })
+			expect(events.sanitizeAttributes("agent", { signal = "done", message = "secret" })).toEqual({
+				signal = "done",
+			})
+			expect(function()
+				events.agent({ id = "a-2", time = 5, pane = 7, signal = "working" :: any })
+			end).toThrow()
+		end)
+	end)
 end)
