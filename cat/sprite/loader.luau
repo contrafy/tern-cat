@@ -16,29 +16,31 @@ export type LoadResult = {
 
 export type Root = { dir: string, source: T.PackSource }
 
+-- Returns the pack, or nil plus why it is not valid (nil, nil: no pack.json, not a pack).
 local function loadPack(
 	fs: T.FsAdapter,
 	decodeJson: (string) -> any,
 	dir: string,
-	source: T.PackSource
+	source: T.PackSource,
+	files: boolean?
 ): (T.LoadedPack?, string?)
 	local okRead, text = pcall(fs.read, manifest.joinPath(dir, MANIFEST_FILE), MANIFEST_MAX_BYTES + 1)
 	if not okRead then
-		return nil, `{source} pack at {dir}: could not read {MANIFEST_FILE}`
+		return nil, `could not read {MANIFEST_FILE}`
 	end
 	if type(text) ~= "string" then
 		return nil, nil
 	end
 	if #text > MANIFEST_MAX_BYTES then
-		return nil, `{source} pack at {dir}: {MANIFEST_FILE} exceeds {MANIFEST_MAX_BYTES} bytes`
+		return nil, `{MANIFEST_FILE} exceeds {MANIFEST_MAX_BYTES} bytes`
 	end
 	local okDecode, raw = pcall(decodeJson, text)
 	if not okDecode then
-		return nil, `{source} pack at {dir}: {MANIFEST_FILE} is not valid JSON`
+		return nil, `{MANIFEST_FILE} is not valid JSON`
 	end
-	local result = manifest.validate(raw, fs, dir)
+	local result = manifest.validate(raw, fs, dir, { files = files })
 	if not result.ok or not result.manifest then
-		return nil, `{source} pack at {dir}: {table.concat(result.errors, "; ")}`
+		return nil, table.concat(result.errors, "; ")
 	end
 	return {
 		manifest = result.manifest,
@@ -95,7 +97,7 @@ local function loadAll(fs: T.FsAdapter, decodeJson: (string) -> any, roots: { Ro
 			local pack, problem = loadPack(fs, decodeJson, dir, root.source)
 			if problem then
 				seen += 1
-				table.insert(problems, problem)
+				table.insert(problems, `{root.source} pack at {dir}: {problem}`)
 			elseif pack then
 				seen += 1
 				local id = pack.manifest.id
@@ -113,6 +115,22 @@ local function loadAll(fs: T.FsAdapter, decodeJson: (string) -> any, roots: { Ro
 	end
 
 	return { packs = packs, problems = problems }
+end
+
+-- Validates one pack folder `name` under `root` (one step of an incremental scan). Returns the
+-- pack, or nil plus why it is not valid (without the path); nil, nil when it has no pack.json.
+-- `opts.files = false` skips the image checks (a pack the host half already validated).
+local function loadDir(
+	fs: T.FsAdapter,
+	decodeJson: (string) -> any,
+	root: Root,
+	name: string,
+	opts: { files: boolean? }?
+): (T.LoadedPack?, string?)
+	if not isPackDirName(name) then
+		return nil, nil
+	end
+	return loadPack(fs, decodeJson, manifest.joinPath(root.dir, name), root.source, opts and opts.files)
 end
 
 local function select(packs: { [string]: T.LoadedPack }, wanted: string?, defaultId: string): (T.LoadedPack?, string?)
@@ -201,6 +219,7 @@ end
 
 return {
 	loadAll = loadAll,
+	loadDir = loadDir,
 	isPackDirName = isPackDirName,
 	select = select,
 	assetPath = assetPath,

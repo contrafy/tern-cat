@@ -14,6 +14,7 @@ local running = require("../core/running")
 local model = require("../core/model")
 local loader = require("../sprite/loader")
 local manifest = require("../sprite/manifest")
+local catalog = require("../sprite/catalog")
 local sound = require("../integrations/sound")
 local configFile = require("../adapters/config")
 local fsMod = require("../adapters/fs")
@@ -35,6 +36,10 @@ local KV_RETRY_MS = 5000
 local KV_UNREADABLE_NOTE = "Saved state could not be read; showing a temporary cat and not saving until it can be read"
 -- Copies of one agent signal from several windows arrive within an inbox poll or two.
 local AGENT_DEDUPE_MS = 3000
+-- The pack catalog: user pack folders are listed again this often; a refresh validates new
+-- folders for at most CATALOG_BUDGET_MS and continues on the next poll.
+local CATALOG_POLL_MS = 10000
+local CATALOG_BUDGET_MS = 500
 
 export type Clock = T.Clock & { wall_precise: () -> number }
 
@@ -78,10 +83,19 @@ export type Brain = {
 	ids: T.Rng,
 	frozen: boolean,
 	notes: { string },
+	-- Winning valid pack per id (see catalog.build), from the validated folders in pack_dirs.
 	packs: { [string]: T.LoadedPack },
 	pack: T.LoadedPack?,
 	pack_note: string?,
 	all_packs_loaded: boolean,
+	-- Every pack folder validated so far, by "<source>/<folder>".
+	pack_dirs: { [string]: catalog.DirResult },
+	-- The catalog last built for tern.kv "packs", and whether it was written.
+	catalog: catalog.Catalog?,
+	catalog_written: boolean,
+	-- Rev of the catalog found in kv at load (a reload continues from it).
+	catalog_base_rev: number,
+	next_catalog_ms: number,
 	asset_cache: { [string]: string },
 	inbox: inbox.State,
 	last_catchup_s: number,
@@ -293,50 +307,78 @@ local function listPackDirs(b: Brain): { string }
 	return out
 end
 
--- Validates only the named pack folders (loader.loadAll over a filtered directory listing).
-local function validatePacks(b: Brain, ids: { string })
-	local wanted: { [string]: boolean } = {}
-	local any = false
-	for _, id in ids do
-		if b.packs[id] == nil then
-			wanted[id] = true
-			any = true
-		end
-	end
-	if not any then
-		return
-	end
-	local fs = b.deps.fs
-	local filtered: T.FsAdapter = {
-		read = fs.read,
-		exists = fs.exists,
-		list = function(path: string): { string }?
-			for _, root in packRoots(b) do
-				if path == root.dir then
-					local names = fs.list(path)
-					if names == nil then
-						return nil
-					end
-					local out = {}
-					for _, name in names do
-						if wanted[name] then
-							table.insert(out, name)
-						end
-					end
-					return out
-				end
+-- Validates the pack folders not validated yet: only those named in `only`, or every folder (then
+-- folders that are gone are forgotten). With `budget_ms`, stops starting new folders once that
+-- much time has passed. Returns true when every wanted folder is validated.
+local function scanDirs(b: Brain, only: { [string]: boolean }?, budget_ms: number?): boolean
+	local d = b.deps
+	local t0 = d.clock.now_ms()
+	local complete = true
+	local listed: { [string]: boolean } = {}
+	for _, root in packRoots(b) do
+		local names = table.clone(d.fs.list(root.dir) or {})
+		table.sort(names)
+		local n = 0
+		for _, name in names do
+			if not loader.isPackDirName(name) or (only and not only[name]) then
+				continue
 			end
-			return fs.list(path)
-		end,
-	}
-	local result = loader.loadAll(filtered, b.deps.json.decodeOrError, packRoots(b))
-	for id, pack in result.packs do
-		if b.packs[id] == nil then
-			b.packs[id] = pack
+			n += 1
+			if n > catalog.MAX_ENTRIES / 2 then
+				break
+			end
+			local key = `{root.source}/{name}`
+			listed[key] = true
+			if b.pack_dirs[key] ~= nil then
+				continue
+			end
+			if budget_ms and d.clock.now_ms() - t0 >= budget_ms then
+				complete = false
+				continue
+			end
+			local pack, problem = loader.loadDir(d.fs, d.json.decodeOrError, root, name)
+			if problem then
+				log(b, "warn", `{root.source} pack at {manifest.joinPath(root.dir, name)}: {problem}`)
+			end
+			b.pack_dirs[key] = { source = root.source, folder = name, pack = pack, problem = problem }
 		end
 	end
-	for _, problem in result.problems do
-		log(b, "warn", problem)
+	if only == nil then
+		for key in table.clone(b.pack_dirs) do
+			if not listed[key] then
+				b.pack_dirs[key] = nil
+			end
+		end
+	end
+	return complete
+end
+
+-- Rebuilds b.packs from the validated folders; returns the catalog entries.
+local function mergePacks(b: Brain): { catalog.Entry }
+	local dirs: { catalog.DirResult } = {}
+	for _, dir in b.pack_dirs do
+		table.insert(dirs, dir)
+	end
+	local entries, winners = catalog.build(dirs)
+	b.packs = winners
+	return entries
+end
+
+-- Validates only the named pack folders.
+local function validatePacks(b: Brain, names: { string })
+	local only: { [string]: boolean } = {}
+	for _, name in names do
+		only[name] = true
+	end
+	scanDirs(b, only)
+	mergePacks(b)
+end
+
+-- Validates every pack folder (the full scan) unless that was done since the last removal.
+local function loadAllPacks(b: Brain)
+	if not b.all_packs_loaded then
+		b.all_packs_loaded = scanDirs(b, nil)
+		mergePacks(b)
 	end
 end
 
@@ -347,8 +389,7 @@ local function selectPack(b: Brain)
 	-- Not found by folder name (a note means the default was substituted): scan every folder,
 	-- since a pack's folder name need not equal its id.
 	if (pack == nil or note ~= nil) and not b.all_packs_loaded then
-		validatePacks(b, listPackDirs(b))
-		b.all_packs_loaded = true
+		loadAllPacks(b)
 		pack, note = loader.select(b.packs, wanted, DEFAULT_PACK)
 	end
 	b.pack = pack
@@ -360,15 +401,54 @@ end
 
 -- Every available pack, validated on first use (settings appearance page).
 local function availablePacks(b: Brain): { T.LoadedPack }
-	if not b.all_packs_loaded then
-		validatePacks(b, listPackDirs(b))
-		b.all_packs_loaded = true
-	end
+	loadAllPacks(b)
 	local out: { T.LoadedPack } = {}
 	for _, id in util.sortedKeys(b.packs) do
 		table.insert(out, b.packs[id])
 	end
 	return out
+end
+
+-- Lists the pack folders again, validates new ones (time-boxed) and writes the catalog to
+-- tern.kv "packs" when it changed (or was not written yet). Returns true when it changed.
+local function refreshCatalog(b: Brain): boolean
+	local d = b.deps
+	local complete = scanDirs(b, nil, CATALOG_BUDGET_MS)
+	local entries = mergePacks(b)
+	b.all_packs_loaded = complete
+	b.next_catalog_ms = d.clock.now_ms() + CATALOG_POLL_MS
+	local last = b.catalog
+	local changed = last == nil or last.complete ~= complete or not catalog.equal(last.packs, entries)
+	if changed then
+		b.catalog = catalog.encode((if last then last.rev else b.catalog_base_rev) + 1, entries, complete)
+		b.catalog_written = false
+	end
+	-- tern.kv refuses to write over an unreadable kv.json; the next poll tries again.
+	if not b.catalog_written and not b.kv_read_failed then
+		local ok, err = d.kv.set(catalog.KEY, b.catalog)
+		b.catalog_written = ok
+		if not ok then
+			log(b, "warn", `could not publish the pack catalog: {err or "unknown error"}`)
+		end
+	end
+	if changed then
+		-- A pack the config names may have just been validated; the settings page lists packs.
+		if b.pack_note ~= nil then
+			selectPack(b)
+		end
+		notify(b, "packs")
+	end
+	return changed
+end
+
+-- The slow catalog poll: refreshes when CATALOG_POLL_MS passed, a scan is unfinished or the last
+-- write failed. Returns true when the catalog changed.
+local function pollCatalog(b: Brain): boolean
+	local c = b.catalog
+	if c ~= nil and c.complete and b.catalog_written and b.deps.clock.now_ms() < b.next_catalog_ms then
+		return false
+	end
+	return refreshCatalog(b)
 end
 
 -- Bytes of a pack-relative asset (validated path, size-capped, cached).
@@ -602,6 +682,10 @@ local function applyLoaded(b: Brain, loaded: configFile.Loaded)
 	end
 	if previous == nil or previous.cat.appearance ~= b.config.cat.appearance then
 		selectPack(b)
+		-- A newly named pack may live in a folder the catalog has not seen yet.
+		if b.catalog ~= nil then
+			refreshCatalog(b)
+		end
 	end
 	if b.config.sound.enabled then
 		ensureSound(b)
@@ -694,9 +778,10 @@ local function removePack(b: Brain, id: string): RemoveOutcome
 		return { ok = false, error = "Could not delete the pack folder.", switched = false }
 	end
 	log(b, "info", `removed user pack "{id}"`)
-	-- Validate again from scratch: a same-id pack in another folder that the loader ignored as a
-	-- duplicate is now available.
-	b.packs = {}
+	-- Forget the folder and rebuild the winners: a same-id pack in another folder that the loader
+	-- ignored as a duplicate is now available. Other folders are listed again.
+	b.pack_dirs[`user/{string.match(dir, "([^/]+)$") or ""}`] = nil
+	mergePacks(b)
 	b.all_packs_loaded = false
 	local prefix = dir .. "/"
 	for path in table.clone(b.asset_cache) do
@@ -711,6 +796,7 @@ local function removePack(b: Brain, id: string): RemoveOutcome
 		out.config_error = if ok then nil else err
 	end
 	selectPack(b)
+	refreshCatalog(b)
 	notify(b, "packs")
 	return out
 end
@@ -863,6 +949,8 @@ end
 
 local function load(deps: Deps): Brain
 	local started = deps.clock.now_ms()
+	local prior = deps.kv.get(catalog.KEY)
+	local priorRev = if type(prior) == "table" and type(prior.rev) == "number" then prior.rev else 0
 	local b: Brain = {
 		deps = deps,
 		config = nil :: any,
@@ -886,6 +974,11 @@ local function load(deps: Deps): Brain
 		pack = nil,
 		pack_note = nil,
 		all_packs_loaded = false,
+		pack_dirs = {},
+		catalog = nil,
+		catalog_written = false,
+		catalog_base_rev = if priorRev == priorRev and math.abs(priorRev) < 2 ^ 52 then math.floor(priorRev) else 0,
+		next_catalog_ms = started,
 		asset_cache = {},
 		inbox = inbox.newState(),
 		last_catchup_s = deps.clock.wall_s(),
@@ -937,6 +1030,8 @@ return {
 	setConfig = setConfig,
 	setTestMode = setTestMode,
 	availablePacks = availablePacks,
+	refreshCatalog = refreshCatalog,
+	pollCatalog = pollCatalog,
 	removePack = removePack,
 	assetBytes = assetBytes,
 	listPackDirs = listPackDirs,

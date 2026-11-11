@@ -36,6 +36,14 @@ All notable changes to tern-cat are documented here. The format follows
 
 - `set_config` intents may set `cat.appearance` from the block, the window (Cat menu) and the
   keyboard; Carly still may not change the appearance.
+- Sprite packs are validated only by the host half, which publishes a pack catalog under
+  `tern.kv` key `packs` (folder names, ids, names, authors, validity; no paths) after load, when
+  the appearance changes, after a pack removal and on a 10 s poll of the pack folders. Windows
+  read it instead of validating packs in their timer ticks (5-43 ms per pack before): the
+  selected pack's `pack.json` is read with field and path checks only, and the Cat menu lists
+  the catalog. A pack copied into the user packs folder now appears within about 10 seconds
+  instead of after a reload. Windows still validate packs themselves until the host has written
+  a catalog.
 
 ## [0.3.0] - 2026-11-11
 
@@ -101,6 +109,7 @@ the plugin APIs tern-cat uses changed, and the overlay's Tern DOM and CSS hooks 
   timer has a backup, so a stopped tick no longer ends its timer chain.
 
 ### Changed
+
 
 - CI type-checks against a pinned `stencil-hq/tern-sdk` commit whose `tern.d.luau` matches Tern
   0.9.16 (`ba85dce`), instead of the moving `main` branch (`TERN_SDK_REF` still overrides it).

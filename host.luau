@@ -1,6 +1,7 @@
 --!strict
--- tern-cat host half: the single writer of the shared cat (tern.kv "state"), host hooks, the
--- intent inbox, sound, and the interactive "Tern Cat" block. Logic lives in cat/host/brain.luau.
+-- tern-cat host half: the single writer of the shared cat (tern.kv "state") and the pack catalog
+-- (tern.kv "packs"), host hooks, the intent inbox, sound, and the interactive "Tern Cat" block.
+-- Logic lives in cat/host/brain.luau.
 
 local T = require("./cat/types")
 local fsAdapter = require("./cat/adapters/fs")
@@ -468,6 +469,10 @@ local function pollConfig()
 	if not ok then
 		log("error", "config poll failed: " .. tostring(err))
 	end
+	local okCatalog, catalogErr = pcall(brainMod.pollCatalog, brain)
+	if not okCatalog then
+		log("error", "pack catalog poll failed: " .. tostring(catalogErr))
+	end
 	for pane in live do
 		if not stillRunning(pane) then
 			live[pane] = nil
@@ -475,6 +480,27 @@ local function pollConfig()
 	end
 	tern.timer(CONFIG_MS, pollConfig)
 end
+
+-- The pack catalog windows read (tern.kv "packs"), right after load instead of inside it.
+tern.timer(0, function()
+	local t0 = tern.now()
+	local ok, err = pcall(brainMod.refreshCatalog, brain)
+	if not ok then
+		log("error", "pack catalog failed: " .. tostring(err))
+		return
+	end
+	local c = brain.catalog
+	log(
+		"info",
+		string.format(
+			"pack catalog rev %d: %d folders in %.1f ms%s",
+			c and c.rev or 0,
+			c and #c.packs or 0,
+			tern.now() - t0,
+			if c and not c.complete then " (more on the next poll)" else ""
+		)
+	)
+end)
 
 tern.timer(INBOX_MS, pollInbox)
 tern.timer(CONFIG_MS, pollConfig)

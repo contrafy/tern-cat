@@ -48,6 +48,7 @@ local BOOT_MODULES = {
 	"sprite/png",
 	"sprite/manifest",
 	"sprite/loader",
+	"sprite/catalog",
 	"render/travel",
 	"render/overlay",
 	"config/schema",

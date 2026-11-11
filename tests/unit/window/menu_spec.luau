@@ -227,12 +227,7 @@ end)
 
 describe("window/menu packChoices", function()
 	local function pack(id: string, name: string, source: string, author: string?): any
-		return {
-			manifest = { id = id, name = name, author = author },
-			root = "/p/" .. id,
-			source = source,
-			warnings = {},
-		}
+		return { id = id, name = name, source = source, author = author }
 	end
 
 	it("sorts by name and describes each pack by author, else its source", function()

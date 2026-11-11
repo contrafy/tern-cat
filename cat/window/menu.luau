@@ -10,6 +10,8 @@ export type Menu = "top" | "feed" | "play" | "appearance" | "transition" | "corn
 
 -- One sprite pack the Appearance submenu offers.
 export type PackChoice = { id: string, name: string, detail: string? }
+-- A valid sprite pack (from the host's catalog, or validated by this window).
+export type PackInfo = { id: string, name: string, author: string?, source: T.PackSource }
 
 -- What the menu shows: read from this window's controller when it opens.
 export type State = {
@@ -236,15 +238,15 @@ local function choose(item: any): Action?
 	return nil
 end
 
--- Appearance choices from validated packs: sorted by name (then id), detail the author, else
--- where the pack comes from.
-local function packChoices(packs: { T.LoadedPack }): { PackChoice }
+-- Appearance choices from valid packs: sorted by name (then id), detail the author, else where
+-- the pack comes from.
+local function packChoices(packs: { PackInfo }): { PackChoice }
 	local out: { PackChoice } = {}
 	for _, p in packs do
-		local author = p.manifest.author
+		local author = p.author
 		table.insert(out, {
-			id = p.manifest.id,
-			name = p.manifest.name,
+			id = p.id,
+			name = p.name,
 			detail = if author and author ~= "" then author elseif p.source == "user" then "user pack" else "bundled",
 		})
 	end

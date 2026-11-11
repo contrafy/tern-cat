@@ -120,9 +120,10 @@ does nothing).
 Each choice is the same request the palette commands and the block make: it is validated, rate
 limited and applied by the host half, and the overlay in this window reacts at once to gestures,
 snoozes and the overlay toggle. Appearance, pane switch and corner changes are written to
-`config.json` and reach every window within about 3 seconds. The first time you open the menu
-after a reload, the window checks the sprite packs it has not loaded yet, one per timer tick;
-until that is done Appearance... ends with **More packs are loading...**, which opens it again.
+`config.json` and reach every window within about 3 seconds. Appearance... lists the packs the
+host half has validated; a pack you copy into `<tern.plugin.data>/packs/` shows up within about
+10 seconds. While the host is still checking packs (right after a reload, or many new packs) it
+ends with **More packs are loading...**, which opens it again.
 
 The menu needs Tern 0.7.1 or later (the inline picker); on an older Tern the command says so and
 opens the cat block instead. It has no default key. To bind one, add a `keybinds` entry for

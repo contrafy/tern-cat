@@ -16,6 +16,7 @@ local fsAdapter = require("../adapters/fs")
 local jsonAdapter = require("../adapters/json")
 local pathsAdapter = require("../adapters/paths")
 local carly = require("../integrations/carly")
+local catalogMod = require("../sprite/catalog")
 local presenterMod = require("./presenter")
 local packsMod = require("./packs")
 local portalsMod = require("./portals")
@@ -81,6 +82,8 @@ export type Controller = {
 	config_unreadable: boolean,
 	envelope: T.StoreEnvelope,
 	rev: number?,
+	-- Rev of the host's pack catalog last read (tern.kv "packs").
+	catalog_rev: number?,
 	mirror_key: string?,
 	-- Local reactions whose host echoes must not replay (see mirror.luau).
 	recent: mirror.Recent,
@@ -174,6 +177,7 @@ local function new(ports: Ports): Controller
 		config_unreadable = false,
 		envelope = envelope,
 		rev = nil,
+		catalog_rev = nil,
 		mirror_key = nil,
 		recent = {},
 		context_text = "",
@@ -489,6 +493,22 @@ local function loadConfig(c: Controller, force: boolean): boolean
 	return true
 end
 
+-- Adopts the host's pack catalog when its rev changed. True when it changed (the caller selects
+-- the pack again).
+local function readCatalog(c: Controller): boolean
+	local raw, err = c.ports.kv.get(catalogMod.KEY)
+	if err then
+		return false
+	end
+	local rev = if type(raw) == "table" and type(raw.rev) == "number" then raw.rev else nil
+	if rev == c.catalog_rev then
+		return false
+	end
+	c.catalog_rev = rev
+	packsMod.setCatalog(c.packs, catalogMod.decode(raw, c.packs.deps.roots))
+	return true
+end
+
 -- Reads the shared envelope when its rev changed; mirrors a new host reaction. True when the
 -- overlay should re-render.
 local function pollKv(c: Controller): boolean
@@ -554,6 +574,9 @@ local function onTimer(c: Controller, info: TickInfo?)
 		end
 		if now >= c.next_kv_ms then
 			c.next_kv_ms = now + KV_POLL_MS
+			if readCatalog(c) then
+				selectPack(c)
+			end
 			pollKv(c)
 		end
 		if presenterMod.visible(p) then
@@ -616,6 +639,8 @@ local function startSteps(c: Controller): { StartStep }
 	return {
 		timed("overlay config", function()
 			c.ports.fs.mkdir(c.ports.paths.inbox)
+			-- The host's pack catalog first, so the selection below validates no pack.
+			readCatalog(c)
 			loadConfig(c, true)
 			pollKv(c)
 		end),
@@ -830,9 +855,10 @@ local function toggleOverlay(c: Controller, source: T.IntentSource): (Result, bo
 	return result, show
 end
 
--- What the Cat menu shows. Validating a pack takes about 20-30 ms, too much for a picker callback
--- on top of its other work, so pack folders not validated yet (new ones too) are only queued
--- here: the timer validates one per tick from now on.
+-- What the Cat menu shows. With the host's catalog nothing is validated here. Without one,
+-- validating a pack takes about 20-30 ms, too much for a picker callback on top of its other
+-- work, so pack folders not validated yet (new ones too) are only queued: the timer validates
+-- one per tick from now on.
 local function menuState(c: Controller): menu.State
 	local clock = c.ports.clock
 	if packsMod.refresh(c.packs) then
@@ -855,7 +881,7 @@ local function menuState(c: Controller): menu.State
 		pane_transition = c.config.rendering.pane_transition,
 		overlay_position = c.config.rendering.overlay_position,
 		packs = packs,
-		packs_pending = packsMod.scanning(c.packs),
+		packs_pending = packsMod.pending(c.packs),
 	}
 end
 
