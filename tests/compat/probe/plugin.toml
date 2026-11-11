@@ -1,0 +1,6 @@
+schema = 1
+id = "tern-cat-probe"
+name = "Tern Cat compat probe"
+version = "0.0.0"
+description = "Sandbox-only probe for scripts/compat.sh: reports what tern-cat's window glue reads from Tern."
+window = "window.luau"
