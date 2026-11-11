@@ -61,6 +61,10 @@ you want it gone too.
 
   ![The cat block floated over a pane, with needs bars, stats and buttons](docs/images/floated-card.png)
 
+- **Cat menu.** **Cat menu** in the palette opens a picker over the focused pane: pet, poke, feed,
+  play, snooze, hide the overlay, or change the sprite pack, pane switch or overlay corner without
+  opening the block. No default key; bind `plugin.tern-cat.menu` in Tern's `settings.json`
+  ([usage](docs/usage.md#cat-menu)).
 - **Behavior.** Presets `menace` (default), `quiet_office`, `chaos` and `zen`. Focus mode keeps
   the cat still while your commands run; snooze and quiet hours silence it.
 - **Coding agents.** When an agent pane (omp, Claude Code) finishes a turn the cat cheers, when
@@ -75,9 +79,9 @@ Every setting: [docs/configuration.md](docs/configuration.md).
 ## Appearance
 
 Three bundled packs: `orange-menace` (default), `void` and `tuxedo`; pick one on the block's
-settings page or with `cat.appearance`. The default cat is named "Menace" (`cat.name`). Install
-your own packs under `<tern.plugin.data>/packs/<id>/` and remove them again from the settings
-page; the format is in [docs/sprite-pack-spec.md](docs/sprite-pack-spec.md).
+settings page, in the Cat menu or with `cat.appearance`. The default cat is named "Menace"
+(`cat.name`). Install your own packs under `<tern.plugin.data>/packs/<id>/` and remove them again
+from the settings page; the format is in [docs/sprite-pack-spec.md](docs/sprite-pack-spec.md).
 
 ![The three bundled sprite packs, every animation on light and dark backgrounds](docs/images/packs-preview.png)
 

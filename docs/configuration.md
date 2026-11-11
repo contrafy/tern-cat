@@ -199,11 +199,14 @@ every 2 seconds.
 
 - The block's settings page (any row it shows). Removing the selected sprite pack on its
   Appearance page sets `cat.appearance` back to `"orange-menace"`.
-- The overlay toggle and Carly's `configure` / `set_personality` exports. `configure` accepts
-  only these keys: `behavior.activity`, `behavior.allow_visual_obscuring`, `behavior.allow_swats`,
-  `behavior.allow_command_reactions`, `behavior.allow_development_reactions`,
-  `behavior.allow_pane_reactions`, `behavior.allow_agent_reactions`, `behavior.allow_idle_sleep`,
-  `behavior.allow_pacing`, `behavior.allow_pointer_reactions`,
+- The overlay toggle, the Cat menu (`cat.appearance`, `rendering.overlay`,
+  `rendering.pane_transition`, `rendering.overlay_position`) and Carly's `configure` /
+  `set_personality` exports. They send requests that the host half validates against one list
+  of keys: `cat.appearance`, `behavior.activity`, `behavior.allow_visual_obscuring`,
+  `behavior.allow_swats`, `behavior.allow_command_reactions`,
+  `behavior.allow_development_reactions`, `behavior.allow_pane_reactions`,
+  `behavior.allow_agent_reactions`, `behavior.allow_idle_sleep`, `behavior.allow_pacing`,
+  `behavior.allow_pointer_reactions`,
   `behavior.focus_mode`, `sound.enabled`, `sound.volume`, `rendering.overlay`,
   `rendering.overlay_position`, `rendering.overlay_offset_px`, `rendering.reduced_motion`,
   `rendering.pane_transition`, `rendering.fullscreen_behavior`, `quiet.hours_enabled`,
@@ -211,9 +214,9 @@ every 2 seconds.
 - Carly is held to less than that, because it calls exports without asking you: it may set
   `sound.enabled`, `behavior.allow_pointer_reactions` and `behavior.allow_agent_reactions` only
   to `false`, and `quiet.hours_enabled` and `behavior.focus_mode` only to `true`, and may not
-  change `sound.volume`, `quiet.start` or `quiet.stop`. Turning sound, pointer or agent reactions
-  on, loosening quiet hours or turning focus mode off takes the block's settings page or an edit
-  to `config.json`.
+  change `cat.appearance`, `sound.volume`, `quiet.start` or `quiet.stop`. Turning sound, pointer
+  or agent reactions on, loosening quiet hours or turning focus mode off takes the block's
+  settings page or an edit to `config.json`.
 
-Only the host half writes the file. AI settings, appearance and sharing are never changeable
-through Carly.
+Only the host half writes the file. AI settings and sharing are never changeable through Carly or
+the Cat menu; the appearance is never changeable through Carly.

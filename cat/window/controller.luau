@@ -21,6 +21,7 @@ local packsMod = require("./packs")
 local portalsMod = require("./portals")
 local intents = require("./intents")
 local mirror = require("./mirror")
+local menu = require("./menu")
 
 export type Handle = { cancel: (self: any) -> () }
 
@@ -829,6 +830,35 @@ local function toggleOverlay(c: Controller, source: T.IntentSource): (Result, bo
 	return result, show
 end
 
+-- What the Cat menu shows. Validating a pack takes about 20-30 ms, too much for a picker callback
+-- on top of its other work, so pack folders not validated yet (new ones too) are only queued
+-- here: the timer validates one per tick from now on.
+local function menuState(c: Controller): menu.State
+	local clock = c.ports.clock
+	if packsMod.refresh(c.packs) then
+		armTimer(c, nil)
+	end
+	local packs = menu.packChoices(packsMod.available(c.packs))
+	local appearance = c.config.cat.appearance
+	local listed = false
+	for _, p in packs do
+		listed = listed or p.id == appearance
+	end
+	if not listed and c.pack then
+		appearance = c.pack.manifest.id
+	end
+	local p = c.presenter
+	return {
+		overlay_visible = presenterMod.visible(p),
+		snoozed = p.snooze_until ~= nil and clock.wall_s() < p.snooze_until,
+		appearance = appearance,
+		pane_transition = c.config.rendering.pane_transition,
+		overlay_position = c.config.rendering.overlay_position,
+		packs = packs,
+		packs_pending = packsMod.scanning(c.packs),
+	}
+end
+
 local function reloadConfig(c: Controller)
 	packsMod.invalidate(c.packs)
 	portalsMod.invalidate(c.portals)
@@ -891,6 +921,7 @@ return {
 	onAgentEvent = onAgentEvent,
 	request = request,
 	toggleOverlay = toggleOverlay,
+	menuState = menuState,
 	reloadConfig = reloadConfig,
 	confirmReset = confirmReset,
 	setCovered = setCovered,

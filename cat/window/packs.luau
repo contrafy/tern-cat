@@ -127,10 +127,11 @@ local function startScan(c: Cache)
 				continue
 			end
 			if n >= MAX_PACKS_PER_ROOT then
-				table.insert(
-					c.problems,
+				local problem =
 					`{root.source} packs at {root.dir}: more than {MAX_PACKS_PER_ROOT} entries, rest ignored`
-				)
+				if not table.find(c.problems, problem) then
+					table.insert(c.problems, problem)
+				end
 				break
 			end
 			n += 1
@@ -153,6 +154,7 @@ local function step(c: Cache): boolean
 	end
 	local item = table.remove(queue, 1)
 	if item then
+		c.scanned[item.name] = true
 		local roots = { item.root }
 		local result = loader.loadAll(filteredFs(c.deps.fs, roots, { [item.name] = true }), c.deps.decode, roots)
 		merge(c, result.packs)
@@ -164,6 +166,26 @@ local function step(c: Cache): boolean
 	end
 	c.full = #queue == 0
 	return c.full
+end
+
+-- Queues for `step` every pack folder not validated yet, including folders added since an earlier
+-- scan finished (lists the roots only). True while some remain.
+local function refresh(c: Cache): boolean
+	if not scanning(c) then
+		startScan(c)
+	end
+	return scanning(c)
+end
+
+-- Every validated pack whose pack.json is still there (the Cat menu's Appearance choices).
+local function available(c: Cache): { T.LoadedPack }
+	local out: { T.LoadedPack } = {}
+	for _, pack in c.packs do
+		if c.deps.fs.exists(manifest.joinPath(pack.root, loader.MANIFEST_FILE)) then
+			table.insert(out, pack)
+		end
+	end
+	return out
 end
 
 -- Never runs the full scan itself: when the wanted pack is not in its own directory, it starts the
@@ -244,5 +266,7 @@ return {
 	select = select,
 	scanning = scanning,
 	step = step,
+	refresh = refresh,
+	available = available,
 	asset = asset,
 }

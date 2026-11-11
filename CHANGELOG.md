@@ -18,12 +18,24 @@ All notable changes to tern-cat are documented here. The format follows
   host, which drops the copies other windows send, decides once (one sound) and every window
   mirrors the reaction. New `behavior.allow_agent_reactions` (default `true` in every preset),
   settings row "React to coding agents"; Carly may only turn it off.
+- **Cat menu** palette command (`plugin.tern-cat.menu`): Tern's inline picker over the focused
+  pane with Pet, Poke, Feed... (treat, kibble, fish), Play... (ball, string, feather), Snooze 30
+  min or Wake, Hide or Show overlay, Appearance... (every valid bundled and user sprite pack),
+  Pane switch..., Overlay corner..., Open cat and Cat settings; the current choice is checked.
+  Every choice is a validated, rate-limited window intent applied by the host. No default key
+  (bind it in `settings.json`, see docs/usage.md). Needs Tern 0.7.1 or later (`cx:pick`); on an
+  older Tern the command says so and opens the block.
 - Development: `scripts/sandbox-window.sh` opens every sandboxed test window (smoke, compat
   probe, soak, perf baseline). With the copy `scripts/sandbox-app.sh` builds (an ad-hoc signed
   Tern.app clone with bundle id `so.stencil.tern.sandbox`) it launches in the background, gets
   past the sign-in card with a stand-in account and logs where the window landed, so a window
   manager rule can keep test windows off your workspaces; without it, a plain `tern --control`
   window as before (docs/develop-with-omp-tern.md).
+
+### Changed
+
+- `set_config` intents may set `cat.appearance` from the block, the window (Cat menu) and the
+  keyboard; Carly still may not change the appearance.
 
 ## [0.3.0] - 2026-11-11
 

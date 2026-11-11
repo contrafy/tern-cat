@@ -174,6 +174,14 @@ t.describe("safety: shipped sources", function()
 		t.expect(offenders(shipped(), "session:event", { "window.luau" })).toEqual({})
 	end)
 
+	t.it("open Tern's picker only from the window half, for the Cat menu", function()
+		local sources = shipped()
+		t.expect(offenders(sources, ":pick%s*%(", { "window.luau" })).toEqual({})
+		t.expect(occurrences(sources["window.luau"], ":pick%s*%(")).toBe(1)
+		-- Choices map to intents through the pure menu model, which never touches Tern.
+		t.expect(occurrences(sources["cat/window/menu.luau"], "%f[%w_]tern%.")).toBe(0)
+	end)
+
 	t.it("keep the window half read-only on shared state (host is the single kv writer)", function()
 		local sources = shipped()
 		local windowSide = {}

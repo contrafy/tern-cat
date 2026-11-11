@@ -114,10 +114,11 @@ does not ask the user before Carly calls them, so:
 - mutating calls become intents that go through the same allowlist as every other source
   (`cat/core/commands.luau`: allowlisted kinds and per-kind arguments);
 - the `set_config` allowlist is source-aware: intents with source `carly` may not opt into sound
-  (the only feature that starts a process), loosen quiet hours or end focus mode. Carly may set
-  `sound.enabled` only to `false`, `quiet.hours_enabled` and `behavior.focus_mode` only to
-  `true`, and may not change `sound.volume`, `quiet.start` or `quiet.stop`; the block, the window
-  and the keyboard keep the full allowlist;
+  (the only feature that starts a process), loosen quiet hours, end focus mode or change the
+  sprite pack. Carly may set `sound.enabled` only to `false`, `quiet.hours_enabled` and
+  `behavior.focus_mode` only to `true`, and may not change `cat.appearance`, `sound.volume`,
+  `quiet.start` or `quiet.stop`; the block, the window (palette commands and the Cat menu) and
+  the keyboard keep the full allowlist;
 - read-only views (status, explain, AI status, context) return small summaries; nothing returns
   command text, terminal output, file paths or journal summaries.
 

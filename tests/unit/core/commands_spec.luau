@@ -191,7 +191,7 @@ describe("commands", function()
 				"ai.enabled"
 			)
 			rejects(factories.intent("set_config", { key = "ai.share_command_output", value = true }))
-			rejects(factories.intent("set_config", { key = "cat.appearance", value = "void" }))
+			rejects(factories.intent("set_config", { key = "cat.name", value = "Rex" }))
 			rejects(factories.intent("set_config", { key = "personality.mischief", value = 1 }))
 			rejects(factories.intent("set_config", { key = "__proto__", value = 1 }))
 		end)
@@ -207,6 +207,19 @@ describe("commands", function()
 			rejects(factories.intent("set_config", { values = {} }))
 			rejects(factories.intent("set_config", { key = "sound.enabled" }))
 			rejects(factories.intent("set_config", { key = "sound.enabled", value = true, values = {} }))
+		end)
+
+		it("lets the user's own surfaces pick a sprite pack, never Carly", function()
+			for _, source in { "block", "window", "keyboard" } do
+				local intent = accepts("set_config", { key = "cat.appearance", value = "void" }, { source = source })
+				expect(intent.args).toEqual({ values = { ["cat.appearance"] = "void" } })
+			end
+			rejects(factories.intent("set_config", { key = "cat.appearance", value = "../etc" }, { source = "window" }))
+			expect(
+				rejects(
+					factories.intent("set_config", { key = "cat.appearance", value = "void" }, { source = "carly" })
+				)
+			).toContain("Carly")
 		end)
 
 		it("never lets Carly turn sound on or loosen quiet hours (no user consent on that surface)", function()

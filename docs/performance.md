@@ -79,6 +79,8 @@ from Carly's animation, not tern-cat.
 | Host half load | 3.2-16 ms (selected and default pack validated) |
 | Window half load | 2-3 timer slices of 15-17 ms each; overlay setup 2.5-12.6 ms |
 | Overlay visible after a plugin reload | about 40-60 ms (up to about 800 ms while the app is still starting) |
+| Cat menu callbacks (Tern 0.9.16, sandbox) | command and picker `:next` callbacks 0.6-6.0 ms, including the submenu opened from a choice |
+| Pack validation after the first Cat menu open | one pack folder per overlay tick: 5-43 ms per bundled pack (176 files, about 720 KB), under 1 ms for an invalid `pack.json`; ticks over 20 ms log a slow-tick warning |
 
 Why the window half loads in slices: Tern stops a window hook that takes longer than 50 ms (and
 until 0.8.3 disabled it until reload). Compiling every module in one call took 26-45 ms and once

@@ -248,6 +248,45 @@ describe("window/packs full scan", function()
 		packs.select(cache, "still-nope")
 		expect(packs.scanning(cache)).toBe(true)
 	end)
+
+	it("refresh queues the unvalidated folders, then only folders added since", function()
+		local files = manyPacks()
+		local cache, log = make(files)
+		packs.select(cache, "orange-menace")
+		expect(packs.scanning(cache)).toBe(false)
+		expect(packs.refresh(cache)).toBe(true)
+		while packs.scanning(cache) do
+			local before = #log
+			packs.step(cache)
+			expect(manifestReads(log, before)).toBeLessThanOrEqual(1)
+		end
+		local n = #log
+		expect(packs.refresh(cache)).toBe(false)
+		expect(manifestReads(log, n)).toBe(0)
+		addPack(files, USER .. "/new-one", "new-one")
+		expect(packs.refresh(cache)).toBe(true)
+		packs.step(cache)
+		expect(packs.scanning(cache)).toBe(false)
+		expect(manifestReads(log, n)).toBe(1)
+		expect(cache.packs["new-one"]).notToBeNil()
+	end)
+
+	it("available lists the validated packs whose pack.json is still there", function()
+		local files = manyPacks()
+		local cache = make(files)
+		packs.select(cache, "orange-menace")
+		packs.refresh(cache)
+		while packs.scanning(cache) do
+			packs.step(cache)
+		end
+		files[USER .. "/folder-2/pack.json"] = nil
+		local ids = {}
+		for _, p in packs.available(cache) do
+			table.insert(ids, p.manifest.id)
+		end
+		table.sort(ids)
+		expect(ids).toEqual({ "orange-menace", "user-1", "user-3", "user-4", "user-5", "void" })
+	end)
 end)
 
 describe("window/packs.asset", function()
