@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Real-window smoke test for the tern-cat window half, fully sandboxed (own config dir, daemon
-# and logs under $SB). Opens two control windows on the desktop, checks the overlay sheet, intents,
+# and logs under $SB). Opens two control windows through scripts/sandbox-window.sh (from the
+# sandbox app when it exists, see scripts/sandbox-app.sh), checks the overlay sheet, intents,
 # the hide toggle and chord, Carly exports/context and single counting across windows, takes a
 # screenshot, then quits the windows and stops the sandbox daemon.
 #
@@ -93,8 +94,7 @@ wait_for() {
 
 open_window() {
   local ep="$1"
-  (cd "$SB" && nohup tern --control "$ep" "$SB/work" >>"$SB/logs/$(basename "$ep").out" 2>&1 &)
-  wait_for 30 test -S "$ep" || return 1
+  bash scripts/sandbox-window.sh "$ep" "$SB/work" >/dev/null || return 1
   ctl "$ep" ready >/dev/null
 }
 
@@ -180,9 +180,10 @@ check "context within 160 chars" test "$(printf '%s' "${LINE#- Tern Cat: }" | se
 echo "==> screenshot"
 sheet_visible || ctl "$WA" plugins run plugin.tern-cat.toggle-overlay >/dev/null
 SHOT_JSON="$(ctl "$WA" shot overlay)"
-SHOT_REL="$(printf '%s' "$SHOT_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("png",""))' 2>/dev/null)"
-if [ -n "$SHOT_REL" ] && [ -f "$SB/$SHOT_REL" ]; then
-  cp "$SB/$SHOT_REL" "$SHOTS/overlay.png"
+SHOT="$(printf '%s' "$SHOT_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("png",""))' 2>/dev/null)"
+case "$SHOT" in "" | /*) ;; *) SHOT="$SB/$SHOT" ;; esac
+if [ -n "$SHOT" ] && [ -f "$SHOT" ]; then
+  cp "$SHOT" "$SHOTS/overlay.png"
   ok "screenshot saved to $SHOTS/overlay.png"
 else
   bad "screenshot" "$SHOT_JSON"

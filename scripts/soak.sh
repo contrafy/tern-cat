@@ -38,10 +38,8 @@ cleanup() {
 trap cleanup EXIT
 
 open_window() {
-  local ep="$1" i
-  (cd "$SB" && nohup tern --control "$ep" "$SB/work" >>"$SB/logs/$(basename "$ep").out" 2>&1 &)
-  for i in $(seq 300); do [ -S "$ep" ] && break; sleep 0.1; done
-  [ -S "$ep" ] || return 1
+  local ep="$1"
+  bash scripts/sandbox-window.sh "$ep" "$SB/work" >/dev/null || return 1
   ctl "$ep" ready >/dev/null
 }
 

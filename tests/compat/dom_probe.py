@@ -36,6 +36,7 @@ CFG = DATA / "tern-cat" / "config.json"
 KV = DATA / "tern-cat" / "kv.json"
 PROBE = DATA / "tern-cat-probe" / "probe.json"
 PROBE_CSS = OUT / "probe.css"
+LAUNCHER = Path(__file__).resolve().parents[2] / "scripts" / "sandbox-window.sh"
 OVERLAY = "plugin:local:tern-cat:overlay"
 TRAVEL = "plugin:local:tern-cat:travel"
 CORNERS = ("top-right", "top-left", "bottom-right", "bottom-left")
@@ -108,16 +109,13 @@ def start_window(settings: dict | None) -> bool:
     else:
         SETTINGS.unlink(missing_ok=True)
     WORK.mkdir(parents=True, exist_ok=True)
-    with open(SB / "logs" / "probe-win.out", "ab") as log:
-        subprocess.Popen(
-            ["tern", "--control", str(EP), str(WORK)],
-            cwd=SB,
-            stdout=log,
-            stderr=log,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-    if not wait_for(EP.exists, 30, 0.2):
+    # Through scripts/sandbox-window.sh: the sandbox app's window when it exists.
+    opened = subprocess.run(
+        ["bash", str(LAUNCHER), str(EP), str(WORK)],
+        stdout=subprocess.DEVNULL,
+        timeout=90,
+    )
+    if opened.returncode != 0:
         return False
     return wait_for(lambda: ctl("ready").get("ok"), 30, 0.5) is True
 

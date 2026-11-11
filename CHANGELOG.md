@@ -18,6 +18,12 @@ All notable changes to tern-cat are documented here. The format follows
   host, which drops the copies other windows send, decides once (one sound) and every window
   mirrors the reaction. New `behavior.allow_agent_reactions` (default `true` in every preset),
   settings row "React to coding agents"; Carly may only turn it off.
+- Development: `scripts/sandbox-window.sh` opens every sandboxed test window (smoke, compat
+  probe, soak, perf baseline). With the copy `scripts/sandbox-app.sh` builds (an ad-hoc signed
+  Tern.app clone with bundle id `so.stencil.tern.sandbox`) it launches in the background, gets
+  past the sign-in card with a stand-in account and logs where the window landed, so a window
+  manager rule can keep test windows off your workspaces; without it, a plain `tern --control`
+  window as before (docs/develop-with-omp-tern.md).
 
 ## [0.3.0] - 2026-11-11
 

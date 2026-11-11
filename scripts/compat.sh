@@ -14,9 +14,9 @@
 #      rely on, and the behaviors built on them (corners, pass-through, walk, portal, full-screen
 #      hide, floated card, settings page, reduced motion).
 #
-# Opens visible windows on the desktop (smoke and probe). Re-running is safe: each run relinks
-# fresh snapshots and resets the probe's plugin data; on exit it quits its windows and stops the
-# sandbox daemon. Exits non-zero when any step fails, listing missing Tern hooks.
+# Opens windows through scripts/sandbox-window.sh (smoke and probe). Re-running is safe: each run
+# relinks fresh snapshots and resets the probe's plugin data; on exit it quits its windows and
+# stops the sandbox daemon. Exits non-zero when any step fails, listing missing Tern hooks.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 REPO="$PWD"

@@ -39,6 +39,7 @@ import psutil
 
 SB = Path(os.environ.get("SB", ""))
 SHEET = "plugin:local:tern-cat:overlay"
+LAUNCHER = Path(__file__).resolve().parent.parent / "scripts" / "sandbox-window.sh"
 
 
 def log(msg: str) -> None:
@@ -159,16 +160,14 @@ def wait_until(secs: float, cond) -> bool:
 def start(plugin: bool, block: bool, env: dict[str, str] | None = None) -> tuple[psutil.Process, psutil.Process]:
     stop()
     (SB / "work").mkdir(exist_ok=True)
-    with open(SB / "logs" / "perf-window.out", "ab") as out:
-        subprocess.Popen(
-            ["tern", "--control", str(SB / "perf.sock"), str(SB / "work")],
-            cwd=SB,
-            stdout=out,
-            stderr=out,
-            start_new_session=True,
-            env={**os.environ, **(env or {})},
-        )
-    if not wait_until(30, lambda: (SB / "perf.sock").exists()):
+    # Through scripts/sandbox-window.sh: the sandbox app's window when it exists.
+    opened = subprocess.run(
+        ["bash", str(LAUNCHER), str(SB / "perf.sock"), str(SB / "work")],
+        stdout=subprocess.DEVNULL,
+        env={**os.environ, **(env or {})},
+        timeout=90,
+    )
+    if opened.returncode != 0:
         sys.exit("perf: window did not start")
     ctl("ready")
     if plugin and not wait_until(15, lambda: overlay_rules() > 0):
