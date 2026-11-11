@@ -69,7 +69,7 @@ or remote asset loading. Pack paths cannot be URLs (`:` is rejected).
 ### Autonomous AI is disabled
 
 The PRD asked for opt-in autonomous AI reactions. M0 found that Tern 0.6.2 has no hidden or
-constrained completion API (still true in 0.8.3): a scheduled Carly turn is a full Carly turn
+constrained completion API (still true in 0.9.16): a scheduled Carly turn is a full Carly turn
 with access to Lua, `run_command` and `send_input`, and "there is no separate Carly approval or
 per-turn access tier" ([sdk-capability-matrix.md](sdk-capability-matrix.md#7-carly)). Prompt
 wording cannot make that safe, so the `carly_schedule` provider in `cat/integrations/ai.luau` is

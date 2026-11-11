@@ -1,6 +1,6 @@
 # SDK capability matrix (M0)
 
-Target: Tern `0.6.2 (4b3ed42)` on macOS arm64. The API types came from `tern plugin types` (`tern.d.luau`, 1814 lines). Line references point into that file. Re-checked against Tern `0.8.3 (e2b8656)`: see [Tern 0.8.3 delta](#tern-083-delta).
+Target: Tern `0.6.2 (4b3ed42)` on macOS arm64. The API types came from `tern plugin types` (`tern.d.luau`, 1814 lines). Line references point into that file. Re-checked against Tern `0.8.3 (e2b8656)` and `0.9.16 (41a10a5)`: see [Tern 0.8.3 delta](#tern-083-delta) and [Tern 0.9.16 delta](#tern-0916-delta).
 
 Tags:
 
@@ -55,7 +55,7 @@ Both ran against an isolated config, daemon and log directory (see [Dev isolatio
 | Requirement | Command events need shell integration (OSC 133); see [guides/hooks](https://docs.stencil.so/tern/guides/hooks.html) | VERIFIED |
 | Remote panes | A remote host runs its own host halves. The local host half never hears about remote panes, but the window half does | VERIFIED (docs) |
 | Output text elsewhere | Window `cx.session:read(pane, opts)` returns up to 2000 lines, 64000 chars, scrollback on by default, with no coordinates. tern-cat never calls it on shell panes | VERIFIED |
-| Budgets | Host 2 s per call; window 50 ms; formatters and `available` 4 ms. A tripped budget disables the hook until reload ([concepts/runtime](https://docs.stencil.so/tern/concepts/runtime.html)) | VERIFIED |
+| Budgets | Host 2 s per call; window 50 ms; formatters and `available` 4 ms. A tripped budget disables the hook until reload (0.9.6 and later: pauses it; see [Tern 0.9.16 delta](#tern-0916-delta)) ([concepts/runtime](https://docs.stencil.so/tern/concepts/runtime.html)) | VERIFIED |
 | Decision | Count command events in the host half only. Never read `line` into any outbound payload | - |
 
 ## 2. Drawing over panes
@@ -279,6 +279,83 @@ commit so CI keeps checking against the tested version (VERIFIED).
 | Floated card | `cx.layout:float(pane, owner, "br")` leaves the card in `glance` mode: tilted, 297x280 CSS px here (glance size 480x280, capped by the owner), and `ctl pick` on its buttons hits `section.tn-pane.pip` itself, so clicks on the sprite and buttons did nothing. `float(..., { focus = true })` is still glance. Double-click, `ctl pip focus` or `cx.layout:focus(pane)` switches it to `focus` mode (446x420 here; focus size 720x420), where clicks reach the block. Fix: `cat/window/blocks.luau` focuses every card it floats. The card takes keyboard focus; clicking the pane returns focus and the card to glance | VERIFIED |
 | Late-attach images | 0.6.3: "block images published while the pane was hidden or before a restart show instead of 'The image data has not arrived'". tern-cat keeps every frame node in the view anyway (see [section 5](#5-images-blobs-frame-rate-hit-testing-sound)), which stays correct; dropping it would need 0.6.3 as the minimum and a re-test | VERIFIED (release notes) / INFERENCE (removal) |
 | Sandbox hazard | A 0.8.3 window on a fresh config dir offered and ran "Install omp", copying `~/.local/bin/omp` into `$TERN_CONFIG_DIR/omp`. Nothing outside the sandbox changed (`~/.local/bin/omp` and the shell rc files kept their dates) | VERIFIED |
+
+## Tern 0.9.16 delta
+
+Re-check on Tern `0.9.16 (41a10a5)`, macOS arm64, in sandboxes under `/tmp/tern-cat-dev/Compat09`
+and with `scripts/compat.sh` (types, checks, goldens, `scripts/smoke-window.sh` 19/19 and the
+DOM-hook probe). Sources: a diff of `tern plugin types` (2332 lines, up from 2016), the release
+notes Tern bundles for 0.8.4 to 0.9.16 (palette "What's new: release notes"; the same Markdown is
+in the executable: `strings -n 1 /Applications/Tern.app/Contents/MacOS/tern`, from `## 0.9.16`
+to `## 0.8.3`), throwaway plugins in a sandbox, and real-window runs with `tern ctl`.
+
+**Verdict:** no API tern-cat calls changed (`scripts/check.sh` type-checks against the 0.9.16 types
+without source changes) and every undocumented DOM/CSS hook still matches. Three behavior changes
+broke tern-cat and are fixed: `at_prompt` is true while `less` runs, Tiles/Islands padding scales
+with the interface size, and a budget trip now pauses timers (which stalled the window boot).
+New: a window key, `budget`, `unload`, `process_exit`, `agent_state`, `float_moved` and
+`session_ended` events; none is needed. Still no hover/pointer events, overlay API, pane or cell
+geometry, occlusion signal, audio or constrained Carly completion.
+
+### API changes in the types
+
+| Change | Since | Effect on tern-cat | Tag |
+|---|---|---|---|
+| `cx.layout:float(pane, over, corner, opts: FloatOpts?)`: the 4th argument was `Reveal`, now `{ focus, size }` (`size` sets the glance size) | 0.9.8 | None: tern-cat passes three arguments | VERIFIED (types, release notes) |
+| `cx:new_block(kind, args, how, opts: BlockOpts?)` (`target`, `dir`, `ratio`); `How` adds `"over"` and `"glimpse"` | 0.9.8, 0.9.11 | None. `"glimpse"` (over the whole tab until the next click) could show the card without a split; not adopted | VERIFIED (types, release notes) |
+| `cx:window_key()` (`""` for the first window) and `TERN_WINDOW_KEY` for processes the window starts; block events carry `ev.window`; `EffectCx:open(target, { window })` acts in the window that sent the event | 0.9.6, 0.9.16 | None: window state is VM-local and the host is the only kv writer, so no window id is needed. The probe returned `""` | VERIFIED (types, sandbox) |
+| `tern.on("budget", BudgetEvent)`; a hook over budget is paused (5 s, doubling within 10 min, up to 5 min) instead of disabled until reload; only the plugin's own Lua counts, a call may take ten budgets of wall time | 0.9.6 | Fixed the boot (below). Not subscribed: Tern itself logs `plugin hook exceeded its budget; paused` and `resumed after its pause` with plugin and hook (a throwaway plugin's handler only repeated them) | VERIFIED (types, release notes, sandbox) |
+| `tern.on("unload", cx)` in both halves; `tern.process.run` children survive a reload and end as a `process_exit` event in the new VM | 0.9.16 | Not used. Tern removes the plugin's sheets when it unloads (`tern plugin unlink` dropped `overlay` and `styles` at once) and its timers go with the VM. The only process is the host's sound player: short, at most 10 s, and `tern.process.run` returns no pid to stop. Its late `process_exit` goes unhandled | VERIFIED (types, sandbox) / INFERENCE (unhandled `process_exit` is harmless) |
+| `agent_state` (`working`, `waiting_input`, `idle`, `exited`), `float_moved`, `session_ended` window events | 0.9.6, 0.9.8 | Not used. `agent_state` would allow a reaction to an agent waiting without reading output; `float_moved` could remember where the user dropped the card | VERIFIED (types) |
+| `pane_created` fires for every pane kind, not only terminals | 0.9.8 | Opening the cat's own block now also counts as a new pane for pane reactions | VERIFIED (release notes) / INFERENCE (effect) |
+| `cx.session:selection`, `tern.files.button`, `tern.chrome.program_icon`, `tern.ui.button`/`stats`, table rows and cells, `BlockDef.font`, `overlay` node props (a panel inside a block), `:has()` and `@layer` in sheets, `TERN_EXE`, `tern.timer` raising on huge delays | 0.9.6-0.9.16 | None | VERIFIED (types, release notes) |
+| Sheets no longer accept `-stencil-descendant-animation-delay` (added 0.9.0); endless animations no longer need `steps()` to save power (Tern paces them on battery) | 0.9.8, 0.9.9 | None: never used; tern-cat keeps `steps()`, which set the sprite frame rate | VERIFIED (release notes) |
+
+The CI download (`stencil-hq/tern-sdk`, `plugins/tern.d.luau`) at commit `ba85dce` (2026-11-10,
+then `main`) is byte-identical to 0.9.16's `tern plugin types`; `scripts/fetch-types.sh` pins it
+(VERIFIED).
+
+### Behavior changes
+
+| Item | Detail | Tag |
+|---|---|---|
+| `PaneInfo.at_prompt` | True while `less` waits for a key (also at `(END)`); `false` in `vim -u NONE`, `top` and `sleep`. `running` is set and `program` is `less` throughout. The presenter cleared the full-screen mark on the next tick, so the cat sat over `less`. Fix: a pane counts as at its prompt only while `running` is unset (`cat/window/presenter.luau`) | VERIFIED (probe plugin, shots) |
+| `man` and `git log` | Rendered as native command lenses in the pane (no pager, no full-screen); the command finishes at once and the cat stays, which fits | VERIFIED (shots) |
+| Pane padding | Tiles and Islands padding scale with the interface size (release notes 0.9.6): 3.69 and 4.92 px at 16 px, header 36.92 px (`ctl dump`). `travel.insets` scaled only the header; fixed | VERIFIED |
+| Budget trip | The error `tern: <hook> exceeded 50 ms` is not caught by `pcall`. The hook (here every timer callback) pauses, and timers that came due run when the pause ends, which happens on the window's next event (a `ctl` command, input), not on its own. A timer created before the stopped callback fires then. The boot scheduled its next slice after the work, so a cold start that ran a slice past 50 ms never finished. Fix: `cat/window/budget.luau` (see [architecture.md](architecture.md#window-entry-boot)); reproduced with an injected 80 ms step | VERIFIED (throwaway plugin, sandbox) |
+| Cold-start cost | Overlay setup in one callback measured up to 44-48 ms on cold window starts (5-17 ms warm); now four steps | VERIFIED (sandbox logs) |
+| Reduced motion | `cx.settings:get("reduce_motion")` returns `"system"` by default (Tern follows the OS), `"on"`/`"off"` when forced in `settings.json`. The window half cannot read the OS setting, so under `"system"` only the sheets' `@media (prefers-reduced-motion: reduce)` rules apply: with the harness's `reduce-motion on`, `ctl stats` showed no animating element and a walk showed one cat appearing in the new pane. Whether 0.8.3 also returned `"system"` was not checked | VERIFIED / INFERENCE (0.8.3) |
+| Pane ids | Ids after a daemon restart look like `4294967297` (high bits set); tern-cat treats them as opaque numbers | VERIFIED (probe plugin) |
+| Pane classes | Unfocused panes carry `.dim`; panes carry `tn-float-card`, `multi` and with headers `headed`. tern-cat selects only `.on`/`.off`/`.pip` | VERIFIED (`ctl dump`) |
+| Sandbox hazard | As in 0.8.3, a fresh sandbox window offered omp and later installed a copy into `$TERN_CONFIG_DIR/omp`; `~/Library/Application Support/Tern/omp` kept its timestamps | VERIFIED |
+
+### Capabilities on the roadmap
+
+| Question | 0.9.16 answer | Tag |
+|---|---|---|
+| Pointer, hover, move, drag events for plugins | None. Block nodes add `actions.hold` (phone long-press); the hover changes are Tern's own UI | VERIFIED (types, release notes) |
+| Overlay or decoration API | None; the new `overlay` node is a panel inside a block. Window-half `tern.css` remains the route | VERIFIED (types) |
+| Pane geometry, cell or caret metrics | None | VERIFIED (types) |
+| Window identity | `cx:window_key()` (above) | VERIFIED |
+| Visibility, occlusion, OS window focus | None | VERIFIED (types) |
+| Reduced-motion signal | `reduce_motion` setting (`system`/`on`/`off`), polled; no OS value | VERIFIED |
+| Sound | No audio API | VERIFIED (types) |
+| Constrained or hidden Carly completion | None | VERIFIED (types) |
+| Permissions, manifest | No permission system; `schema = 1`; a window-only manifest (no `host`) loads | VERIFIED (sandbox) |
+
+### Undocumented DOM and CSS the overlay relies on
+
+All checked by `scripts/compat.sh` (DOM-hook probe 87/87, types identical to the pin, checks,
+goldens and window smoke passing) and by frame shots.
+
+| Hook | 0.9.16 | Tag |
+|---|---|---|
+| `section.tn-pane.on:not(.off) > div.tn-body > div.tv > div.tv-fx.top` (`::after` cat, `::before` ring) | Present, box equal to the view; cat picked at all four corners; a click on it keeps `textarea.tv-input` focused and typing runs; hover and press frames show `look` and the swat | VERIFIED |
+| `div.tn-stage > section.tn-pane`, ratio-exact tiling | Yes, at Tern's defaults and with Split headers, Islands and a 16 px interface | VERIFIED |
+| `div.tv-grid > div.tv-fx`, `div.tv-layer`, `--tv-px`/`--tv-py` | Present; a probe pseudo at `var(--tv-px) var(--tv-py)` lands on the grid origin; Tern's CSS still reads `var(--tv-aside)` | VERIFIED |
+| Portal, vent, box | Dive in the old pane and emerge in the new one, at top and bottom corners (frame shots) | VERIFIED |
+| Walk | Travel sheet installed and cleared; frames show one cat walking, leaping the divider and handing off without a jump, also with headers at 16 px | VERIFIED |
+| Floated card | `section.tn-pane.pip.pip-focus.pip-r.pip-b` after **Open cat**; block in `div.tv.covered > div.tv-cover > div.sf-region.sf-main`; `.sf-img-frame` present; Pet and Settings work; the overlay steps aside | VERIFIED |
 
 ## Headless testing recipe
 
