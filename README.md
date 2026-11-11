@@ -63,6 +63,9 @@ you want it gone too.
 
 - **Behavior.** Presets `menace` (default), `quiet_office`, `chaos` and `zen`. Focus mode keeps
   the cat still while your commands run; snooze and quiet hours silence it.
+- **Coding agents.** When an agent pane (omp, Claude Code) finishes a turn the cat cheers, when
+  it fails it droops, and when it waits for you it stares (and meows, if sound is on). It sees
+  only that state, never what the agent said. `behavior.allow_agent_reactions` turns it off.
 - **Carly.** Carly can check on, pet, feed and configure the cat through validated exports, and
   gets a one-line summary of its mood in her context.
 

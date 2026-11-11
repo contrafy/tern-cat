@@ -149,18 +149,30 @@ There are 20 animations. A pack that lacks one falls back along a chain that end
 | `flop` | Three failed test runs in a row (`allow_development_reactions`). |
 | `stare` | A `sudo` command started. |
 | `hop` | A pane opened or closed (with `look`), ambient bursts of energy. |
+| `happy`, `hop`, `disappointed`, `look`, `stare` (coding agents) | An agent pane (omp, Claude Code or another agent that reports its status to Tern) finished a turn (`happy`, sometimes `hop`), failed one (`disappointed`), exited (`look`), or waits for your input (`stare` or `look`, with a meow when sound is on). `allow_agent_reactions`. |
 
 Command reactions are sampled (`reaction_sample_rate`, default 35%) and rate limited
 (`reaction_cooldown_s`, default 45 s). Only the command's category (test, build, vcs, list, sudo,
 editor, network, package, other) and exit status are used; the command line is dropped inside
 the hook.
 
+Coding agents: the cat uses Tern's `agent_finished` and `agent_state` events, keeping only the
+agent's pane id and how its turn ended (done, failed, exited) or that it now waits for input;
+it never reads what the agent said. Finished turns are sampled and rate limited like commands
+(per outcome); the waiting cue is rate limited (`reaction_cooldown_s`) but never sampled away,
+and it can wake a napping cat. One agent event makes one reaction and at most one meow, however
+many windows show the agent; the cat in every window plays it within about a second. Closing an
+agent block is left to the pane reactions. Turn them off with
+`behavior.allow_agent_reactions: false` (settings label "React to coding agents"). An agent you
+start by typing its command in a shell counts as a running command for focus mode, which keeps
+the cat from reacting to it until it exits.
+
 Focus mode (`behavior.focus_mode`, off by default, on in `quiet_office`; switch under Quiet
 hours & sound in the settings page) keeps the cat still while any command runs: it only idles,
-sits, blinks, grooms or sleeps, does not react to commands or panes, and plays no sound. Your own
-pets, treats, play and `perform` requests still play. When the last running command finishes,
-the cat behaves normally again and may react to that command. Snooze and quiet hours rank above
-focus mode; reduced motion and the `allow_*` toggles below it.
+sits, blinks, grooms or sleeps, does not react to commands, panes or agents, and plays no sound.
+Your own pets, treats, play and `perform` requests still play. When the last running command
+finishes, the cat behaves normally again and may react to that command. Snooze and quiet hours
+rank above focus mode; reduced motion and the `allow_*` toggles below it.
 
 The mood (calm, playful, sleepy, annoyed, curious, happy) comes from the needs (hunger, energy,
 affection, boredom), which never reduce stats and are simulated, capped, for time Tern was
@@ -175,8 +187,8 @@ rare reactions, focus mode), `chaos` (frequent reactions, more swats, hops and w
 The window half registers these Carly exports (Carly calls them as
 `plugins['tern-cat'].<name>(...)`). Every argument is validated, every call is wrapped in
 `pcall`, and actions return `{ok = true}` or `{ok = false, error = "..."}`. Requests are rate
-limited (a burst of 3, then 10 per minute), and Carly can only mute sound or turn quiet hours or
-focus mode on, never the reverse.
+limited (a burst of 3, then 10 per minute), and Carly can only mute sound, turn pointer or agent
+reactions off, or turn quiet hours or focus mode on, never the reverse.
 
 | Export | Signature |
 |---|---|

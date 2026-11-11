@@ -384,6 +384,25 @@ describe("store", function()
 			expect(#out.journal).toBe(1)
 			expect(out.journal[1].kind).toBe("gesture")
 		end)
+
+		it("turns an agent signal into an effect without changing the envelope", function()
+			local env = freshEnv()
+			local intent = factories.intent(
+				"agent",
+				{ pane = 7, signal = "waiting" },
+				{ intent_id = "w-a1", source = "window" }
+			)
+			local out, effects = store.applyIntent(env, intent, factories.config(), opts())
+			expect(out).toEqual(env)
+			expect(out.rev).toBe(env.rev)
+			expect(#effects).toBe(1)
+			expect(effects[1].kind).toBe("agent")
+			local ev = effects[1].event
+			expect(ev.type).toBe("agent")
+			expect(ev.scope).toBe("window")
+			expect(ev.pane_id).toBe(7)
+			expect(ev.attributes).toEqual({ signal = "waiting" })
+		end)
 	end)
 
 	describe("recordReaction", function()

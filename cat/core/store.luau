@@ -8,6 +8,7 @@ local util = require("./util")
 local model = require("./model")
 local needsMod = require("./needs")
 local commands = require("./commands")
+local events = require("./events")
 local animations = require("../render/animations")
 
 local SCHEMA_VERSION = 1
@@ -343,7 +344,10 @@ end
 
 -- Validates and applies a state-changing intent once. Config-changing intents are returned as
 -- `{kind = "config", changes = {[dotted path] = value}}` effects for the host to write into
--- config.json; they never modify the envelope beyond dedupe bookkeeping.
+-- config.json; they never modify the envelope beyond dedupe bookkeeping. An `agent` intent is a
+-- signal, not a state change: it becomes an `{kind = "agent", event}` effect and leaves the
+-- envelope (and `seen`) alone; the host dedupes the copies several windows send by pane and
+-- signal (see docs/architecture.md).
 local function applyIntent(
 	env: T.StoreEnvelope,
 	rawIntent: any,
@@ -359,6 +363,22 @@ local function applyIntent(
 	end
 	local o: IntentOptions = opts or {}
 	local now = if o.wall_s ~= nil and util.isFiniteNumber(o.wall_s) then o.wall_s :: number else intent.at
+
+	if intent.kind == "agent" then
+		return env,
+			{
+				{
+					kind = "agent",
+					event = events.agent({
+						id = intent.intent_id,
+						time = intent.at,
+						scope = "window" :: T.EventScope,
+						pane = intent.args.pane,
+						signal = intent.args.signal,
+					}),
+				},
+			}
+	end
 
 	local gestureEvent = commands.toEvent(intent)
 	if gestureEvent then

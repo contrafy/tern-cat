@@ -66,6 +66,7 @@ export type EventType =
 	| "timer"
 	| "focus"
 	| "ai"
+	| "agent"
 
 export type EventScope = "host" | "window" | "block"
 
@@ -75,6 +76,10 @@ export type CommandCategory = "test" | "build" | "vcs" | "list" | "sudo" | "edit
 export type Gesture = "pet" | "poke" | "feed" | "play" | "perform"
 
 export type EventAttributes = { [string]: string | number | boolean }
+
+-- The only information ever derived from a coding agent's window events (`agent_finished`,
+-- `agent_state`): how its turn ended, or that it waits for the user. Never what it said.
+export type AgentSignal = "done" | "failed" | "exited" | "waiting"
 
 export type CatEvent = {
 	event_id: string,
@@ -224,6 +229,8 @@ export type Config = {
 		allow_command_reactions: boolean,
 		allow_development_reactions: boolean,
 		allow_pane_reactions: boolean,
+		-- Coding agents (omp, Claude Code, ...) finishing a turn or waiting for input.
+		allow_agent_reactions: boolean,
 		allow_idle_sleep: boolean,
 		allow_pacing: boolean,
 		-- CSS-only hover/press reactions of the overlay cat (look near the pointer, swat on press).
@@ -295,6 +302,8 @@ export type IntentKind =
 	| "reset_identity"
 	| "export_identity"
 	| "clear_ai_state"
+	-- Window-only signal: an agent pane's turn ended or it waits for input (host dedupes copies).
+	| "agent"
 
 export type IntentSource = "block" | "window" | "carly" | "keyboard"
 

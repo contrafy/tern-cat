@@ -131,6 +131,7 @@ local EDITABLE: { [string]: boolean } = {
 	["behavior.allow_command_reactions"] = true,
 	["behavior.allow_development_reactions"] = true,
 	["behavior.allow_pane_reactions"] = true,
+	["behavior.allow_agent_reactions"] = true,
 	["behavior.allow_idle_sleep"] = true,
 	["behavior.allow_pacing"] = true,
 	["behavior.allow_pointer_reactions"] = true,

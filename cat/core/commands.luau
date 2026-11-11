@@ -23,6 +23,7 @@ local KINDS = {
 	"reset_identity",
 	"export_identity",
 	"clear_ai_state",
+	"agent",
 }
 local SOURCES = { "block", "window", "carly", "keyboard" }
 local GESTURE_KINDS = { "pet", "poke", "feed", "play", "perform" }
@@ -39,6 +40,7 @@ local SET_CONFIG_KEYS = {
 	"behavior.allow_command_reactions",
 	"behavior.allow_development_reactions",
 	"behavior.allow_pane_reactions",
+	"behavior.allow_agent_reactions",
 	"behavior.allow_idle_sleep",
 	"behavior.allow_pacing",
 	"behavior.allow_pointer_reactions",
@@ -59,9 +61,9 @@ local SET_CONFIG_KEYS = {
 local MAX_SET_CONFIG_ENTRIES = #SET_CONFIG_KEYS
 
 -- Carly calls exports without asking the user, so it may not opt into sound (the only feature
--- that starts a process), loosen quiet hours, end focus mode or turn pointer reactions on. For
--- these keys Carly may only set the listed less-intrusive value; keys mapped to nil are refused
--- outright.
+-- that starts a process), loosen quiet hours, end focus mode or turn pointer or agent reactions
+-- on. For these keys Carly may only set the listed less-intrusive value; keys mapped to nil are
+-- refused outright.
 local CARLY_RESTRICTED: { [string]: { value: any? } } = {
 	["sound.enabled"] = { value = false },
 	["sound.volume"] = {},
@@ -70,7 +72,12 @@ local CARLY_RESTRICTED: { [string]: { value: any? } } = {
 	["quiet.stop"] = {},
 	["behavior.focus_mode"] = { value = true },
 	["behavior.allow_pointer_reactions"] = { value = false },
+	["behavior.allow_agent_reactions"] = { value = false },
 }
+
+-- Agent signals come only from a window's own `agent_finished`/`agent_state` events.
+local AGENT_SOURCE = "window"
+local MAX_PANE_ID = 2 ^ 53
 
 local SCOPE_BY_SOURCE: { [string]: T.EventScope } = {
 	block = "block",
@@ -261,6 +268,22 @@ local function validateArgs(kind: string, args: Args, source: string): (Args?, s
 			return nil, problem
 		end
 		return { name = name }, nil
+	elseif kind == "agent" then
+		local err = onlyKeys(args, { "pane", "signal" })
+		if err then
+			return nil, err
+		end
+		if source ~= AGENT_SOURCE then
+			return nil, "only a window may report agents"
+		end
+		local pane = args.pane
+		if not util.isFiniteNumber(pane) or pane ~= math.floor(pane) or pane < 0 or pane > MAX_PANE_ID then
+			return nil, "pane must be a pane id"
+		end
+		if not events.isAgentSignal(args.signal) then
+			return nil, "signal must be one of done, failed, exited, waiting"
+		end
+		return { pane = pane, signal = args.signal }, nil
 	end
 	local err = onlyKeys(args, {})
 	if err then

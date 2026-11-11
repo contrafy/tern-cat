@@ -33,6 +33,8 @@ local PERSIST_GAP_MS = 1500
 -- How often an unreadable kv.json is read again.
 local KV_RETRY_MS = 5000
 local KV_UNREADABLE_NOTE = "Saved state could not be read; showing a temporary cat and not saving until it can be read"
+-- Copies of one agent signal from several windows arrive within an inbox poll or two.
+local AGENT_DEDUPE_MS = 3000
 
 export type Clock = T.Clock & { wall_precise: () -> number }
 
@@ -91,6 +93,8 @@ export type Brain = {
 	last_export: string?,
 	persist_error: string?,
 	listeners: { Listener },
+	-- Engine ms each recent agent signal (`<pane>|<signal>`) was first reported.
+	agent_seen: { [string]: number },
 	load_ms: number,
 }
 
@@ -738,6 +742,23 @@ end
 
 export type IntentOutcome = { kind: string, [string]: any }
 
+-- Every window showing an agent's session sends its own copy of each agent signal; only the
+-- first per pane and signal within AGENT_DEDUPE_MS reaches the engine (one roll, one sound).
+local function firstAgentSignal(b: Brain, event: T.CatEvent): boolean
+	local now = b.deps.clock.now_ms()
+	for key, at in b.agent_seen do
+		if now - at >= AGENT_DEDUPE_MS then
+			b.agent_seen[key] = nil
+		end
+	end
+	local key = `{event.pane_id}|{event.attributes.signal}`
+	if b.agent_seen[key] ~= nil then
+		return false
+	end
+	b.agent_seen[key] = now
+	return true
+end
+
 -- Validates and applies one raw intent once. Returns what happened, for toasts.
 local function applyIntent(b: Brain, raw: any): IntentOutcome
 	local c = b.deps.clock
@@ -758,6 +779,12 @@ local function applyIntent(b: Brain, raw: any): IntentOutcome
 			log(b, "warn", `intent rejected: {tostring(effect.error)}`)
 		elseif kind == "gesture" then
 			react(b, effect.event)
+		elseif kind == "agent" then
+			if firstAgentSignal(b, effect.event) then
+				react(b, effect.event)
+			else
+				outcome = { kind = "duplicate" }
+			end
 		elseif kind == "config" then
 			local ok, err = setConfig(b, effect.changes)
 			outcome.ok = ok
@@ -870,6 +897,7 @@ local function load(deps: Deps): Brain
 		last_export = nil,
 		persist_error = nil,
 		listeners = {},
+		agent_seen = {},
 		load_ms = 0,
 	}
 
@@ -892,6 +920,7 @@ end
 return {
 	DEFAULT_PACK = DEFAULT_PACK,
 	MIN_TICK_MS = MIN_TICK_MS,
+	AGENT_DEDUPE_MS = AGENT_DEDUPE_MS,
 	MAX_TICK_MS = MAX_TICK_MS,
 	load = load,
 	subscribe = subscribe,

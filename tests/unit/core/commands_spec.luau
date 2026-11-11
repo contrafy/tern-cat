@@ -220,6 +220,10 @@ describe("commands", function()
 			rejects(factories.intent("set_config", { key = "behavior.focus_mode", value = false }, carly))
 			-- Pointer reactions are visual only, but turning them on is still the user's call.
 			rejects(factories.intent("set_config", { key = "behavior.allow_pointer_reactions", value = true }, carly))
+			-- Agent reactions add an attention cue (and a meow); only the user may turn them back on.
+			expect(
+				rejects(factories.intent("set_config", { key = "behavior.allow_agent_reactions", value = true }, carly))
+			).toContain("Carly")
 			rejects(factories.intent("set_config", { key = "quiet.start", value = "23:00" }, carly))
 			rejects(factories.intent("set_config", { key = "quiet.stop", value = "06:00" }, carly))
 			rejects(
@@ -245,6 +249,9 @@ describe("commands", function()
 			).toBe(true)
 			accepts("set_config", { key = "behavior.allow_pointer_reactions", value = false }, carly)
 			expect(
+				accepts("set_config", { key = "behavior.allow_agent_reactions", value = false }, carly).args.values["behavior.allow_agent_reactions"]
+			).toBe(false)
+			expect(
 				accepts("set_config", { key = "rendering.pane_transition", value = "off" }, carly).args.values["rendering.pane_transition"]
 			).toBe("off")
 			accepts("set_config", { key = "rendering.pane_transition", value = "vent" }, carly)
@@ -262,7 +269,44 @@ describe("commands", function()
 				accepts("set_config", { key = "quiet.start", value = "23:00" }, { source = source })
 				accepts("set_config", { key = "behavior.focus_mode", value = false }, { source = source })
 				accepts("set_config", { key = "behavior.allow_pointer_reactions", value = true }, { source = source })
+				accepts("set_config", { key = "behavior.allow_agent_reactions", value = true }, { source = source })
 			end
+		end)
+	end)
+
+	describe("agent", function()
+		local window = { source = "window" }
+
+		it("accepts a window's agent signal for a pane", function()
+			for _, signal in { "done", "failed", "exited", "waiting" } do
+				local intent = accepts("agent", { pane = 4294967298, signal = signal }, window)
+				expect(intent.args).toEqual({ pane = 4294967298, signal = signal })
+			end
+		end)
+
+		it("accepts it only from a window, where Tern's agent events fire", function()
+			for _, source in { "block", "keyboard", "carly" } do
+				expect(rejects(factories.intent("agent", { pane = 3, signal = "done" }, { source = source }))).toContain(
+					"window"
+				)
+			end
+		end)
+
+		it("rejects other signals, pane ids and extra fields (no agent text rides along)", function()
+			rejects(factories.intent("agent", { pane = 3, signal = "working" }, window))
+			rejects(factories.intent("agent", { pane = 3, signal = "closed" }, window))
+			rejects(factories.intent("agent", { pane = 3 }, window))
+			rejects(factories.intent("agent", { pane = -1, signal = "done" }, window))
+			rejects(factories.intent("agent", { pane = 1.5, signal = "done" }, window))
+			rejects(factories.intent("agent", { pane = "3", signal = "done" }, window))
+			rejects(factories.intent("agent", { signal = "done" }, window))
+			expect(rejects(factories.intent("agent", { pane = 3, signal = "done", message = "hi" }, window))).toContain(
+				"unexpected argument"
+			)
+		end)
+
+		it("is not a gesture", function()
+			expect(commands.toEvent(accepts("agent", { pane = 3, signal = "done" }, window))).toBeNil()
 		end)
 	end)
 

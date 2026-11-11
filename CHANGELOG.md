@@ -7,6 +7,18 @@ All notable changes to tern-cat are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The cat reacts to coding agents (omp, Claude Code, any agent that reports its status to Tern;
+  Tern 0.9): `happy` (sometimes `hop`) when an agent finishes a turn, `disappointed` when the turn
+  fails, `look` when the agent exits, and `stare` or `look` plus a meow (when sound is on) when it
+  waits for your input. Only Tern's `agent_finished`/`agent_state` events are used, reduced to the
+  pane id and that outcome; nothing the agent said is read. Finished turns are sampled and rate
+  limited like commands; the waiting cue is rate limited only. Each window sends the signal to the
+  host, which drops the copies other windows send, decides once (one sound) and every window
+  mirrors the reaction. New `behavior.allow_agent_reactions` (default `true` in every preset),
+  settings row "React to coding agents"; Carly may only turn it off.
+
 ## [0.3.0] - 2026-11-11
 
 Tested against Tern 0.9.16 (macOS, Apple silicon). Tern 0.6.2 or later is still required; none of

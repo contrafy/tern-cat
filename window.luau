@@ -35,6 +35,8 @@ local WINDOW_EVENTS = {
 	"command_finished",
 	"cwd",
 }
+-- Coding agents' turns: reduced to a signal and sent to the host (see controller.onAgentEvent).
+local AGENT_EVENTS = { "agent_finished", "agent_state" }
 -- Dependency order, so each require compiles only that module.
 local BOOT_MODULES = {
 	"types",
@@ -355,6 +357,20 @@ for _, name in WINDOW_EVENTS do
 		controllerMod.onWindowEvent(ctl, name, ev, read)
 		updatePane(cx)
 	end)
+end
+
+-- Tern before 0.8.2 (agent_finished) and 0.9 (agent_state) does not have these events.
+for _, name in AGENT_EVENTS do
+	local ok, err = pcall(function()
+		tern.on(name, function(ev: any, _cx: WindowCx)
+			if ctl ~= nil then
+				controllerMod.onAgentEvent(ctl, name, ev)
+			end
+		end)
+	end)
+	if not ok then
+		tern.log.debug(`tern-cat: no {name} event in this Tern: {err}`)
+	end
 end
 
 -- Carly -----------------------------------------------------------------------------------

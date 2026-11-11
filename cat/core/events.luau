@@ -18,6 +18,10 @@ local CATEGORIES: { [string]: boolean } = {
 
 local GESTURES: { [string]: boolean } = { pet = true, poke = true, feed = true, play = true, perform = true }
 local PANE_KINDS: { [string]: boolean } = { created = true, closed = true, exited = true }
+local AGENT_SIGNALS: { [string]: boolean } = { done = true, failed = true, exited = true, waiting = true }
+-- `agent_finished` results that become a signal; "closed" (the block closed) is left to the pane
+-- reactions.
+local AGENT_RESULTS: { [string]: T.AgentSignal } = { done = "done", failed = "failed", exited = "exited" }
 
 local MAX_TOKENS = 32
 local MAX_STRING = 32
@@ -437,6 +441,7 @@ local ALLOWED: { [string]: { [string]: Kind } } = {
 	pointer = { kind = "word" },
 	resize = { kind = "word" },
 	ai = { animation = "word", source = "word" },
+	agent = { signal = "word" },
 }
 
 local function isFinite(n: number): boolean
@@ -559,6 +564,33 @@ local function gesture(
 	})
 end
 
+local function agent(args: BaseArgs & { signal: T.AgentSignal }): T.CatEvent
+	if not AGENT_SIGNALS[args.signal] then
+		error(`events.agent: unknown agent signal`)
+	end
+	return build("agent", args, { signal = args.signal })
+end
+
+local function isAgentSignal(value: any): boolean
+	return type(value) == "string" and AGENT_SIGNALS[value] == true
+end
+
+-- Reduces a Tern `agent_finished` {pane, result} or `agent_state` {pane, old, new} payload to an
+-- AgentSignal and the pane id; nil for anything the cat does not react to (working, idle,
+-- exited states, a closed block, a state that did not change). Nothing else is read.
+local function agentSignal(name: string, payload: any): (T.AgentSignal?, number?)
+	if type(payload) ~= "table" or type(payload.pane) ~= "number" then
+		return nil, nil
+	end
+	local signal: T.AgentSignal? = nil
+	if name == "agent_finished" then
+		signal = AGENT_RESULTS[payload.result]
+	elseif name == "agent_state" and payload.new == "waiting_input" and payload.old ~= "waiting_input" then
+		signal = "waiting"
+	end
+	return signal, if signal then payload.pane else nil
+end
+
 local function newId(rng: T.Rng, prefix: string): string
 	return string.format("%s-%08x%08x", prefix, rng:int(0, 0xFFFFFFFF), rng:int(0, 0xFFFFFFFF))
 end
@@ -577,4 +609,7 @@ return {
 	idle = idle,
 	timer = timer,
 	gesture = gesture,
+	agent = agent,
+	isAgentSignal = isAgentSignal,
+	agentSignal = agentSignal,
 }

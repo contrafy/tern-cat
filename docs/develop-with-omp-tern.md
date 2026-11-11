@@ -128,6 +128,26 @@ Carly exports can be exercised in such a window with the Carly script commands d
 `carly lua "return await(plugins['tern-cat'].status())"`); M0 recorded these from the docs
 without executing them.
 
+Agent reactions need no model: agent blocks report their state with OSC 7501, so a shell script
+as the agent command drives `agent_state` and `agent_finished` (blocked is `waiting_input`, error
+is `failed`, and the script exiting is `exited`):
+
+```sh
+cat > "$SB/fake-agent.sh" <<'EOF'
+#!/bin/sh
+s() { printf '\033]7501;state=%s\007' "$1"; sleep "$2"; }
+sleep 24; s working 3; s blocked 8; s working 3; s done 8; s working 3; s error 8
+EOF
+chmod +x "$SB/fake-agent.sh"
+tern ctl --control "$SB/ctl.sock" agent-command "$SB/fake-agent.sh"
+tern ctl --control "$SB/ctl.sock" block agent &   # opens the agent block beside the focused pane
+```
+
+While an agent block animates, scenario commands (`block agent`, `agent-command`, `alert`) answer
+"timed out after 20s" but still apply, and the control endpoint takes one command at a time, so
+the script waits before its first status. Watch `last_reaction` in
+`$SB/config/plugin-data/tern-cat/kv.json` and take `ctl shot`s once `block agent` has returned.
+
 ## Headless golden shots (needs Tern)
 
 `tern shot` renders scenarios offscreen. It loads user plugins only when the scenario attaches an
